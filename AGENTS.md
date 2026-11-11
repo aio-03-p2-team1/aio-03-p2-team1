@@ -1,0 +1,100 @@
+# AGENTS.md — AI 작업 지침 (aio-03-p2-team1)
+
+이 파일은 이 저장소에서 작업하는 모든 AI 코딩 도구(Claude Code, Codex, Copilot 등)와 팀원이 따르는 규칙이다.
+- 요구사항 원문: `prompt.md`
+- 일정·평가·필수 산출물: `docs/project-context.md`
+- 둘이 충돌하면 사용자(팀원)에게 묻는다.
+
+## 프로젝트 한 줄 요약
+
+**다시 만나**: 반려동물을 잃어버린 보호자가 구조동물 공고를 검색하고, 유사 후보와 보호센터 위치를 확인하는 LangGraph 에이전트 서비스. AIO 3기 단위 프로젝트 2, 1팀. 최종 제출은 2026-11-19(목) 15:00이다.
+
+## 구조
+
+```text
+backend/          FastAPI 앱(`/api/v1`), LangGraph 그래프, 도구, 인증, 저장소 어댑터
+frontend/         React + Vite
+tests/            백엔드 pytest
+frontend/tests/   프론트 node --test
+scripts/          Supabase 스키마 SQL, 평가 스크립트
+docs/             아키텍처 설계서, 시험 결과 보고서, 평가 데이터, 프로젝트 컨텍스트
+```
+
+아직 생성되지 않은 디렉터리는 `prompt.md` 19장의 구현 순서대로 만든다.
+
+## 명령
+
+```bash
+uv sync                                                      # 백엔드 의존성
+uv run uvicorn backend.main:app --reload --port 8000         # 백엔드 실행
+uv run pytest                                                # 백엔드 테스트
+docker compose up -d redis                                   # 로컬 Redis (127.0.0.1:6380)
+cd frontend && npm ci && npm run dev                         # 프론트 (http://127.0.0.1:5173)
+cd frontend && npm test && npm run build                     # 프론트 테스트·빌드
+```
+
+PR을 올리기 전에 `uv run pytest`와 `npm test && npm run build`가 통과해야 한다.
+PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 검사를 실행한다. `backend`·`frontend` 검사가 실패하면 병합하지 않는다. 의존성을 바꾸면 `uv.lock`, `frontend/package-lock.json`을 함께 커밋한다.
+
+## Git 협업 규칙 (PR + 1인 승인)
+
+- 브랜치 흐름:
+  - `main`에 직접 커밋·푸시하지 않는다.
+  - 이슈 단위로 브랜치를 만든다: `feat/<이슈번호>-<짧은설명>`, `fix/...`, `docs/...`, `test/...`
+  - 브랜치는 작게 유지하고, PR 하나에는 한 가지 목적만 담는다.
+- PR 작성:
+  - `.github/pull_request_template.md` 양식을 채운다.
+  - 변경 이유, 입력·출력, 상태 변화, 오류 처리, 실행한 검증을 적는다.
+- 병합:
+  - 승인 담당 1인이 리뷰·승인한 뒤 병합한다.
+  - 리뷰어는 정상·오류 요청의 실제 결과를 확인한다.
+- 커밋 메시지: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:` 접두어 + 한국어 설명. 예: `feat: 보호센터 좌표 조회 API 추가`
+- 공유 영역:
+  - **상태 객체, 도구 스키마, 그래프 노드·엣지, 환경변수 이름, API 계약**은 여러 사람이 함께 쓴다.
+  - 수정 전에 관련 담당자와 조율한다.
+  - PR 설명에 영향 범위를 적고, `docs/architecture.md`도 함께 갱신한다.
+- AI 도구 권한:
+  - 사용자가 요청하지 않은 push, force-push, rebase, 브랜치 삭제, 원격 설정 변경, 배포를 하지 않는다.
+
+## AI가 지켜야 할 규칙
+
+1. **작업 전 확인**
+   - 관련 파일과 `prompt.md`의 해당 장을 먼저 읽는다.
+   - 수정 범위가 요청보다 커지면 먼저 묻는다.
+2. **추측 금지**
+   - 배포 URL, 환경변수 값, 외부 API 필드, 존재하지 않는 엔드포인트를 지어내지 않는다.
+   - 모르는 설정은 질문한다.
+3. **비밀 값**
+   - API 키·DB 키·Redis URL·토큰을 코드, 문서, 커밋, 로그, 채팅에 쓰지 않는다.
+   - `.env`는 커밋하지 않는다. 변수 이름은 `.env.example`에만 적는다.
+   - 프론트 `VITE_` 변수는 공개된다고 전제한다.
+4. **정직한 보고**
+   - 실행하지 않은 테스트·배포를 완료라고 쓰지 않는다.
+   - 모의 응답을 실제 API 데이터라고 하지 않는다.
+   - 측정하지 않은 수치는 `미측정`으로 표시한다.
+5. **데이터 정확성**
+   - LLM이 공고 번호·연락처·날짜·좌표를 생성하지 않는다.
+   - 빈 결과와 호출 실패를 구분한다.
+   - 실패를 샘플 데이터로 덮지 않는다.
+6. **테스트**
+   - 기능을 바꾸면 테스트를 추가·수정한다.
+   - 외부 API는 모의 transport로 시험하고, 실제 호출 검증은 별도로 표시한다.
+7. **문서 동기화**
+   - 노드·상태 필드·도구 스키마가 바뀌면 `docs/architecture.md`를 갱신한다.
+   - 오류 수정·프롬프트 변경은 버전과 이유를 `docs/test-report.md`의 수정 이력에 남긴다.
+   - 이 기록은 필수 산출물의 근거가 된다.
+8. **보안 기본값**
+   - 사용자 데이터는 로그인 사용자 ID로 격리한다.
+   - 클라이언트가 보낸 ID나 주소를 신뢰하지 않는다.
+   - CORS는 정확한 origin만 허용한다.
+
+## 배포
+
+| 대상 | 플랫폼 | 이름 |
+| --- | --- | --- |
+| 프론트엔드 | Vercel | 프로젝트 `aio-03-p2-team1` (Root `frontend`) |
+| 백엔드 | Render | 서비스 `aio-03-p2-team1` |
+
+- 배포 주소와 브랜치가 확정되기 전에는 `vercel.json`의 rewrite 대상, `CORS_ORIGINS`, 카카오 도메인에 임의 URL을 넣지 않는다.
+- 환경변수 변경은 저장만으로 반영되지 않는다. 재배포까지 해야 한다.
+- 자주 발생한 오류와 해결책은 `prompt.md` 17장을 본다.
