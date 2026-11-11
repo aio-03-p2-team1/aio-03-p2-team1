@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- 다시 만나 프로젝트 ---
+.env.*
+!.env.example
+frontend/.env.local
+node_modules/
+.data/
+*.db
