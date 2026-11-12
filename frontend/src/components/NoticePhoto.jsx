@@ -1,0 +1,29 @@
+import { useState } from 'react'
+import { noticeTitle } from '../lib/format.js'
+
+/**
+ * 공고 사진. 실제 공고는 API 사진 URL, 샘플 공고는 디자인 예시 이미지(스프라이트)를 쓴다.
+ * variant: 'thumb'(게시판 카드) | 'notice'(검색 결과 카드, 390:171) | 'main'(상세)
+ */
+export default function NoticePhoto({ item, variant = 'thumb' }) {
+  const [failed, setFailed] = useState(false)
+  const label = `${noticeTitle(item)} 사진`
+  const src = item?.photos?.[0]
+  if (item?.source === 'sample' && item?.sample_photo != null) {
+    const cls = variant === 'main' ? 'detail-main-photo' : variant === 'notice' ? 'notice-photo' : 'post-thumb sample-photo'
+    return <span className={`${cls} photo-${item.sample_photo} sample-${item.sample_photo}`} role="img" aria-label={`${label} (샘플)`} />
+  }
+  if (!src || failed) {
+    return <span className={variant === 'main' ? 'post-detail-empty' : 'post-thumb'}>사진 없음</span>
+  }
+  return (
+    <img
+      className={variant === 'main' ? 'detail-photo-img' : variant === 'notice' ? 'notice-photo notice-photo-img' : 'post-thumb post-thumb-img'}
+      src={src}
+      alt={label}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+    />
+  )
+}
