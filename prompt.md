@@ -586,3 +586,4 @@ Supabase 연결 설정:
 - 2026-11-13: 대표 배포 주소를 `dasi-manna.vercel.app` 으로 정하고(이전 주소는 리다이렉트) README 에 팀원용 시작 안내를 추가했다.
 - 2026-11-13: 헤더에 마이페이지(`/my`)를 추가했다. 내 정보와 검색 기록(`GET /runs`)을 보여 주며 새 API는 없다.
 - 2026-11-13: 실종 정보 게시판(`/board`, `/posts` API)을 추가했다. 게시글은 공개 데이터로 공용 소유자 키 아래 `kind=post` 로 저장하며, 운영 Supabase 는 `documents.kind` check 제약에 `post` 를 추가해야 한다(`scripts/bootstrap_schema.sql`).
+- 2026-11-13: 실종 정보 등록의 실종 위치를 검색 화면과 같은 카카오 지도 선택창으로 받도록 바꾸고(`lost_place`), 게시글 상세 사진을 4:3 비율로 크게 전체 표시하도록 바꿨다.

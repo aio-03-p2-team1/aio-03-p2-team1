@@ -131,3 +131,7 @@ button[disabled]{opacity:.65;cursor:progress}
 .post-description{margin:0;color:#4e473e;font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
 .danger-button{border-color:#ecc7bd;color:#a34a39}
 .primary-button.danger-button{background:#f6d8cf}
+/* 실종 정보 상세: 사진을 크게, 잘리지 않게(가로 넓은 시안 비율 대신 4:3 안에 전체 표시) */
+@media(min-width:901px){.post-detail-layout{grid-template-columns:minmax(420px,1.2fr) minmax(380px,.8fr)}}
+.post-detail-media>img{aspect-ratio:4/3;max-height:680px;object-fit:contain;background:#f3eee5}
+.post-detail-media>.post-detail-empty{aspect-ratio:4/3}

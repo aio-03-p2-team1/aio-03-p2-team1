@@ -52,12 +52,13 @@ class PostBody(BaseModel):
     pet_name: str = Field(min_length=1, max_length=20)
     species: Literal["dog", "cat", "etc"]
     region: str = Field(min_length=1, max_length=20)
+    lost_place: str = Field(default="", max_length=100)  # 지도에서 고른 동 단위 주소(좌표는 받지 않음)
     lost_date: date
     breed: str = Field(default="", max_length=30)
     description: str = Field(min_length=5, max_length=1000)
     photo: str | None = Field(default=None, max_length=MAX_PHOTO_BYTES * 2)
 
-    @field_validator("pet_name", "region", "breed", "description")
+    @field_validator("pet_name", "region", "lost_place", "breed", "description")
     @classmethod
     def _strip(cls, value: str) -> str:
         return value.strip()
@@ -82,6 +83,7 @@ def _public(post_id: str, data: dict, viewer: str | None, *, detail: bool) -> di
         "pet_name": data["pet_name"],
         "species": data["species"],
         "region": data["region"],
+        "lost_place": data.get("lost_place", ""),
         "lost_date": data["lost_date"],
         "breed": data.get("breed", ""),
         "has_photo": bool(data.get("photo")),
@@ -165,6 +167,8 @@ async def create_post(body: PostBody, user: SessionUser = Depends(current_user),
         raise ApiError(422, "lost_date_too_old", "실종 날짜는 최근 1년 이내만 등록할 수 있어요.")
     if not body.pet_name or not body.region or len(body.description) < 5:
         raise ApiError(422, "invalid_request", "입력값을 확인해 주세요.")
+    if body.region in ("전체", "all"):
+        raise ApiError(422, "region_required", "실종 위치를 지도에서 선택해 주세요.")
     photo = None
     if body.photo:
         media_type, raw = _decode_photo(body.photo)
@@ -179,6 +183,7 @@ async def create_post(body: PostBody, user: SessionUser = Depends(current_user),
         "pet_name": body.pet_name,
         "species": body.species,
         "region": body.region,
+        "lost_place": body.lost_place,
         "lost_date": body.lost_date.isoformat(),
         "breed": body.breed,
         "description": body.description,

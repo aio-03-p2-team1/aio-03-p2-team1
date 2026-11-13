@@ -4,10 +4,11 @@ import { api, API_BASE } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate } from '../lib/format.js'
 import { localDate, MAX_PHOTO_BYTES, dataUrlBytes, POST_SPECIES, postPhotoPath, postTitle, validatePost } from '../lib/post.js'
+import RegionPicker from '../components/RegionPicker.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
 
-const EMPTY = { pet_name: '', species: '', region: '', lost_date: '', breed: '', description: '' }
+const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed: '', description: '' }
 
 // 실종 정보 게시판 — 디자인: dasimanna-cards-board.html
 export default function PostBoardPage() {
@@ -133,7 +134,7 @@ export default function PostBoardPage() {
                 <span className="post-card-body">
                   {post.mine && <span className="sample-label">내 글</span>}
                   <strong>{postTitle(post)}</strong>
-                  <p>{post.region} · {formatDate(post.lost_date)}</p>
+                  <p>{post.lost_place || post.region} · {formatDate(post.lost_date)}</p>
                   <small>{post.summary}</small>
                 </span>
               </Link>
@@ -164,6 +165,8 @@ export function PostPhoto({ post, main = false }) {
 function PostForm({ regions, onCancel, onCreated }) {
   const toast = useToast()
   const [form, setForm] = useState(EMPTY)
+  const [location, setLocation] = useState(null) // 지도에서 고른 위치 { region, address, lat, lng }
+  const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useState(null)
   const [errors, setErrors] = useState({})
   const [photoError, setPhotoError] = useState('')
@@ -241,14 +244,21 @@ function PostForm({ regions, onCancel, onCreated }) {
           </select>
           <FieldError text={errors.species} />
         </label>
-        <label>
-          실종 지역
-          <select value={form.region} onChange={update('region')} disabled={!regions.list.length} aria-invalid={!!errors.region}>
-            <option value="">{regions.error ? '지역 목록을 불러오지 못했어요' : '선택'}</option>
-            {regions.list.map((r) => <option key={r.code} value={r.name}>{r.name}</option>)}
-          </select>
+        <div className="field-block">
+          <span className="field-label">실종 위치</span>
+          <button
+            type="button"
+            className={`region-trigger${location ? ' filled' : ''}`}
+            onClick={() => setRegionOpen(true)}
+            aria-haspopup="dialog"
+            aria-invalid={!!errors.region}
+            disabled={!regions.list.length}
+          >
+            <span aria-hidden="true">⌖</span>
+            {location ? location.address || location.region : regions.error ? '지역 목록을 불러오지 못했어요' : '지도에서 실종 위치 선택'}
+          </button>
           <FieldError text={errors.region} />
-        </label>
+        </div>
         <label>
           실종 날짜
           <input type="date" value={form.lost_date} max={today} onChange={update('lost_date')} aria-invalid={!!errors.lost_date} />
@@ -274,6 +284,24 @@ function PostForm({ regions, onCancel, onCreated }) {
       {serverError && (
         <p className="state-box state-error" role="alert">{errorMessage(serverError)}</p>
       )}
+      <RegionPicker
+        open={regionOpen}
+        regions={regions.list}
+        initial={location}
+        allowAll={false}
+        title="실종 위치 선택"
+        onClose={() => setRegionOpen(false)}
+        onSelect={(value) => {
+          // 동 단위 주소와 공식 시·도 이름만 저장한다(정확한 좌표는 저장하지 않음).
+          setLocation(value)
+          setForm((prev) => ({
+            ...prev,
+            region: value.region,
+            lost_place: value.address && value.address !== value.region ? value.address : ''
+          }))
+          setRegionOpen(false)
+        }}
+      />
       <div className="form-bottom">
         <p className="fineprint">
           게시글은 로그인하지 않은 사람도 볼 수 있어요. 연락처·주소 같은 개인정보는 적지 마세요. 내가 쓴 글은 상세 화면에서 지울 수 있어요.

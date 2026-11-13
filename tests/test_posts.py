@@ -63,6 +63,17 @@ def test_filters_by_species_and_region():
         assert client.get("/api/v1/posts?species=bird").status_code == 422
 
 
+def test_lost_place_saved_and_whole_country_rejected():
+    with new_client() as client:
+        signup(client)
+        created = client.post("/api/v1/posts", json=body(lost_place="  서울특별시 강서구 화곡동 ")).json()
+        assert created["lost_place"] == "서울특별시 강서구 화곡동"
+        assert client.get("/api/v1/posts").json()["items"][0]["lost_place"] == "서울특별시 강서구 화곡동"
+        res = client.post("/api/v1/posts", json=body(region="전체"))
+        assert res.status_code == 422 and res.json()["detail"]["code"] == "region_required"
+        assert client.post("/api/v1/posts", json=body(lost_place="x" * 101)).status_code == 422
+
+
 def test_only_author_can_delete():
     with new_client() as client:
         signup(client, "a@example.com")
