@@ -1,5 +1,5 @@
 // 카카오 지도 JavaScript SDK 로더.
-// autoload=false 로 페이지당 한 번만 로드해 재사용하고, 실패하면 다음 호출에서 다시 시도한다(prompt.md 6.2).
+// autoload=false 로 페이지당 한 번만 로드해 재사용하고, 실패하면 다음 호출에서 다시 시도한다.
 // 주소 검색·좌표→주소 변환을 위해 services 라이브러리를 함께 받는다.
 
 export const KAKAO_JS_KEY = import.meta.env?.VITE_KAKAO_JS_KEY || ''

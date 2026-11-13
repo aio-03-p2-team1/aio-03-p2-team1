@@ -1,7 +1,8 @@
 # AGENTS.md — AI 작업 지침 (aio-03-p2-team1)
 
 이 파일은 이 저장소에서 작업하는 모든 AI 코딩 도구(Claude Code, Codex, Copilot 등)와 팀원이 따르는 규칙이다.
-- 요구사항 원문: `prompt.md`
+- 기술 스택·환경변수·로컬 실행·배포: `docs/development.md`
+- 에이전트 구조·상태·API 계약: `docs/architecture.md`
 - 일정·평가·필수 산출물: `docs/project-context.md`
 - 둘이 충돌하면 사용자(팀원)에게 묻는다.
 
@@ -20,7 +21,7 @@ scripts/          Supabase 스키마 SQL, 평가 스크립트
 docs/             아키텍처 설계서, 시험 결과 보고서, 평가 데이터, 프로젝트 컨텍스트
 ```
 
-아직 생성되지 않은 디렉터리는 `prompt.md` 19장의 구현 순서대로 만든다.
+디렉터리와 기능 범위는 실제 요구와 팀 우선순위를 확인한 뒤 정한다.
 
 ## 명령
 
@@ -59,7 +60,7 @@ PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 �
 ## AI가 지켜야 할 규칙
 
 1. **작업 전 확인**
-   - 관련 파일과 `prompt.md`의 해당 장을 먼저 읽는다.
+   - 관련 코드와 `docs/architecture.md`, `docs/development.md`의 해당 내용을 먼저 읽는다.
    - 수정 범위가 요청보다 커지면 먼저 묻는다.
 2. **추측 금지**
    - 배포 URL, 환경변수 값, 외부 API 필드, 존재하지 않는 엔드포인트를 지어내지 않는다.
@@ -95,6 +96,6 @@ PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 �
 | 프론트엔드 | Vercel | 프로젝트 `aio-03-p2-team1` (Root `frontend`) |
 | 백엔드 | Render | 서비스 `aio-03-p2-team1` |
 
-- 배포 주소와 브랜치가 확정되기 전에는 `vercel.json`의 rewrite 대상, `CORS_ORIGINS`, 카카오 도메인에 임의 URL을 넣지 않는다.
+- 배포 주소는 `docs/development.md`의 확정값을 사용한다. Preview·커스텀 도메인은 확인 없이 추가하지 않는다.
 - 환경변수 변경은 저장만으로 반영되지 않는다. 재배포까지 해야 한다.
-- 자주 발생한 오류와 해결책은 `prompt.md` 17장을 본다.
+- 자주 발생한 개발·배포 설정 오류와 해결책은 `docs/development.md`를 본다.

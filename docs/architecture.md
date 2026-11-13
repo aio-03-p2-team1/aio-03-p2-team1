@@ -183,8 +183,9 @@ flowchart LR
 
 - 알림(구독·Discord DM·발송 이력), 브라우저 푸시
 - 대화 요약 전략
-- 배포 주소(Render 서비스 URL, Vercel 도메인)와 `vercel.json` API rewrite, 운영 `CORS_ORIGINS`
 - 구조동물 API 응답 필드는 문서 기준으로 정규화했고, 실제 키 응답 확인이 필요하다(`docs/test-report.md`).
+
+개발·환경변수·배포 설정은 [docs/development.md](development.md)를 참고한다.
 
 ### 사진 분석 흐름
 

@@ -1,6 +1,6 @@
 # 프로젝트 컨텍스트 — AIO 3기 단위 프로젝트 2 · 1팀
 
-단위 프로젝트 2 안내를 팀 작업에 필요한 내용으로 요약했다. 요구사항 원문은 `prompt.md`, 작업 규칙은 `AGENTS.md`에 있다.
+단위 프로젝트 2 안내를 팀 작업에 필요한 내용으로 요약했다. 개발 환경은 [development.md](development.md), 에이전트 설계는 [architecture.md](architecture.md), 작업 규칙은 [../AGENTS.md](../AGENTS.md)를 참고한다.
 
 ## 과정 정보
 

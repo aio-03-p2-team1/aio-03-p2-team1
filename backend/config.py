@@ -1,4 +1,4 @@
-"""환경변수 설정 (prompt.md 14장).
+"""환경변수 설정.
 
 - pydantic-settings로 검증한다.
 - live 모드에서 필수 값이 비어 있으면 시작 단계에서 누락 항목 *이름만* 알리고 멈춘다.
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-6-luna"
 
-    # ANIMAL_API_KEY 우선, 별칭 ANIMAL_API_SERVICE_KEY 지원 (6.1)
+    # ANIMAL_API_KEY 우선, 별칭 ANIMAL_API_SERVICE_KEY 지원.
     animal_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("ANIMAL_API_KEY", "ANIMAL_API_SERVICE_KEY")
     )
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     @field_validator("animal_api_base_url")
     @classmethod
     def _force_https(cls, value: str) -> str:
-        # 포털 예시의 http:// 를 HTTPS로 보정 (6.1)
+        # 포털 예시의 http:// 를 HTTPS로 보정.
         value = value.strip().rstrip("/")
         if value.startswith("http://"):
             value = "https://" + value[len("http://") :]
@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     def _check_redis_url(cls, value: str) -> str:
         value = value.strip()
         if not value.startswith(("redis://", "rediss://", "unix://")):
-            # 17장: CIDR 등을 넣으면 기동 실패. 값은 출력하지 않는다.
+            # CIDR 등이 아닌 Redis 접속 URL을 받아야 한다. 값은 출력하지 않는다.
             raise ValueError("REDIS_URL은 redis:// · rediss:// · unix:// 형식의 접속 URL이어야 합니다")
         return value
 
@@ -118,7 +118,7 @@ class Settings(BaseSettings):
 
     @property
     def animal_data_source(self) -> Literal["api", "sample"]:
-        """코드가 계산하는 값 (14장: 환경변수로 넣지 않는다)."""
+        """코드가 계산하는 값이며 환경변수로 설정하지 않는다."""
         return "api" if self.animal_api_key is not None else "sample"
 
 

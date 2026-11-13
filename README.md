@@ -3,7 +3,7 @@
 반려동물을 잃어버린 보호자가 구조동물 공고를 검색하고, 닮은 후보와 보호센터 위치를 확인하는 LangGraph 에이전트 서비스입니다.
 AIO 3기 단위 프로젝트 2 · 1팀.
 
-- 요구사항: [`prompt.md`](prompt.md) · 작업 규칙: [`AGENTS.md`](AGENTS.md) · 일정·산출물: [`docs/project-context.md`](docs/project-context.md)
+- 개발 환경·기술 스택·환경변수·배포: [`docs/development.md`](docs/development.md) · 작업 규칙: [`AGENTS.md`](AGENTS.md) · 일정·산출물: [`docs/project-context.md`](docs/project-context.md)
 - 아키텍처 설계서: [`docs/architecture.md`](docs/architecture.md)
 - 시험 결과 보고서: [`docs/test-report.md`](docs/test-report.md)
 - **배포 주소: https://dasi-manna.vercel.app** (예전 주소 `vibe-codeing-demo.vercel.app`·`meet-again-team1.vercel.app` 은 이 주소로 넘어갑니다)
@@ -53,7 +53,7 @@ npm run dev                   # http://127.0.0.1:5173
 
 - 키는 **채팅·노션·Git·문서에 붙여넣지 않습니다.** 공유가 꼭 필요하면 비밀번호 관리자 등 안전한 경로를 씁니다.
 - 운영용 Supabase service role 키·OpenAI 키는 배포 서버에만 둡니다.
-- 공공데이터 키는 끝에 `_Decoding` 같은 글자를 붙이지 말고 원문만 넣습니다(prompt.md 17장).
+- 공공데이터 키는 끝에 `_Decoding` 같은 글자를 붙이지 말고 원문만 넣습니다([개발 안내](docs/development.md#자주-발생하는-설정-오류)).
 
 ### 4. 작업 흐름
 
@@ -72,8 +72,8 @@ npm run dev                   # http://127.0.0.1:5173
 
 1. [`docs/project-context.md`](docs/project-context.md): 일정·평가 기준·필수 산출물
 2. [`AGENTS.md`](AGENTS.md): 작업 규칙
-3. [`docs/architecture.md`](docs/architecture.md): 그래프·상태·API 구조
-4. [`prompt.md`](prompt.md): 요구사항 원문(특히 17장 자주 발생한 오류)
+3. [`docs/architecture.md`](docs/architecture.md): 실제 에이전트 구조·상태·API 계약
+4. [`docs/development.md`](docs/development.md): 기술 스택·환경변수·실행·배포·오류 해결
 
 ### 6. 자주 막히는 곳
 

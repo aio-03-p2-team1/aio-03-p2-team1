@@ -1,4 +1,4 @@
-"""문서 저장소 (prompt.md 11장).
+"""문서 저장소.
 
 SQLite(로컬)와 Supabase(운영)를 같은 인터페이스로 제공한다.
 모든 문서는 (owner, kind, id) 로 식별하고, owner 는 로그인 사용자 키다.

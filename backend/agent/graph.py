@@ -1,4 +1,4 @@
-"""검색 StateGraph (prompt.md 7장).
+"""검색 StateGraph.
 
 START → analyze ─[누락·오류]→ ask → END(awaiting_input)
           └→ context → plan → execute → rank → validate

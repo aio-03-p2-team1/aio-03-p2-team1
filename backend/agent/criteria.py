@@ -1,4 +1,4 @@
-"""요청 조건 정규화·검증 (prompt.md 4장 입력 검증, 8장 기억 적용 순서)."""
+"""요청 조건 정규화·검증. 기억 적용 순서는 docs/architecture.md 를 참고한다."""
 
 from __future__ import annotations
 

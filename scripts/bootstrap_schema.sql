@@ -1,4 +1,4 @@
--- 다시 만나: Supabase 문서 테이블 (prompt.md 11장)
+-- 다시 만나: Supabase 문서 테이블. 구조는 docs/architecture.md 를 참고한다.
 -- 실행 위치: Supabase SQL Editor. 기존 테이블이 있으면 먼저 열·기본키 호환성을 확인한다.
 -- 실행 후 Data API 설정의 Exposed schemas 에 aio-03-p2-team1-demo 를 추가해야 한다(PGRST106 방지).
 

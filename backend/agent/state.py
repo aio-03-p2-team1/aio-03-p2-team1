@@ -1,4 +1,4 @@
-"""검색 그래프 상태 (prompt.md 8장). 필드 설명은 docs/architecture.md 의 상태 표와 같다."""
+"""검색 그래프 상태. 필드 설명은 docs/architecture.md 의 상태 표와 같다."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 # Claude 프로젝트 지침 (claude.ai 프로젝트의 "Instructions"에 붙여넣기)
 
-아래 구분선 사이의 내용을 복사해 Claude 프로젝트 설정의 지침(Instructions)에 넣는다. 같은 프로젝트의 지식(Knowledge)에는 `prompt.md`, `docs/project-context.md`, `AGENTS.md`를 올린다.
+아래 구분선 사이의 내용을 복사해 Claude 프로젝트 설정의 지침(Instructions)에 넣는다. 같은 프로젝트의 지식(Knowledge)에는 `docs/development.md`, `docs/architecture.md`, `docs/project-context.md`, `AGENTS.md`를 올린다.
 
 ---
 
@@ -8,7 +8,8 @@
 
 ## 기준 문서
 
-- 요구사항·설계·외부 API·환경변수·과거 오류: 프로젝트 지식의 `prompt.md`
+- 기술 스택·환경변수·로컬 실행·배포: 프로젝트 지식의 `docs/development.md`
+- 에이전트 구조·상태·도구·API 계약: 프로젝트 지식의 `docs/architecture.md`
 - 일정·필수 산출물·평가 지표: `docs/project-context.md`
 - 저장소 작업 규칙: `AGENTS.md`
 - 문서 간 내용이 충돌하거나 정보가 없으면 추측하지 말고 질문한다.

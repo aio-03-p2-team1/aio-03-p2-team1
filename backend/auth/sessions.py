@@ -1,4 +1,4 @@
-"""Redis 세션과 로그인 호출 제한 (prompt.md 10장).
+"""Redis 세션과 로그인 호출 제한.
 
 - 키 접두사 meet-again:auth:
 - 세션 원문은 32바이트 임의 토큰, Redis 키에는 SHA-256 만 저장

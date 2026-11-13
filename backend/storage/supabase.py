@@ -2,7 +2,7 @@
 
 - 지정 스키마 "aio-03-p2-team1-demo" 의 documents 테이블을 쓴다(public 금지).
 - 스키마는 Accept-Profile / Content-Profile 헤더로 지정한다.
-  Data API 의 Exposed schemas 에 없으면 406 / PGRST106 이 난다(17장).
+  Data API 의 Exposed schemas 에 없으면 406 / PGRST106 이 난다.
 - service_role 키를 apikey 와 Bearer 헤더에 함께 넣는다(11장).
 - 오류 메시지에 응답 본문·키를 넣지 않는다.
 """
