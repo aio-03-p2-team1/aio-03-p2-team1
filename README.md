@@ -51,9 +51,10 @@ cd frontend && npm test && npm run build
 | 대상 | 플랫폼 | 설정 |
 | --- | --- | --- |
 | 프론트엔드 | Vercel `aio-03-p2-team1` | Root `frontend`, Install `npm ci`, Build `npm run build`, Output `dist` |
-| 백엔드 | Render (서비스 확정 대기) | Python 3.12(`.python-version`), Build `pip install uv && uv sync --frozen --no-dev`, Start `uv run --no-sync uvicorn backend.main:app --host 0.0.0.0 --port $PORT`, Health `/api/v1/health` |
+| 백엔드 | Render `aio-03-p2-team1` (`https://aio-03-p2-team1.onrender.com`) | Python 3.12(`.python-version`), Build `pip install uv && uv sync --frozen --no-dev`, Start `uv run --no-sync uvicorn backend.main:app --host 0.0.0.0 --port $PORT`, Health `/api/v1/health` |
 
-배포 주소가 확정되면 `frontend/vercel.json` 에 `/api/v1/:path*` → `https://<Render 주소>/api/v1/:path*` rewrite 를 **SPA fallback 보다 앞에** 추가하고, Render `CORS_ORIGINS` 와 카카오 SDK 도메인을 같은 값으로 맞춥니다.
+- 프론트 주소: `https://aio-03-p2-team1-aio-03-p2-team1.vercel.app` (Vercel 이 `/api/v1/*` 를 Render 로 전달, `frontend/vercel.json`)
+- Render `CORS_ORIGINS` 와 카카오 JavaScript SDK 도메인에 위 프론트 주소를 같은 값으로 등록합니다. Preview·커스텀 도메인은 각각 추가합니다.
 
 ## 현재 구현 범위
 

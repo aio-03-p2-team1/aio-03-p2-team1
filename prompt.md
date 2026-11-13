@@ -434,8 +434,9 @@ Supabase 연결 설정:
 | 프론트엔드 | Vercel 프로젝트 `aio-03-p2-team1`, Root Directory `frontend`, Framework `Vite`, Install `npm ci`, Build `npm run build`, Output `dist` |
 | 백엔드 | Render Web Service `aio-03-p2-team1`, Python 3.12, uv, 시작 명령은 `$PORT`를 읽는다(예: `uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT`) |
 | 헬스 체크 | Render Health Check Path `/api/v1/health` |
-| 운영 Redis | Render Key Value(제공처 확정 후 기록) |
-| 미확정 | Vercel 도메인, Render 서비스 URL, 배포 브랜치(기본 제안: `main`), Preview 배포 사용 여부 |
+| 운영 Redis | Render Key Value(다른 프로젝트와 공유, 키 접두사 `meet-again:auth:` 로 구분. 메모리·연결 한도 공유) |
+| 확정 주소 | 프론트 `https://aio-03-p2-team1-aio-03-p2-team1.vercel.app`, 백엔드 `https://aio-03-p2-team1.onrender.com`, 배포 브랜치 `main` |
+| 미확정 | 커스텀 도메인, Preview 배포 origin 허용 여부 |
 
 배포 주소가 확정되면 `frontend/vercel.json`의 rewrite 대상(`https://<Render 서비스 URL>/api/v1/:path*`), Render `CORS_ORIGINS`, 카카오 JavaScript SDK 도메인을 같은 값으로 맞춘다. 추측한 URL을 넣지 않는다. Render 무료 인스턴스는 유휴 시 잠들어 첫 요청이 느릴 수 있으므로 시연 전에 미리 깨운다.
 
@@ -580,3 +581,4 @@ Supabase 연결 설정:
 - 2026-11-11: `VibeCodeing_Demo` 프롬프트(1~24번 항목)를 정리해 새 저장소용으로 작성했다.
 - 2026-11-11: 호스팅을 Vercel·Render `aio-03-p2-team1`로 확정하고, 단위 프로젝트 2 안내의 필수 지표·산출물·PR 협업 방식을 반영했다.
 - 2026-11-12: 프로젝트 골격(백엔드·검색 그래프·인증·4개 화면)을 생성했다. 화면 설계에 맞춰 조회 전용 `GET /notices`, `GET /notices/{id}` 를 추가했다(docs/architecture.md 8장).
+- 2026-11-13: 배포 주소를 확정해 16장에 기록하고 `frontend/vercel.json` 에 `/api/v1` rewrite 를 추가했다.
