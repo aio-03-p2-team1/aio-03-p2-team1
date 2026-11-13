@@ -89,3 +89,18 @@ export const LOCATION_REASON = {
   address_ambiguous: '주소에 해당하는 위치가 여러 곳이라 표시하지 않았어요.',
   invalid_coordinates: '좌표가 올바르지 않아 표시하지 않았어요.'
 }
+
+export const RUN_STATUS_LABEL = { completed: '완료', partial: '부분 결과', failed: '실패', awaiting_input: '추가 정보 필요', running: '진행 중' }
+
+export function runStatusLabel(status) {
+  return RUN_STATUS_LABEL[status] || '상태 미확인'
+}
+
+/** 검색 기록 한 줄 요약: '강아지 · 서울특별시 · 2026.11.10부터' */
+export function runSummary(criteria) {
+  const c = criteria || {}
+  const species = c.species ? speciesLabel(c.species).replace(/^개$/, '강아지') : '종류 미입력'
+  const region = !c.region ? '지역 미입력' : c.region === 'all' ? '전체 지역' : c.region_name || c.region
+  const since = c.start_date ? `${formatDate(c.start_date)}부터` : '기간 미입력'
+  return `${species} · ${region} · ${since}`
+}

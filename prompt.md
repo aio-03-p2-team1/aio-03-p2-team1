@@ -582,3 +582,4 @@ Supabase 연결 설정:
 - 2026-11-11: 호스팅을 Vercel·Render `aio-03-p2-team1`로 확정하고, 단위 프로젝트 2 안내의 필수 지표·산출물·PR 협업 방식을 반영했다.
 - 2026-11-12: 프로젝트 골격(백엔드·검색 그래프·인증·4개 화면)을 생성했다. 화면 설계에 맞춰 조회 전용 `GET /notices`, `GET /notices/{id}` 를 추가했다(docs/architecture.md 8장).
 - 2026-11-13: 배포 주소를 확정해 16장에 기록하고 `frontend/vercel.json` 에 `/api/v1` rewrite 를 추가했다.
+- 2026-11-13: 헤더에 마이페이지(`/my`)를 추가했다. 내 정보와 검색 기록(`GET /runs`)을 보여 주며 새 API는 없다.
