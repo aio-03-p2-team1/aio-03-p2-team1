@@ -6,7 +6,7 @@ AIO 3기 단위 프로젝트 2 · 1팀.
 - 요구사항: [`prompt.md`](prompt.md) · 작업 규칙: [`AGENTS.md`](AGENTS.md) · 일정·산출물: [`docs/project-context.md`](docs/project-context.md)
 - 아키텍처 설계서: [`docs/architecture.md`](docs/architecture.md)
 - 시험 결과 보고서: [`docs/test-report.md`](docs/test-report.md)
-- **배포 주소: https://meet-again-team1.vercel.app** (예전 주소 `vibe-codeing-demo.vercel.app` 은 이 주소로 넘어갑니다)
+- **배포 주소: https://dasi-manna.vercel.app** (예전 주소 `vibe-codeing-demo.vercel.app`·`meet-again-team1.vercel.app` 은 이 주소로 넘어갑니다)
 - 처음 합류했다면 아래 [팀원용 시작 안내](#팀원용-시작-안내)부터 보세요.
 
 ## 팀원용 시작 안내
@@ -131,8 +131,8 @@ cd frontend && npm test && npm run build
 | 프론트엔드 | Vercel `aio-03-p2-team1` | Root `frontend`, Install `npm ci`, Build `npm run build`, Output `dist` |
 | 백엔드 | Render `aio-03-p2-team1` (`https://aio-03-p2-team1.onrender.com`) | Python 3.12(`.python-version`), Build `pip install uv && uv sync --frozen --no-dev`, Start `uv run --no-sync uvicorn backend.main:app --host 0.0.0.0 --port $PORT`, Health `/api/v1/health` |
 
-- 프론트 주소: `https://meet-again-team1.vercel.app` (Vercel 이 `/api/v1/*` 를 Render 로 전달, `frontend/vercel.json`)
-  - 예전 주소 `https://vibe-codeing-demo.vercel.app` 은 위 주소로 307 리다이렉트됩니다. Vercel 기본 주소 `https://aio-03-p2-team1-aio-03-p2-team1.vercel.app` 도 같은 배포를 가리킵니다.
+- 프론트 주소: `https://dasi-manna.vercel.app` (Vercel 이 `/api/v1/*` 를 Render 로 전달, `frontend/vercel.json`)
+  - 예전 주소 `https://vibe-codeing-demo.vercel.app`·`https://meet-again-team1.vercel.app` 은 위 주소로 307 리다이렉트됩니다. Vercel 기본 주소 `https://aio-03-p2-team1-aio-03-p2-team1.vercel.app` 도 같은 배포를 가리킵니다.
 - Render `CORS_ORIGINS` 와 카카오 JavaScript SDK 도메인에 프론트 주소를 같은 값으로 등록합니다. Preview·커스텀 도메인은 각각 추가합니다.
 
 ## 현재 구현 범위
