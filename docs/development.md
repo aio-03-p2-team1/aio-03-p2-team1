@@ -13,7 +13,7 @@
 | --- | --- |
 | 프론트엔드 | React 19, React Router 7, Vite 8, Node.js 22+, npm |
 | 백엔드 | Python 3.12+, FastAPI, Uvicorn, Pydantic Settings |
-| 에이전트·모델 | LangGraph, OpenAI API (`gpt-6-luna`) |
+| 에이전트·모델 | LangGraph, LangChain `langchain-openai` (`ChatOpenAI`, `OpenAIEmbeddings`; 기본 채팅 모델 `gpt-6-luna`) |
 | 데이터 저장 | Supabase 문서 저장소, 로컬 SQLite 대체 저장소 |
 | 세션·검색 캐시 | Redis |
 | 외부 서비스 | 공공데이터포털 구조동물 API, 카카오 로컬 API·지도 SDK |
@@ -91,7 +91,7 @@ cd frontend && npm test && npm run build
 - 공공데이터포털 키는 발급된 값 그대로 `ANIMAL_API_KEY`에 설정한다. 키 문자열에 `_Decoding` 등을 덧붙이지 않는다.
 - 카카오 REST 키는 백엔드 `.env`의 `KAKAO_REST_API_KEY`에 둔다.
 - 카카오 지도 SDK 키는 `frontend/.env.local`의 `VITE_KAKAO_JS_KEY`에 둔다. 접속 origin을 카카오 앱의 JavaScript SDK 도메인에 등록한다.
-- OpenAI 연동은 `OPENAI_API_KEY`가 필요하다. `APP_MODE=live`에서는 Supabase 환경변수도 설정한다.
+- LangChain OpenAI 연동은 `OPENAI_API_KEY`가 필요하다. `APP_MODE=live`에서는 Supabase 환경변수도 설정한다. 채팅·사진 분석 클라이언트와 임베딩 클라이언트는 생성자에서 주입할 수 있어 외부 호출 없이 모의 클라이언트로 검증할 수 있다.
 - 비밀 값은 팀 채팅이나 저장소에 공유하지 않는다. 운영 비밀 값은 배포 서비스의 환경변수 설정에만 둔다.
 
 ## 배포 설정

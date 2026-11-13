@@ -6,7 +6,7 @@
 ## 1. 전체 구성
 
 ```text
-React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 ──▶ 도구(구조동물 API · 카카오 · OpenAI)
+React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 ──▶ 도구(구조동물 API · 카카오 · LangChain OpenAI)
                            │                     │
                            ├─ Redis: 세션·호출 제한   └─ 저장소(SQLite | Supabase documents)
 ```
@@ -69,9 +69,9 @@ flowchart TD
 | 필수 조건(종류·지역·기간) 누락·오류 | 도구 호출 없이 질문 | `questions` |
 | 지역이 '전체'가 아님 | `animal_regions` → 공식 시도 코드 매핑 | `tool_calls[].reason` |
 | 조건 충분 | `animal_search(page=1, rows=1000)` 1회(통신 재시도 별도) | 페이지·건수 |
-| live 모드 + 자유 서술 있음 | `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
+| live 모드 + 자유 서술 있음 | LangChain `ChatOpenAI` 기반 `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
 | 검증 통과 + 카카오 키 + 주소 | 상위 3개만 `kakao_geocode` | 후보 ID |
-| 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 OpenAI 비전) | 적합성 판정·특징 JSON |
+| 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 LangChain `ChatOpenAI` 비전) | 적합성 판정·특징 JSON |
 
 호출 한도 `MAX_TOOL_CALLS` 를 넘으면 `tool_budget` 으로 멈춘다. 상세·보호센터 전용 공공 API 는 없으므로 검색 응답 필드에서 정규화한다(만들어내지 않음).
 
@@ -82,13 +82,13 @@ sequenceDiagram
   participant U as 사용자
   participant API as FastAPI /searches
   participant G as Graph
-  participant LLM as OpenAI
+  participant LLM as LangChain OpenAI
   participant AN as 구조동물 API
   participant K as 카카오
   U->>API: 조건 입력
   API->>G: run_search(owner, criteria, thread_id)
   G->>G: analyze (누락이면 질문 후 종료)
-  G->>LLM: 서술 → {colors, breed, sex, marks} (JSON)
+  G->>LLM: ChatOpenAI 서술 → {colors, breed, sex, marks} (JSON)
   LLM-->>G: 특징(설명에 없는 품종은 폐기)
   G->>AN: sido_v2 (지역 코드)
   G->>AN: abandonmentPublic_v2 page 1..N
@@ -131,6 +131,7 @@ sequenceDiagram
 - 모델 입력은 자유 서술(최대 1,000자)뿐이다. 이메일·연락처·키는 넣지 않는다.
 - 체크포인트: 한 요청 안에서 그래프가 끝까지 실행되고, 추가 질문 상태는 `thread` 문서에 저장되므로 재시작 후 같은 `thread_id` 로 이어 간다.
 - 요약 전략(토큰 예산·요약 임계값)은 **미구현**. 현재 LLM 입력은 단일 서술이라 요약이 필요하지 않다. 대화형 입력을 늘리면 추가한다.
+- 특징·사진 분석은 `ChatOpenAI`, 임베딩은 `OpenAIEmbeddings`를 사용한다. 각 어댑터 생성자는 LangChain 호환 클라이언트를 선택적으로 받아 테스트에서 모의 클라이언트를 주입할 수 있다. 기본 런타임은 API 키와 timeout으로 실제 LangChain 클라이언트를 구성한다.
 
 ## 6. 자가 성찰 (Activity)
 
@@ -153,7 +154,7 @@ flowchart LR
 
 ## 7. 후보 정렬 규칙
 
-`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. 이 규칙 순위와 전체 공고 임베딩의 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
+`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
 ## 8. 백엔드 API 계약 (요약)
 

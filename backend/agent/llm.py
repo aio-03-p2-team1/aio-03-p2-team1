@@ -5,10 +5,10 @@ import logging
 import base64
 
 import httpx
+from langchain_openai import ChatOpenAI
 
 log = logging.getLogger("dasimanna.llm")
 
-OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 PROMPT_VERSION = "feature-extract-v1"
 PHOTO_PROMPT_VERSION = "photo-feature-v1"
 PHOTO_CONFIDENCE_THRESHOLD = 0.8
@@ -64,46 +64,52 @@ def classify(status: int, body: dict | None) -> str:
 
 
 class FeatureExtractor:
-    def __init__(self, api_key: str, model: str, timeout: float = 30, transport=None):
-        self._key = api_key
+    def __init__(self, api_key: str, model: str, timeout: float = 30, transport=None, client=None):
         self.model = model
-        self._client = httpx.AsyncClient(timeout=timeout, transport=transport)
+        http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if transport is not None else None
+        self._client = client or ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            timeout=timeout,
+            max_retries=0,
+            http_async_client=http_client,
+            model_kwargs={"response_format": {"type": "json_object"}},
+        )
+
+    async def _invoke_json(self, messages) -> dict:
+        try:
+            response = await self._client.ainvoke(messages)
+        except Exception as exc:
+            status = getattr(exc, "status_code", None)
+            body = getattr(exc, "body", None)
+            if not isinstance(body, dict):
+                body = None
+            if status:
+                code = classify(status, body)
+                request_id = getattr(exc, "request_id", None)
+                log.warning("openai error status=%s code=%s request_id=%s", status, code, request_id)
+                raise LlmError(code, status) from exc
+            if isinstance(exc, (httpx.TimeoutException, TimeoutError)) or "timeout" in type(exc).__name__.lower():
+                raise LlmError("llm_timeout") from exc
+            if isinstance(exc, httpx.HTTPError) or "connection" in type(exc).__name__.lower():
+                raise LlmError("llm_network") from exc
+            raise LlmError("llm_upstream") from exc
+        content = getattr(response, "content", None)
+        finish_reason = (getattr(response, "response_metadata", None) or {}).get("finish_reason")
+        if finish_reason not in (None, "stop") or not isinstance(content, str):
+            raise LlmError("llm_response")
+        try:
+            data = json.loads(content)
+        except (ValueError, TypeError) as exc:
+            raise LlmError("llm_response") from exc
+        if not isinstance(data, dict):
+            raise LlmError("llm_response")
+        return data
 
     async def extract(self, description: str) -> dict:
-        payload = {
-            "model": self.model,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": description[:1000]},
-            ],
-        }
-        try:
-            res = await self._client.post(OPENAI_URL, json=payload, headers={"Authorization": f"Bearer {self._key}"})
-        except httpx.TimeoutException as exc:
-            raise LlmError("llm_timeout") from exc
-        except httpx.HTTPError as exc:
-            raise LlmError("llm_network") from exc
-        request_id = res.headers.get("x-request-id")
-        if res.status_code >= 400:
-            try:
-                body = res.json()
-            except ValueError:
-                body = None
-            code = classify(res.status_code, body)
-            log.warning("openai error status=%s code=%s request_id=%s", res.status_code, code, request_id)
-            raise LlmError(code, res.status_code)
-        try:
-            choice = res.json()["choices"][0]
-            if choice.get("finish_reason") not in (None, "stop"):
-                raise LlmError("llm_response", res.status_code)
-            data = json.loads(choice["message"]["content"])
-        except LlmError:
-            raise
-        except (ValueError, KeyError, IndexError, TypeError) as exc:
-            raise LlmError("llm_response", res.status_code) from exc
-        if not isinstance(data, dict):
-            raise LlmError("llm_response", res.status_code)
+        data = await self._invoke_json(
+            [("system", SYSTEM_PROMPT), ("human", description[:1000])]
+        )
         colors = [c for c in data.get("colors") or [] if c in ALLOWED_COLORS]
         sex = data.get("sex") if data.get("sex") in ("M", "F") else ""
         marks = [str(m)[:20] for m in (data.get("marks") or []) if isinstance(m, str) and m.strip()][:6]
@@ -114,48 +120,14 @@ class FeatureExtractor:
         return {"colors": colors, "breed": breed, "sex": sex, "marks": marks, "model": self.model, "prompt_version": PROMPT_VERSION}
 
     async def analyze_photo(self, image: bytes, mime_type: str) -> dict:
-
         encoded = base64.b64encode(image).decode("ascii")
-        payload = {
-            "model": self.model,
-            "response_format": {"type": "json_object"},
-            "messages": [
-                {"role": "system", "content": PHOTO_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "사진을 평가하고 지시에 맞는 JSON을 반환하세요."},
-                        {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}", "detail": "high"}},
-                    ],
-                },
-            ],
-        }
-        try:
-            res = await self._client.post(OPENAI_URL, json=payload, headers={"Authorization": f"Bearer {self._key}"})
-        except httpx.TimeoutException as exc:
-            raise LlmError("llm_timeout") from exc
-        except httpx.HTTPError as exc:
-            raise LlmError("llm_network") from exc
-        request_id = res.headers.get("x-request-id")
-        if res.status_code >= 400:
-            try:
-                body = res.json()
-            except ValueError:
-                body = None
-            code = classify(res.status_code, body)
-            log.warning("openai photo error status=%s code=%s request_id=%s", res.status_code, code, request_id)
-            raise LlmError(code, res.status_code)
-        try:
-            choice = res.json()["choices"][0]
-            if choice.get("finish_reason") not in (None, "stop"):
-                raise LlmError("llm_response", res.status_code)
-            data = json.loads(choice["message"]["content"])
-        except LlmError:
-            raise
-        except (ValueError, KeyError, IndexError, TypeError) as exc:
-            raise LlmError("llm_response", res.status_code) from exc
-        if not isinstance(data, dict):
-            raise LlmError("llm_response", res.status_code)
+        data = await self._invoke_json([
+            ("system", PHOTO_SYSTEM_PROMPT),
+            ("human", [
+                {"type": "text", "text": "사진을 평가하고 지시에 맞는 JSON을 반환하세요."},
+                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}", "detail": "high"}},
+            ]),
+        ])
         confidence = data.get("confidence") if isinstance(data.get("confidence"), dict) else {}
 
         def confident(key: str) -> bool:
@@ -172,7 +144,7 @@ class FeatureExtractor:
         raw_colors = data.get("colors") or []
         raw_marks = data.get("marks") or []
         if not isinstance(raw_colors, list) or not isinstance(raw_marks, list):
-            raise LlmError("llm_response", res.status_code)
+            raise LlmError("llm_response")
         suitable = animal_present and identifiable and center_subject_clear
         species = data.get("species") if suitable and confident("species") and data.get("species") in ("dog", "cat", "etc") else ""
         colors = [
