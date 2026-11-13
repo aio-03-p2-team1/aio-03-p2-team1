@@ -16,7 +16,7 @@
 
 | 대상 | 확인 항목 | 결과 |
 | --- | --- | --- |
-| 구조동물 API `sido_v2`, `abandonmentPublic_v2` | 응답 필드 이름·빈 결과 형식·오류 형식 | 미측정 |
+| 구조동물 API `abandonmentPublic_v2` | 응답 필드 이름 | 2026-11-13 운영 백엔드 `GET /api/v1/notices` 로 확인: 정규화 필드 채워짐, `animal_data_source=api`, 최근 14일 2,875건 (빈 결과·오류 형식은 미측정) |
 | 카카오 로컬 주소 검색 | 보호센터 주소 좌표 변환 | 미측정 |
 | OpenAI `gpt-6-luna` | 모델 접근 권한, JSON 응답 | 미측정 |
 | Supabase `aio-03-p2-team1-demo.documents` | Exposed schemas, service_role 헤더 | 미측정 |
@@ -37,3 +37,4 @@
 | 날짜 | 버전 | 변경 | 이유 |
 | --- | --- | --- | --- |
 | 2026-11-12 | v0.1 | 프로젝트 골격·검색 그래프·4개 화면 최초 작성 | prompt.md 기반 초기 구현 |
+| 2026-11-13 | v0.1.1 | `frontend/vercel.json` 에 `/api/v1` → Render rewrite 추가 | 배포 화면에서 `/api/v1/*` 가 Vercel 404 로 끝나 공고 조회·회원가입 실패 |
