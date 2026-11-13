@@ -435,7 +435,7 @@ Supabase 연결 설정:
 | 백엔드 | Render Web Service `aio-03-p2-team1`, Python 3.12, uv, 시작 명령은 `$PORT`를 읽는다(예: `uv run uvicorn backend.main:app --host 0.0.0.0 --port $PORT`) |
 | 헬스 체크 | Render Health Check Path `/api/v1/health` |
 | 운영 Redis | Render Key Value(다른 프로젝트와 공유, 키 접두사 `meet-again:auth:` 로 구분. 메모리·연결 한도 공유) |
-| 확정 주소 | 프론트 `https://aio-03-p2-team1-aio-03-p2-team1.vercel.app`, 백엔드 `https://aio-03-p2-team1.onrender.com`, 배포 브랜치 `main` |
+| 확정 주소 | 프론트 `https://dasi-manna.vercel.app`(예전 `vibe-codeing-demo.vercel.app`·`meet-again-team1.vercel.app` 은 307 리다이렉트, Vercel 기본 주소 `aio-03-p2-team1-aio-03-p2-team1.vercel.app`), 백엔드 `https://aio-03-p2-team1.onrender.com`, 배포 브랜치 `main` |
 | 미확정 | 커스텀 도메인, Preview 배포 origin 허용 여부 |
 
 배포 주소가 확정되면 `frontend/vercel.json`의 rewrite 대상(`https://<Render 서비스 URL>/api/v1/:path*`), Render `CORS_ORIGINS`, 카카오 JavaScript SDK 도메인을 같은 값으로 맞춘다. 추측한 URL을 넣지 않는다. Render 무료 인스턴스는 유휴 시 잠들어 첫 요청이 느릴 수 있으므로 시연 전에 미리 깨운다.
@@ -582,4 +582,5 @@ Supabase 연결 설정:
 - 2026-11-11: 호스팅을 Vercel·Render `aio-03-p2-team1`로 확정하고, 단위 프로젝트 2 안내의 필수 지표·산출물·PR 협업 방식을 반영했다.
 - 2026-11-12: 프로젝트 골격(백엔드·검색 그래프·인증·4개 화면)을 생성했다. 화면 설계에 맞춰 조회 전용 `GET /notices`, `GET /notices/{id}` 를 추가했다(docs/architecture.md 8장).
 - 2026-11-13: 배포 주소를 확정해 16장에 기록하고 `frontend/vercel.json` 에 `/api/v1` rewrite 를 추가했다.
+- 2026-11-13: 대표 배포 주소를 `dasi-manna.vercel.app` 으로 정하고(이전 주소는 리다이렉트) README 에 팀원용 시작 안내를 추가했다.
 - 2026-11-13: 헤더에 마이페이지(`/my`)를 추가했다. 내 정보와 검색 기록(`GET /runs`)을 보여 주며 새 API는 없다.
