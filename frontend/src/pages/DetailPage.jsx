@@ -28,9 +28,11 @@ export default function DetailPage() {
   const [item, setItem] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
+  const [photoIndex, setPhotoIndex] = useState(0)
 
   useEffect(() => {
     setStatus('loading')
+    setPhotoIndex(0)
     const load = runId
       ? api(`/runs/${encodeURIComponent(runId)}`).then((run) => {
           const found = (run.candidates || []).find((c) => c.id === noticeId)
@@ -85,11 +87,20 @@ export default function DetailPage() {
       </div>
       <div className="detail-layout">
         <div className="detail-gallery">
-          <NoticePhoto item={item} variant="main" />
+          <NoticePhoto item={item} variant="main" src={item.photos?.[photoIndex]} />
           {item.photos?.length > 1 && (
             <div className="detail-thumbs">
               {item.photos.map((p, i) => (
-                <a key={p} href={p} target="_blank" rel="noreferrer"><img className="detail-thumb-img" src={p} alt={`사진 ${i + 1}`} referrerPolicy="no-referrer" /></a>
+                <button
+                  key={p}
+                  type="button"
+                  className={`detail-thumb${i === photoIndex ? ' selected' : ''}`}
+                  aria-pressed={i === photoIndex}
+                  aria-label={`사진 ${i + 1} 크게 보기`}
+                  onClick={() => setPhotoIndex(i)}
+                >
+                  <img className="detail-thumb-img" src={p} alt="" referrerPolicy="no-referrer" />
+                </button>
               ))}
             </div>
           )}

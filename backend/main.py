@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from backend.config import Settings, get_settings
 from backend.deps import AppContext
 from backend.errors import ApiError
-from backend.routers import auth, memory, public, searches
+from backend.routers import auth, memory, posts, public, searches
 from backend.storage import StorageError
 
 log = logging.getLogger("dasimanna")
@@ -123,7 +123,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     async def api_error(request: Request, exc: ApiError):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    for router in (public.router, auth.router, searches.router, memory.router):
+    for router in (public.router, auth.router, searches.router, memory.router, posts.router):
         app.include_router(router, prefix=API_PREFIX)
     return app
 
