@@ -14,6 +14,7 @@ import {
   telHref
 } from '../lib/format.js'
 import KakaoMap from '../components/KakaoMap.jsx'
+import RescueLocation from '../components/RescueLocation.jsx'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 
@@ -123,7 +124,7 @@ export default function DetailPage() {
             <Fact label="나이" value={item.age} />
             <Fact label="체중" value={item.weight} />
             <Fact label="중성화" value={neuterLabel(item.neuter)} />
-            <Fact label="구조 위치" value={item.happen_place} />
+            <Fact label="구조 위치" value={<RescueLocation place={item.happen_place} />} />
             <Fact label="구조 날짜" value={formatDate(item.happen_date)} />
             <Fact label="공고 기간" value={item.notice_start ? `${formatDate(item.notice_start)} ~ ${formatDate(item.notice_end)}` : null} />
           </dl>
