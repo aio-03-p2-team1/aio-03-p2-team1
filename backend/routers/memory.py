@@ -1,5 +1,3 @@
-"""저장 검색과 사용자 기억 (로그인 필요, 소유자 격리)."""
-
 from __future__ import annotations
 
 import uuid
@@ -63,7 +61,7 @@ async def get_memory(profile_id: str, user: SessionUser = Depends(current_user),
 async def put_memory(body: MemoryBody, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     confirmed = body.confirmed.model_dump(exclude_none=True)
     for key in ("species", "region", "start_date", "end_date"):
-        confirmed.pop(key, None)  # 검색 범위는 장기 기억에 넣지 않는다
+        confirmed.pop(key, None)
     data = {"profile_id": body.profile_id, "confirmed": confirmed, "updated_at": _now()}
     await ctx.store.put(user.owner, "memory", body.profile_id, data)
     return data

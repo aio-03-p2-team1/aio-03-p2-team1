@@ -1,4 +1,3 @@
-"""텍스트 임베딩. 외부 응답과 벡터 크기·유한값을 검증한다."""
 import math
 import httpx
 

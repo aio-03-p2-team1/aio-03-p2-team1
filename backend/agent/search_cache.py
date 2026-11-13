@@ -1,4 +1,3 @@
-"""사용자·조건별 상위 300건 스냅샷, 고정 TTL 600초. 벡터는 저장하지 않는다."""
 import asyncio
 import hashlib
 import json

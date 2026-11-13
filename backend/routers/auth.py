@@ -1,5 +1,3 @@
-"""인증 API: /auth/register · /auth/login · /auth/me · /auth/logout (10장)."""
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -14,7 +12,7 @@ from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-hasher = PasswordHash.recommended()  # Argon2
+hasher = PasswordHash.recommended()
 
 INVALID_LOGIN = "이메일 또는 비밀번호가 올바르지 않습니다."
 LOGIN_LIMIT = 10

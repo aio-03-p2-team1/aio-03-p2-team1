@@ -13,7 +13,6 @@ KINDS = {"identity", "thread", "memory", "saved", "run", "subscription", "notifi
 
 
 class StorageError(RuntimeError):
-    """저장소 호출 실패. code 는 화면에 보여도 되는 분류 코드다."""
 
     def __init__(self, code: str, status: int | None = None):
         super().__init__(code)
@@ -27,11 +26,11 @@ class Store(Protocol):
     async def put(self, owner: str, kind: str, doc_id: str, data: dict[str, Any]) -> None: ...
 
     async def create(self, owner: str, kind: str, doc_id: str, data: dict[str, Any]) -> bool:
-        """이미 있으면 False (create-only)."""
+
         ...
 
     async def list(self, owner: str, kind: str, limit: int = 50) -> list[dict[str, Any]]:
-        """updated_at 내림차순. 각 항목은 {"id", "data", "updated_at"}."""
+
         ...
 
     async def delete(self, owner: str, kind: str, doc_id: str) -> bool: ...

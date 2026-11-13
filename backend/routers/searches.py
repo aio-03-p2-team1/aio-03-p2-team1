@@ -1,5 +1,3 @@
-"""검색·실행 이력·보호센터 위치 API (로그인 필요, 소유자 격리)."""
-
 from __future__ import annotations
 
 import time
@@ -162,7 +160,7 @@ async def candidate_location(
         raise ApiError(404, "candidate_not_found", "후보를 찾을 수 없습니다.")
     if candidate.get("source") == "sample":
         return {"status": "unavailable", "reason": "sample"}
-    address = (candidate.get("care") or {}).get("address")  # 클라이언트 입력이 아닌 저장된 결과에서 읽는다
+    address = (candidate.get("care") or {}).get("address")
     cached = candidate.get("location") or {}
     if cached.get("status") == "ok" and cached.get("address") == (address or "").strip():
         return {**cached, "cached": True}

@@ -1,10 +1,3 @@
-"""Redis 세션과 로그인 호출 제한.
-
-- 키 접두사 meet-again:auth:
-- 세션 원문은 32바이트 임의 토큰, Redis 키에는 SHA-256 만 저장
-- Redis 장애는 AuthUnavailable 로 올려 503 으로 응답한다(인증 우회 금지)
-"""
-
 from __future__ import annotations
 
 import hashlib
@@ -72,7 +65,7 @@ class SessionStore:
             raise AuthUnavailable() from exc
 
     async def hit_rate_limit(self, bucket: str, limit: int, window_seconds: int) -> bool:
-        """호출 횟수를 1 늘리고, 한도를 넘었으면 True."""
+
         key = PREFIX + "rate:" + _digest(bucket)
         try:
             count = await self._redis.incr(key)

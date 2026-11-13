@@ -1,14 +1,3 @@
-"""후보 필터·특징 점수·RRF 순위 결합.
-
-- 지역·기간·종류 필터를 먼저 적용한다(이미 API 인자로 걸었더라도 응답을 다시 확인).
-- 선택 정보는 가중치로 점수화한다. 누락 필드는 '미확인'으로, 불일치와 구분한다.
-- 점수는 동일 동물일 확률이 아니다.
-
-가중치: 품종 3, 털색 3(겹치는 색 하나 이상), 성별 2, 특징 키워드 1개당 1(최대 3)
-동점: 점수 내림차순 → 실종일과 발견일이 가까운 순 → 공고 식별자 오름차순
-실제 검색은 이 규칙 순위와 임베딩 코사인 순위를 RRF(k=60)로 결합한다.
-"""
-
 from __future__ import annotations
 
 import re
@@ -91,7 +80,7 @@ def keywords(text: str | None) -> list[str]:
 
 
 def in_scope(item: dict[str, Any], criteria: dict[str, Any]) -> list[str]:
-    """필수 조건 위반 사유 목록(없으면 범위 안)."""
+
     reasons = []
     species = criteria.get("species")
     if species and species != "all" and item.get("species") and item["species"] != species:

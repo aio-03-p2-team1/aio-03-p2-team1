@@ -1,5 +1,3 @@
-"""FastAPI 앱 진입점: uvicorn backend.main:app"""
-
 from __future__ import annotations
 
 import logging
@@ -64,7 +62,7 @@ def build_context(settings: Settings) -> AppContext:
 
 
 def create_app(ctx: AppContext | None = None) -> FastAPI:
-    settings = ctx.settings if ctx else get_settings()  # live 필수 값 누락 시 여기서 멈춘다
+    settings = ctx.settings if ctx else get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -131,15 +129,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         app.include_router(router, prefix=API_PREFIX)
     return app
 
-
 _app: FastAPI | None = None
 
 
-def __getattr__(name):  # pragma: no cover - uvicorn 진입점
-    """`backend.main:app` 을 처음 읽을 때 앱을 만든다.
+def __getattr__(name):
 
-    테스트가 모듈을 import 할 때 .env 설정 검증이 먼저 일어나지 않게 하기 위함이다.
-    """
     global _app
     if name == "app":
         if _app is None:

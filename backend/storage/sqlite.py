@@ -1,5 +1,3 @@
-"""로컬 개발용 SQLite 저장소. 운영(Render)에서는 임시 파일시스템이므로 쓰지 않는다."""
-
 from __future__ import annotations
 
 import asyncio

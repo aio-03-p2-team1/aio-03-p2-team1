@@ -1,5 +1,3 @@
-"""요청 공용 의존성: 앱 컨텍스트와 로그인 사용자."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -20,10 +18,10 @@ class AppContext:
     settings: Settings
     store: Store
     sessions: SessionStore
-    animal: Any  # backend.tools.animal_api.AnimalApi
-    kakao: Any  # backend.tools.kakao.KakaoGeocoder
-    llm: Any  # backend.agent.llm.FeatureExtractor | None
-    photo_llm: Any = None  # backend.agent.llm.FeatureExtractor | None
+    animal: Any
+    kakao: Any
+    llm: Any
+    photo_llm: Any = None
     embedder: Any = None
     search_cache: Any = None
 

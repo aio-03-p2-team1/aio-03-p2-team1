@@ -1,9 +1,3 @@
-"""카카오 로컬 주소 검색으로 보호센터 주소 → 좌표.
-
-임의 마커를 만들지 않는다. 좌표를 확정할 수 없으면 사유 코드를 돌려준다.
-카카오 오류(KakaoError)는 호출 측에서 502 로 응답하고 캐시하지 않는다.
-"""
-
 from __future__ import annotations
 
 import httpx
@@ -12,7 +6,6 @@ KAKAO_ADDRESS_URL = "https://dapi.kakao.com/v2/local/search/address.json"
 
 
 class KakaoError(RuntimeError):
-    """code: location_auth · location_rate_limit · location_timeout · location_network · location_response"""
 
     def __init__(self, code: str, status: int | None = None):
         super().__init__(code)

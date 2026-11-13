@@ -1,10 +1,3 @@
-"""OpenAI 기반 특징 추출 (live 모드).
-
-LLM 은 보호자가 쓴 자유 서술에서 털색·품종·성별·특징 키워드만 구조화한다.
-공고 번호·연락처·날짜·좌표는 절대 만들지 않는다(입력에도 넣지 않는다).
-오류는 구조화된 코드로 분류하고, 원본 메시지·응답 본문·키는 남기지 않는다.
-"""
-
 from __future__ import annotations
 
 import json
@@ -121,7 +114,7 @@ class FeatureExtractor:
         return {"colors": colors, "breed": breed, "sex": sex, "marks": marks, "model": self.model, "prompt_version": PROMPT_VERSION}
 
     async def analyze_photo(self, image: bytes, mime_type: str) -> dict:
-        """사진 적합성을 확인하고 이미지에서 직접 보이는 특징만 구조화한다."""
+
         encoded = base64.b64encode(image).decode("ascii")
         payload = {
             "model": self.model,

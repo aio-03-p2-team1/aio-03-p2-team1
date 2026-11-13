@@ -74,7 +74,7 @@ class SupabaseStore:
             "kind": kind,
             "id": doc_id,
             "data": data,
-            # 업서트 시에도 정렬 기준이 갱신되도록 서버 시각을 명시한다.
+
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         await self._request(
