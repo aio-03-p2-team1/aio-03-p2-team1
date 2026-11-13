@@ -1,0 +1,19 @@
+# 로컬 개발 전용 Redis (prompt.md 15장). 실행: docker compose up -d redis
+# 6379 는 다른 프로젝트와 충돌할 수 있어 127.0.0.1:6380 으로 연다.
+services:
+  redis:
+    image: redis:8-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    volumes:
+      - dasimanna-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  dasimanna-redis:

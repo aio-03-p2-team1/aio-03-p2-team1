@@ -1,0 +1,57 @@
+/* 앱 추가 스타일: 실제 데이터 상태(로딩·오류·추가 질문·근거·지도)와 React 구조에 맞춘 보정 */
+
+.site-header nav a.active{color:#a67c21}
+.account-area{margin-left:auto;display:flex;align-items:center;gap:10px}
+.account-area .account-link{margin-left:0;cursor:pointer;font:inherit;font-size:13px;font-weight:800}
+.account-name{color:#6f5730;font-size:13px;font-weight:700;white-space:nowrap}
+.site-header>a.account-link{margin-left:auto}
+
+.state-box{padding:22px;border:1px solid #eee8df;border-radius:12px;background:#fff;color:#6e665b;font-size:14px;line-height:1.6}
+.state-box strong{display:block;margin-bottom:4px;color:#3d3832}
+.state-box p{margin:0 0 10px}
+.state-error{border-color:#ecc7bd;background:#fff7f4}
+.state-error strong{color:#a34a39}
+.load-more{display:flex;justify-content:center;margin-top:24px}
+
+.sample-label.source-api{background:#e7f2df;color:#3f5a2c}
+.sample-label.source-sample{background:#fff0c4;color:#6e5932}
+
+a.post-card{text-decoration:none}
+.post-thumb-img{display:block;object-fit:cover}
+.detail-photo-img{display:block;width:100%;max-height:520px;object-fit:cover;border-radius:16px;background:#eee8dd;box-shadow:var(--shadow)}
+.detail-main-photo{display:block}
+.detail-thumbs{display:flex;gap:10px;margin-top:14px}
+.detail-thumb-img{width:128px;height:78px;object-fit:cover;border:3px solid #e5c879;border-radius:9px}
+
+.req{margin-left:4px;color:#b07a1d;font-size:10px;font-style:normal;font-weight:700}
+.question-panel{border-color:#ead7a3;background:#fffaf0}
+.question-panel ul{margin:10px 0;padding-left:20px;color:#4f473b;line-height:1.7}
+.run-meta{margin:16px 0 0;color:#968c7f;font-size:12px}
+.result-grid a.result-card{text-decoration:none}
+
+.evidence-panel{margin-top:18px;padding:20px 22px}
+.evidence-panel h2{margin:0 0 4px;font-size:17px}
+.evidence{margin-top:12px}
+.evidence strong{font-size:13px}
+.evidence ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.7}
+.evidence-ok strong{color:#3f6a2a}
+.evidence-bad strong{color:#a34a39}
+.evidence-unknown strong{color:#8c8376}
+
+.care-box p{line-height:1.8}
+.map-wrap{margin-top:12px}
+.map-box{width:100%;height:260px;border:1px solid #e7e0d5;border-radius:12px;background:#f3eee5}
+.map-note{margin:10px 0 0;color:#857b6e;font-size:13px}
+
+.password-field{position:relative;display:block}
+.password-field input{padding-right:70px!important}
+.password-toggle{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#926c23;font-size:12px;font-weight:700}
+button[disabled]{opacity:.65;cursor:progress}
+
+/* 샘플 사진 위치: 디자인 스프라이트의 8칸 전체(원본은 게시판 카드에 일부만 정의) */
+.sample-photo.photo-0{background-position:3.67% 54.03%}.sample-photo.photo-1{background-position:35.35% 54.03%}
+.sample-photo.photo-2{background-position:65.93% 54.03%}.sample-photo.photo-3{background-position:96.56% 54.03%}
+.sample-photo.photo-4{background-position:3.67% 88.57%}.sample-photo.photo-5{background-position:35.35% 88.57%}
+.sample-photo.photo-6{background-position:65.93% 88.57%}.sample-photo.photo-7{background-position:96.56% 88.57%}
+.notice-photo-img{object-fit:cover;background:#eee8dd}
+.post-thumb.sample-photo{height:auto;aspect-ratio:390/171}

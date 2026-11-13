@@ -226,3 +226,5 @@ frontend/.env.local
 node_modules/
 .data/
 *.db
+# Python 템플릿의 lib/ 규칙이 프론트 소스를 가리지 않도록 예외 처리
+!frontend/src/lib/

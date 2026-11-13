@@ -1,0 +1,43 @@
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import Header from './components/Header.jsx'
+import Footer from './components/Footer.jsx'
+import { ToastProvider } from './components/Toast.jsx'
+import { useAuth } from './lib/auth.jsx'
+import BoardPage from './pages/BoardPage.jsx'
+import DetailPage from './pages/DetailPage.jsx'
+import SearchPage from './pages/SearchPage.jsx'
+import AuthPage from './pages/AuthPage.jsx'
+import NotFoundPage from './pages/NotFoundPage.jsx'
+
+function RequireLogin({ children }) {
+  const { user, ready } = useAuth()
+  const location = useLocation()
+  if (!ready) return <main className="page-main"><p className="state-box">로그인 상태를 확인하고 있어요…</p></main>
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />
+  return children
+}
+
+export default function App() {
+  const { user } = useAuth()
+  return (
+    <ToastProvider>
+      <Header />
+      <Routes>
+        <Route path="/" element={<BoardPage />} />
+        <Route path="/notices/:noticeId" element={<DetailPage />} />
+        <Route
+          path="/search"
+          element={
+            <RequireLogin>
+              {/* 계정이 바뀌면 이전 계정의 화면 상태를 초기화한다 */}
+              <SearchPage key={user?.email || 'guest'} />
+            </RequireLogin>
+          }
+        />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
+      <Footer />
+    </ToastProvider>
+  )
+}
