@@ -34,6 +34,10 @@
 | `SQLITE_PATH` | 로컬 DB 경로; 기본 `.data/meet-again.db` |
 | `SUPABASE_URL`, `SUPABASE_SCHEMA`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase 주소·스키마·서버 전용 키. live 모드에서 Supabase 사용 시 설정 |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI 연결; 모델 기본값 `gpt-6-luna` |
+| `LANGSMITH_TRACING` | LangGraph·LangChain 실행 추적 여부; 기본 `false`. `true`면 API 키 필요 |
+| `LANGSMITH_API_KEY` | LangSmith 서버 전용 API 키; 추적을 켤 때 설정 |
+| `LANGSMITH_PROJECT` | 추적 프로젝트 이름; 기본 `dasimanna` |
+| `LANGSMITH_ENDPOINT` | 선택 설정. LangSmith SaaS 외 별도 endpoint를 쓸 때 지정 |
 | `ANIMAL_API_KEY` | 공공데이터포털 키. 별칭 `ANIMAL_API_SERVICE_KEY`도 지원하며 두 값이 있으면 이 변수가 우선 |
 | `ANIMAL_API_BASE_URL` | 구조동물 API 주소 |
 | `KAKAO_REST_API_KEY` | 보호센터 주소의 좌표 변환 |
@@ -92,6 +96,7 @@ cd frontend && npm test && npm run build
 - 카카오 REST 키는 백엔드 `.env`의 `KAKAO_REST_API_KEY`에 둔다.
 - 카카오 지도 SDK 키는 `frontend/.env.local`의 `VITE_KAKAO_JS_KEY`에 둔다. 접속 origin을 카카오 앱의 JavaScript SDK 도메인에 등록한다.
 - LangChain OpenAI 연동은 `OPENAI_API_KEY`가 필요하다. `APP_MODE=live`에서는 Supabase 환경변수도 설정한다. 채팅·사진 분석 클라이언트와 임베딩 클라이언트는 생성자에서 주입할 수 있어 외부 호출 없이 모의 클라이언트로 검증할 수 있다.
+- LangSmith 추적은 기본 꺼져 있다. 켜려면 `LANGSMITH_TRACING=true`와 `LANGSMITH_API_KEY`를 설정하고, 필요하면 프로젝트 이름을 `LANGSMITH_PROJECT`로 지정한다. 그래프 입력·출력과 모델 입출력에 검색 서술·공고 데이터가 기록될 수 있으므로 실제 키는 로컬 `.env` 또는 배포 환경변수에만 보관하고 추적 프로젝트 접근 권한을 제한한다. 상세 동작과 데이터 범위는 [architecture.md](architecture.md#51-langsmith-추적)를 참고한다.
 - 비밀 값은 팀 채팅이나 저장소에 공유하지 않는다. 운영 비밀 값은 배포 서비스의 환경변수 설정에만 둔다.
 
 ## 배포 설정

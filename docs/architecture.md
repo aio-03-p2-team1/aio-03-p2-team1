@@ -9,6 +9,7 @@
 React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 ──▶ 도구(구조동물 API · 카카오 · LangChain OpenAI)
                            │                     │
                            ├─ Redis: 세션·호출 제한   └─ 저장소(SQLite | Supabase documents)
+                           └─ (선택) LangSmith: 그래프·모델 실행 추적
 ```
 
 | 화면(라우트) | 디자인 원본 | 사용하는 API |
@@ -133,6 +134,13 @@ sequenceDiagram
 - 요약 전략(토큰 예산·요약 임계값)은 **미구현**. 현재 LLM 입력은 단일 서술이라 요약이 필요하지 않다. 대화형 입력을 늘리면 추가한다.
 - 특징·사진 분석은 `ChatOpenAI`, 임베딩은 `OpenAIEmbeddings`를 사용한다. 각 어댑터 생성자는 LangChain 호환 클라이언트를 선택적으로 받아 테스트에서 모의 클라이언트를 주입할 수 있다. 기본 런타임은 API 키와 timeout으로 실제 LangChain 클라이언트를 구성한다.
 - 모델 요청·출력 규격은 `backend/agent/schema.py`의 Pydantic 모델로 정의한다. 요청은 모델 호출 전 검증하고, 응답은 `with_structured_output(..., method="json_schema", strict=True)`로 생성한 뒤 Pydantic 모델로 다시 검증한다. 특징 추출기 메서드는 dict 대신 응답 모델을 반환하며, 그래프 상태·HTTP 응답 경계에서만 직렬화한다.
+
+## 5.1 LangSmith 추적
+
+- LangSmith 추적은 `LANGSMITH_TRACING=true`일 때만 활성화하며 기본값은 비활성화다. 활성화하려면 `LANGSMITH_API_KEY`가 필요하다. `LANGSMITH_PROJECT`는 기본 `dasimanna`; `LANGSMITH_ENDPOINT`는 기본 LangSmith SaaS 주소를 쓰므로 셀프 호스팅 등 별도 주소가 있을 때만 지정한다.
+- FastAPI 설정이 `.env`에서 읽은 `LANGSMITH_*` 값을 프로세스 환경에 전달한다. LangGraph 검색 실행과 그 안의 LangChain 모델 호출은 같은 LangSmith 프로젝트로 추적된다. 조건 캐시 적중은 그래프를 호출하지 않으므로 그래프 추적이 생기지 않는다.
+- 추적에는 그래프 입력·출력과 모델 입력·출력이 포함될 수 있다. 검색 조건의 자유 서술, 공고 후보 데이터 및 내부 `owner` 식별자가 포함될 수 있으므로 프로젝트 접근 권한과 LangSmith 데이터 보존 정책을 관리한다. API 키 등 설정 비밀 값은 그래프 입력에 넣지 않는다.
+- 이 연동은 관측/추적만 제공한다. 평가자, 데이터셋, 프롬프트 관리 및 운영 알림은 별도 구성 사항이다.
 
 ## 6. 자가 성찰 (Activity)
 

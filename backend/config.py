@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-6-luna"
 
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "dasimanna"
+    langsmith_endpoint: str | None = None
+
     animal_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("ANIMAL_API_KEY", "ANIMAL_API_SERVICE_KEY")
     )
@@ -56,6 +61,7 @@ class Settings(BaseSettings):
     @field_validator(
         "supabase_service_role_key",
         "openai_api_key",
+        "langsmith_api_key",
         "animal_api_key",
         "kakao_rest_api_key",
         "discord_bot_token",
@@ -101,6 +107,8 @@ class Settings(BaseSettings):
                 missing.append("ANIMAL_API_KEY")
             if missing:
                 raise ConfigError("실제 연동 모드 설정 누락: " + ", ".join(missing))
+        if self.langsmith_tracing and self.langsmith_api_key is None:
+            raise ConfigError("LANGSMITH_TRACING=true 이면 LANGSMITH_API_KEY가 필요합니다")
         return self
 
     @property
