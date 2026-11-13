@@ -3,6 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
+import Pagination from '../components/Pagination.jsx'
+import { useSearchScroll, useSearchViewState } from '../lib/searchView.jsx'
+import { cachedPage, pageNumber, rememberPage } from '../lib/pagination.js'
 import PhotoFeedbackPopup from '../components/PhotoFeedbackPopup.jsx'
 import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
@@ -18,40 +21,57 @@ const initialForm = () => ({ species: '', lost_date: today(), description: '' })
 export default function SearchPage() {
   const regions = useRegions()
   const toast = useToast()
-  const [form, setForm] = useState(initialForm)
-  const [location, setLocation] = useState(null) // { region, address, lat?, lng? }
+  const [form, setForm] = useSearchViewState('form', initialForm)
+  const [location, setLocation] = useSearchViewState('location', null) // { region, address, lat?, lng? }
   const [regionOpen, setRegionOpen] = useState(false)
-  const [photo, setPhoto] = useState('')
+  const [photo, setPhoto] = useSearchViewState('photo', '')
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [photoMessage, setPhotoMessage] = useState('')
   const [photoFeedbackOpen, setPhotoFeedbackOpen] = useState(false)
   const [photoFeedback, setPhotoFeedback] = useState('')
   const photoRequestId = useRef(0)
-  const photoFeatureText = useRef('')
-  const photoSpecies = useRef('')
-  const [run, setRun] = useState(null)
+  const [photoFeatureText, setPhotoFeatureText] = useSearchViewState('photoFeatureText', '')
+  const [photoSpecies, setPhotoSpecies] = useSearchViewState('photoSpecies', '')
+  const [run, setRun] = useSearchViewState('run', null)
+  const [pageCache, setPageCache] = useSearchViewState('pages', {})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [history, setHistory] = useState([])
 
-  const [params] = useSearchParams()
+  const [params, setParams] = useSearchParams()
   const runParam = params.get('run')
+  const pageParam = pageNumber(params.get('page'))
+  useSearchScroll(`${runParam}:${pageParam}`, !busy && Boolean(run))
 
   useEffect(() => {
     document.title = '다시 만나 · 우리 아이 찾기'
     loadHistory()
   }, [])
 
-  useEffect(() => {
-    if (!photo) return
-    return () => URL.revokeObjectURL(photo)
-  }, [photo])
-
   // 마이페이지 검색 기록에서 들어오면(?run=) 그 결과를 바로 보여 준다.
   useEffect(() => {
-    if (runParam) openHistory(runParam)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runParam])
+    if (!runParam) return
+    const key = `${runParam}:${pageParam}`
+    const cached = cachedPage(pageCache, key)
+    if (cached) {
+      setRun(cached)
+      setError(null)
+      setBusy(false)
+      return
+    }
+    const controller = new AbortController()
+    setBusy(true)
+    setError(null)
+    api(`/runs/${encodeURIComponent(runParam)}?page=${pageParam}`, { signal: controller.signal })
+      .then((result) => {
+        if (controller.signal.aborted) return
+        setRun(result)
+        setPageCache((previous) => rememberPage(previous, key, result))
+      })
+      .catch((err) => { if (err.name !== 'AbortError') setError(err) })
+      .finally(() => { if (!controller.signal.aborted) setBusy(false) })
+    return () => controller.abort()
+  }, [runParam, pageParam])
 
   function loadHistory() {
     api('/runs?limit=8').then((body) => setHistory(body.runs)).catch(() => setHistory([]))
@@ -74,8 +94,8 @@ export default function SearchPage() {
       setPhotoAnalyzing(false)
       return setPhotoMessage('사진은 8MB 이하로 선택해 주세요.')
     }
-    const oldAuto = photoFeatureText.current
-    const oldSpecies = photoSpecies.current
+    const oldAuto = photoFeatureText
+    const oldSpecies = photoSpecies
     if (oldAuto || oldSpecies) {
       setForm((current) => ({
         ...current,
@@ -85,8 +105,8 @@ export default function SearchPage() {
           : {}),
       }))
     }
-    photoFeatureText.current = ''
-    photoSpecies.current = ''
+    setPhotoFeatureText('')
+    setPhotoSpecies('')
     setPhoto(URL.createObjectURL(file))
     setPhotoMessage('')
     setPhotoFeedbackOpen(false)
@@ -117,8 +137,8 @@ export default function SearchPage() {
         ...(result.species ? { species: result.species } : {}),
         ...(extracted ? { description: [extracted, current.description].filter(Boolean).join('\n') } : {}),
       }))
-      photoFeatureText.current = extracted
-      photoSpecies.current = result.species || ''
+      setPhotoFeatureText(extracted)
+      setPhotoSpecies(result.species || '')
       setPhotoFeedbackOpen(true)
     } catch (err) {
       if (requestId === photoRequestId.current) setPhotoMessage(errorMessage(err))
@@ -135,6 +155,8 @@ export default function SearchPage() {
       if (threadId) body.thread_id = threadId
       const result = await api('/searches', { method: 'POST', body })
       setRun(result)
+      setPageCache((previous) => rememberPage(previous, `${result.run_id}:1`, result))
+      setParams({ run: result.run_id, page: '1' })
       loadHistory()
       if (result.status === 'awaiting_input') toast('추가 정보가 필요해요.')
       document.getElementById('results-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -160,12 +182,8 @@ export default function SearchPage() {
     submit({ region: '전체' }, run.thread_id)
   }
 
-  async function openHistory(runId) {
-    try {
-      setRun(await api(`/runs/${encodeURIComponent(runId)}`))
-    } catch (err) {
-      setError(err)
-    }
+  function openHistory(runId) {
+    setParams({ run: runId, page: '1' })
   }
 
   return (
@@ -249,10 +267,14 @@ export default function SearchPage() {
           <div>
             <span className="eyebrow">닮은 후보 살펴보기</span>
             <h2 id="results-title">검색 결과 {run?.data_source && <SourceBadge source={run.data_source} />}</h2>
-            <p>{run?.scope ? scopeText(run.scope) : '조건을 입력하고 검색하면 최대 10마리의 후보를 보여 드려요.'}</p>
+            <p>{run?.scope ? scopeText(run.scope) : '최대 1,000건을 비교해 상위 300건을 페이지로 보여 드려요.'}</p>
           </div>
         </div>
         <Results run={run} busy={busy} error={error} onWiden={widenRegion} />
+        {!error && run?.pagination && (
+          <Pagination page={run.pagination.page} pages={run.pagination.pages} disabled={busy}
+            onChange={(page) => setParams({ run: run.run_id, page: String(page) })} />
+        )}
       </section>
 
       <section className="recent-history" aria-labelledby="history-title">
@@ -339,10 +361,10 @@ function Results({ run, busy, error, onWiden }) {
       {candidates.length > 0 && (
         <div className="result-grid">
           {candidates.map((c) => (
-            <Link key={c.id} className="result-card" to={`/notices/${encodeURIComponent(c.id)}?run=${run.run_id}`}>
+            <Link key={c.id} className="result-card" to={`/notices/${encodeURIComponent(c.id)}?run=${run.run_id}&page=${run.pagination?.page || 1}`}>
               <NoticePhoto item={c} variant="notice" />
               <span className="result-card-body">
-                <span className="sample-label">{c.rank}순위 · 점수 {c.score}</span>
+                <span className="sample-label">{c.rank}순위 · {run.ranking_method === 'rrf' ? `RRF ${c.score.toFixed(5)}` : `점수 ${c.score}`}</span>
                 <strong>{noticeTitle(c)}</strong>
                 <small>{c.happen_place || '발견 장소 미확인'} · {formatDate(c.happen_date)}</small>
                 <small>{c.evidence?.matched?.length ? c.evidence.matched.join(' · ') : '일치 근거 없음(조건 범위 안의 공고)'}</small>

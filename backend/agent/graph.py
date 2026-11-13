@@ -20,12 +20,12 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
-from backend.agent.ranking import TOP_K, in_scope, rank
+from backend.agent.ranking import TOP_K, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
 from backend.tools.animal_api import AnimalApiError, short_region_name
 from backend.tools.kakao import KakaoError
 
-ROWS_PER_PAGE = 50
+ROWS_PER_PAGE = 1000
 LOCATE_TOP = 3
 RETRY_BACKOFF_SECONDS = (0.5, 1.0)
 
@@ -46,6 +46,7 @@ ERROR_MESSAGES = {
     "llm_request": "OpenAI 요청 설정 오류입니다.",
     "llm_upstream": "OpenAI 서버 오류입니다.",
     "llm_response": "OpenAI 응답 형식이 올바르지 않습니다.",
+    "embedding_not_configured": "검색 임베딩 설정이 없습니다. OPENAI_API_KEY 설정이 필요합니다.",
     "unknown_region": "지원하지 않는 지역입니다.",
     "tool_budget": "도구 호출 한도에 도달해 검색을 멈췄습니다.",
 }
@@ -107,11 +108,13 @@ async def context(state: SearchState, config) -> dict:
     memory_used: dict[str, Any] = {}
     profile_id = state.get("profile_id")
     if profile_id:
-        memory = await deps["store"].get(state["owner"], "memory", profile_id)
+        memory = (state.get("request") or {}).get("_profile_memory")
+        if memory is None:
+            memory = await deps["store"].get(state["owner"], "memory", profile_id)
         confirmed = (memory or {}).get("confirmed") or {}
         for key in crit.OPTIONAL_FIELDS:
             if not criteria.get(key) and confirmed.get(key):
-                criteria[key] = str(confirmed[key])
+                criteria[key] = str(confirmed[key])[:500]
                 origin[key] = "memory"
                 memory_used[key] = confirmed[key]
     update: dict[str, Any] = {
@@ -183,7 +186,7 @@ async def plan(state: SearchState, config) -> dict:
         {
             "tool": "animal_search",
             "why": "지역·기간·종류 조건으로 실제 공고를 조회",
-            "max_pages": deps["settings"].max_search_pages,
+            "max_pages": 1,
         }
     )
     return {
@@ -220,7 +223,7 @@ async def execute(state: SearchState, config) -> dict:
         "end": criteria["end_date"],
         "species": criteria["species"],
     }
-    while page <= settings.max_search_pages:
+    while page <= 1:
         attempt = 0
         while True:
             if len(calls) >= budget:
@@ -246,15 +249,13 @@ async def execute(state: SearchState, config) -> dict:
                 error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code), "page": page}
                 break
             calls.append(_call("animal_search", args, "ok", "공고 조회", count=len(result.items), attempt=attempt))
-            items.extend(result.items)
+            items.extend(result.items[:ROWS_PER_PAGE])
             total = result.total_count
             fetched_at = result.fetched_at
             break
         if error:
             break
-        if page * ROWS_PER_PAGE >= total:
-            break
-        page += 1
+        break  # 요청당 원본 API 1페이지(최대 1,000건)만 조회한다.
     pages_fetched = page if not error else page - 1
     return {
         "raw_items": items,
@@ -283,7 +284,27 @@ async def rank_node(state: SearchState, config) -> dict:
             unique.append(item)
         items = unique
     candidates = rank(items, state["criteria"], state.get("llm_features"))
-    return {"candidates": candidates, "pending_fix": None, "trace": ["rank"]}
+    deps = _deps(config)
+    embedder = deps.get("embedder")
+    scores = state.get("semantic_scores")
+    calls = []
+    if items and not state.get("error"):
+        try:
+            if not embedder and deps["animal"].source != "sample":
+                raise LlmError("embedding_not_configured")
+            if embedder:
+                if scores is None:
+                    vectors = await embedder.embed([feature_text(state["criteria"])] + [feature_text(item) for item in items])
+                    if len(vectors) != len(items) + 1:
+                        raise LlmError("llm_response")
+                    scores = {item["id"]: cosine(vectors[0], vector) for item, vector in zip(items, vectors[1:])}
+                    calls = [_call("embedding_search", {"model": embedder.model, "documents": len(items)}, "ok", "전체 공고와 검색 조건 임베딩")]
+                candidates = fuse_rrf(candidates, scores)
+        except (LlmError, ValueError) as exc:
+            code = exc.code if isinstance(exc, LlmError) else "llm_response"
+            return {"candidates": [], "error": {"code": code, "message": ERROR_MESSAGES.get(code, code)}, "trace": ["rank"]}
+    return {"candidates": candidates, "semantic_scores": scores, "ranking_method": "rrf" if embedder else "sample_lexical",
+            "tool_calls": calls, "pending_fix": None, "trace": ["rank"]}
 
 
 async def validate(state: SearchState, config) -> dict:

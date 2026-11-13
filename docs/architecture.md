@@ -1,4 +1,4 @@
-# 에이전트 아키텍처 설계서 (초안 v0.1)
+# 에이전트 아키텍처 설계서 (초안 v0.2)
 
 > 코드 기준: `backend/agent/graph.py`, `backend/agent/state.py`, `backend/agent/runner.py`
 > 노드·상태 필드·도구 스키마가 바뀌면 이 문서를 함께 고친다(AGENTS.md 7).
@@ -40,7 +40,7 @@ flowchart TD
   X -- 사용자 확인 필요 --> Q
   V -- 통과 --> L[locate<br/>상위 3개 보호센터 좌표]
   V -- 수정 불가·성찰 비활성·한도 초과 --> F
-  L --> F[finalize<br/>상위 10개·범위·종료 상태]
+  L --> F[finalize<br/>상위 300개·범위·종료 상태]
   Q --> END1([END awaiting_input])
   F --> END2([END completed / partial / failed])
 ```
@@ -54,11 +54,11 @@ flowchart TD
 | `context` | `criteria`, `profile_id` | 기억으로 선택 항목 보완, `memory_used`, `llm_features`, `error`(LLM) | 오류 → `finalize`, 아니면 `plan` |
 | `plan` | `criteria`, `pending_fix` | `criteria.region_code`, `plan`, `issues(arg_mapping)` | 매핑 실패 → `validate`, 아니면 `execute` |
 | `execute` | `criteria`, 한도 설정 | `raw_items`, `total_count`, `pages_fetched`, `retry_count`, `error` | `rank` |
-| `rank` | `raw_items`, `criteria`, `llm_features`, `pending_fix.dedupe` | `candidates` | `validate` |
+| `rank` | `raw_items`, `criteria`, `llm_features`, `pending_fix.dedupe`, `semantic_scores` | `candidates`, `semantic_scores`, `ranking_method`, `error` | `validate` |
 | `validate` | `candidates`, `issues`, `error` | `issues` | 아래 표 |
 | `reflect` | `issues`, `reflection_count` | `reflections`, `reflection_count`, `pending_fix`, `questions` | `pending_fix.next` |
 | `locate` | `candidates[:3]` | `candidates[].location` | `finalize` |
-| `finalize` | 전체 | `candidates[:10]`, `scope`, `status`, `end_reason`, `partial` | END |
+| `finalize` | 전체 | `candidates[:300]`, `scope`, `status`, `end_reason`, `partial` | END |
 
 `validate` 이후: 수정 가능한 문제(`FIXES`)가 없으면 `locate`(오류가 있으면 `finalize`), 성찰이 꺼져 있거나 `reflection_count ≥ MAX_REFLECTIONS` 이면 `finalize`, 그 밖에는 `reflect`.
 
@@ -68,7 +68,7 @@ flowchart TD
 | --- | --- | --- |
 | 필수 조건(종류·지역·기간) 누락·오류 | 도구 호출 없이 질문 | `questions` |
 | 지역이 '전체'가 아님 | `animal_regions` → 공식 시도 코드 매핑 | `tool_calls[].reason` |
-| 조건 충분 | `animal_search` 를 페이지 단위로 `MAX_SEARCH_PAGES` 까지 | 페이지·건수 |
+| 조건 충분 | `animal_search(page=1, rows=1000)` 1회(통신 재시도 별도) | 페이지·건수 |
 | live 모드 + 자유 서술 있음 | `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
 | 검증 통과 + 카카오 키 + 주소 | 상위 3개만 `kakao_geocode` | 후보 ID |
 | 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 OpenAI 비전) | 적합성 판정·특징 JSON |
@@ -153,7 +153,7 @@ flowchart LR
 
 ## 7. 후보 정렬 규칙
 
-`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. 상위 10개를 보여 준다. 점수는 같은 동물일 확률이 아니다.
+`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. 이 규칙 순위와 전체 공고 임베딩의 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
 ## 8. 백엔드 API 계약 (요약)
 
@@ -165,7 +165,8 @@ flowchart LR
 | `POST /auth/register` · `login` · `GET /auth/me` · `POST /auth/logout` | 쿠키 | `email_taken`, `invalid_credentials`, `login_rate_limited`, `auth_unavailable` |
 | `POST /searches` | 필요 | `not_authenticated`, `invalid_request` |
 | `POST /photo-analysis` | 필요 | `photo_analysis_not_configured`, `photo_analysis_rate_limited`, `invalid_photo`, `photo_too_large`, `photo_too_many_pixels`, `unsupported_photo_format`, `llm_*` |
-| `GET /runs` · `GET /runs/{id}` | 필요(소유자) | `run_not_found` |
+| `GET /runs` · `GET /runs/{id}?page=1&page_size=20` | 필요(소유자) | `run_not_found`, `invalid_page`, `search_cache_unavailable` |
+| `GET /runs/{id}/candidates/{cid}` | 필요(소유자) | `candidate_not_found` |
 | `GET /runs/{id}/candidates/{cid}/location` | 필요(소유자) | `candidate_not_found`, `location_*`(502), `location_rate_limited` |
 | `GET/POST /saved-searches` · `DELETE /saved-searches/{key}` | 필요 | `saved_search_not_found` |
 | `GET /memory/{pid}` · `PUT /memory` · `DELETE /memory/{pid}` | 필요 | `memory_not_found` |
@@ -192,3 +193,18 @@ flowchart LR
 - `backend/agent/llm.py`의 `PHOTO_SYSTEM_PROMPT`가 동물 존재, 외형 식별 가능 여부, 특정 동물의 중심·구분 가능 여부를 각각 판단한다. 세 조건과 각 자동 입력 특징 신뢰도가 0.8 이상인 값만 반환한다.
 - 분석 특징은 검색 폼에 입력되고 사용자가 수정할 수 있다. 낮은 신뢰도·분석 오류는 업로드 영역 아래에 표시한다. 폼 입력에 성공하면 `PhotoFeedbackPopup`이 하단 중앙에 나타난다(데스크톱 50vw, 모바일 80vw). 좋아요·싫어요 값은 현재 화면 상태에만 반영하고 서버에 저장하지 않는다.
 - 사진 분석에는 `OPENAI_API_KEY`가 필요하며, local 모드에서도 키가 설정된 경우 사용할 수 있다. 설정이 없으면 503 오류를 반환한다.
+
+## 10. 조건 캐시·RRF·페이지네이션 (v0.2)
+
+- 실행 전 현재 요청 → 세션 → 확인된 기억을 병합·정규화한 뒤 사용자 ID, 조건, 출처, 모델, 성찰 옵션, 버전을 정렬 JSON으로 직렬화하여 SHA-256 해시 키(`meet-again:search:<digest>`)를 만든다. 필수 조건이 빠지거나 잘못되면 캐시/공고 조회 없이 기존 질문 흐름으로 간다.
+- Redis GET이 적중하면 그래프·공공 API·LLM·임베딩을 실행하지 않는다. 응답마다 새로운 사용자별 run/thread 기록을 만들되 실제 호출 수는 0으로 기록한다.
+- 미적중은 Redis NX 잠금 후 다시 GET한다. 그래프 실행은 최대 120초, 잠금은 150초이며 대기는 최대 125초다. 잠금 소유 토큰을 WATCH로 확인한 뒤 해제한다. Redis 장애는 503, 잠금 대기 초과는 409, 실행 시간 초과는 504다.
+- 공고는 1,000건 한 페이지를 조회한다. 실제 전체가 더 크면 `scope.complete=false`와 실제 조회 건수를 표시한다. API 통신 실패 재시도 규칙은 유지한다. `MAX_SEARCH_PAGES`는 호환용 필드이며 조회량에 영향을 주지 않는다.
+- `embeddings.py`는 `text-embedding-3-small`에 검색 특징 + 공고 전부를 128개 단위로 보내고 응답 인덱스/개수/1,536차원/유한값/영벡터를 검사한다. 이메일·전화·좌표·ID는 공고 임베딩 텍스트에 넣지 않는다. 벡터는 그래프 실행 안에서만 사용한다.
+- 기존 규칙 순위와 코사인 순위의 RRF 합산 점수는 `1/(60+rank_lexical)+1/(60+rank_semantic)`이다. `score`는 RRF 점수이며 기존 점수는 `lexical_score`, 유사도는 `semantic_score`, 순위 근거는 `rrf_ranks`로 반환한다. 점수는 동일 개체일 확률이 아니다.
+- 상태에 `semantic_scores`(공고 ID→코사인 점수, rank에서 갱신, 비영속), `ranking_method`(rrf/sample_lexical, 실행 이력 저장)를 추가했다. 성찰 재정렬은 이미 계산한 유사도를 재사용한다.
+- 성공한 결과는 상위 최대 300건 및 실행 메타데이터만 TTL 600초로 저장한다. 원본 목록·벡터·사용자 ID·run/thread ID는 조건 캐시 값에서 제외한다. 캐시 조회로 TTL을 연장하지 않는다. 오류·질문 상태는 캐시하지 않는다. 신규 공고 감지를 위한 주기적 조회는 없다.
+- 실행 이력에도 상위 300건을 저장한다. `snapshot_id`를 비교해 같은 조건이 만료 후 갱신되더라도 기존 이력의 후보를 다른 스냅샷으로 교체하지 않는다. Redis 만료 후의 이력 조회는 저장소를 사용하며 API/임베딩을 재실행하지 않는다.
+- `POST /searches`와 `GET /runs/{id}`의 후보는 기본 20건만 반환한다. `pagination={page,page_size,total,pages}`, 페이지 크기 최대 40, `cache_hit`, `ranking_method`를 포함한다. 후보 상세/좌표는 전체 저장 이력에서 소유자와 후보를 확인한다.
+- `SearchViewProvider`를 Routes 위에 두어 검색 폼·지역·결과 페이지를 유지한다. `react-router-dom`의 `/search?run=<id>&page=<n>`과 메모리 캐시(최대 45페이지, 10분)를 함께 사용한다. 상세 화면 뒤로가기 시 페이지와 스크롤을 복원한다. 계정이 바뀌면 Provider를 초기화한다. 새로고침은 URL의 실행 ID/페이지로 이력을 다시 읽는다.
+- 전체 공고(`/`)는 특징 쿼리가 없는 별도 목록이므로 기존 조회 경로를 유지한다. 위 RRF·300건·페이지네이션 계약은 맞춤 검색(`/search`)에 적용된다.

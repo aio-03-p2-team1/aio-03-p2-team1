@@ -74,12 +74,13 @@ class FakeAnimal:
         return self.region_list
 
     async def search(self, *, region_code, start, end, species, page=1, rows=50):
-        self.calls.append({"region_code": region_code, "page": page, "species": species})
+        self.calls.append({"region_code": region_code, "page": page, "species": species, "rows": rows})
         if self.errors:
             err = self.errors.pop(0)
             if err:
                 raise AnimalApiError(err)
-        raws = self.pages[page - 1] if page - 1 < len(self.pages) else []
+        all_rows = [raw for chunk in self.pages for raw in chunk]
+        raws = all_rows[(page - 1) * rows:page * rows]
         total = sum(len(p) for p in self.pages)
         items = [normalize_item(r, "2026-11-12T00:00:00+00:00") for r in raws]
         return SearchPage(items=items, total_count=total, page=page, rows=rows, fetched_at="2026-11-12T00:00:00+00:00", source="api")
@@ -98,7 +99,19 @@ def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None) -> A
         animal=animal or SampleAnimalApi(),
         kakao=kakao or KakaoGeocoder(None),
         llm=llm,
+        embedder=FakeEmbedder(),
     )
+
+
+class FakeEmbedder:
+    model = "fake-embedding"
+
+    def __init__(self):
+        self.calls = []
+
+    async def embed(self, texts):
+        self.calls.append(texts)
+        return [[1.0, 0.0] for _ in texts]
 
 
 @pytest.fixture
