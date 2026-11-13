@@ -7,7 +7,6 @@ import { postSpeciesLabel, postTitle } from '../lib/post.js'
 import { useToast } from '../components/Toast.jsx'
 import { PostPhoto } from './PostBoardPage.jsx'
 
-// 실종 정보 상세 — 디자인: dasimanna-cards-post-detail.html
 export default function PostDetailPage() {
   const { postId } = useParams()
   const { user } = useAuth()

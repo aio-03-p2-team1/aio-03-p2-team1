@@ -1,11 +1,6 @@
 import { useState } from 'react'
 import { noticeTitle } from '../lib/format.js'
 
-/**
- * 공고 사진. 실제 공고는 API 사진 URL, 샘플 공고는 디자인 예시 이미지(스프라이트)를 쓴다.
- * variant: 'thumb'(게시판 카드) | 'notice'(검색 결과 카드, 390:171) | 'main'(상세)
- * src: 보여 줄 사진 URL(상세에서 고른 썸네일). 없으면 첫 사진.
- */
 export default function NoticePhoto({ item, variant = 'thumb', src: selected }) {
   const src = selected || item?.photos?.[0]
   const [failedSrc, setFailedSrc] = useState(null)

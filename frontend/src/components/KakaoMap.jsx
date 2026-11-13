@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { KAKAO_JS_KEY, loadKakaoSdk } from '../lib/kakao.js'
 import { kakaoSearchUrl } from '../lib/format.js'
 
-/** lat/lng 가 있을 때만 마커를 찍는다. 지도를 못 쓰면 카카오맵 주소 검색 링크로 대체한다. */
 export default function KakaoMap({ lat, lng, address, title }) {
   const box = useRef(null)
   const [state, setState] = useState(KAKAO_JS_KEY ? 'loading' : 'no_key')

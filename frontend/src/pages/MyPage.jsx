@@ -6,10 +6,9 @@ import { errorMessage, formatDate, formatDateTime, paginate, runStatusLabel, run
 import { postSpeciesLabel, postTitle } from '../lib/post.js'
 import { useToast } from '../components/Toast.jsx'
 
-const HISTORY_LIMIT = 50 // 서버 GET /runs 의 최대 limit
+const HISTORY_LIMIT = 50
 const PAGE_SIZE = 5
 
-/** 목록 하나를 불러오는 작은 상태 묶음: loading | ready | error */
 function useList(path, pick) {
   const [state, setState] = useState({ status: 'loading', items: [], error: null })
   function load() {
@@ -18,13 +17,11 @@ function useList(path, pick) {
       .then((body) => setState({ status: 'ready', items: pick(body), error: null }))
       .catch((error) => setState({ status: 'error', items: [], error }))
   }
-  // 마운트 때 한 번 불러온다(계정이 바뀌면 App 이 key 로 페이지를 새로 만든다).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [])
   return { ...state, reload: load }
 }
 
-// 마이페이지 — 디자인: dasimanna-cards-my.html (내 정보 · 검색 기록 · 내가 쓴 게시글)
 export default function MyPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()

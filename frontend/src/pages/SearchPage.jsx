@@ -14,15 +14,12 @@ import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-// 실종 날짜 기본값은 오늘. 지역은 모달에서 고른 위치(공식 시·도 + 주소)를 쓴다.
 const initialForm = () => ({ species: '', lost_date: today(), description: '' })
-
-// 우리 아이 찾기 — 디자인: dasimanna-cards-search.html
 export default function SearchPage() {
   const regions = useRegions()
   const toast = useToast()
   const [form, setForm] = useSearchViewState('form', initialForm)
-  const [location, setLocation] = useSearchViewState('location', null) // { region, address, lat?, lng? }
+  const [location, setLocation] = useSearchViewState('location', null)
   const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useSearchViewState('photo', '')
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
@@ -48,7 +45,6 @@ export default function SearchPage() {
     loadHistory()
   }, [])
 
-  // 마이페이지 검색 기록에서 들어오면(?run=) 그 결과를 바로 보여 준다.
   useEffect(() => {
     if (!runParam) return
     const key = `${runParam}:${pageParam}`
@@ -173,7 +169,6 @@ export default function SearchPage() {
     for (const [k, v] of Object.entries(form)) if (v.trim()) criteria[k] = v.trim()
     if (location?.region) criteria.region = location.region
     if (location?.address) criteria.lost_place = location.address
-    // 이어지는 질문에 답하는 중이면 같은 세션(thread)으로 보낸다.
     submit(criteria, run?.status === 'awaiting_input' ? run.thread_id : undefined)
   }
 

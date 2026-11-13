@@ -2,14 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { KAKAO_JS_KEY, loadKakaoSdk } from '../lib/kakao.js'
 import { kakaoSearchUrl } from '../lib/format.js'
 
-/**
- * 공고 상세 '구조 위치' 값 + 지도 버튼(🗺️).
- * 버튼을 누르면 작은 창에 구조 위치 지도를 띄우고, 창 밖을 누르거나 Esc 를 누르면 닫는다.
- *
- * 구조 위치(happenPlace)는 좌표 없이 글로만 오므로 브라우저 카카오 SDK 로 찾는다.
- * 주소 검색 → 실패하면 장소 검색 순서. 찾지 못하면 임의 마커를 찍지 않고 카카오맵 검색 링크만 준다.
- * 찾은 좌표는 이 화면에서만 쓰고 저장하지 않는다.
- */
 export default function RescueLocation({ place }) {
   const [open, setOpen] = useState(false)
   const wrap = useRef(null)
@@ -51,7 +43,7 @@ export default function RescueLocation({ place }) {
 
 function RescueMapPopover({ place, onClose }) {
   const box = useRef(null)
-  const [state, setState] = useState(KAKAO_JS_KEY ? 'loading' : 'no_key') // loading | ready | approx | not_found | error | no_key
+  const [state, setState] = useState(KAKAO_JS_KEY ? 'loading' : 'no_key')
   const [found, setFound] = useState('')
   const [attempt, setAttempt] = useState(0)
 
@@ -102,7 +94,6 @@ function RescueMapPopover({ place, onClose }) {
   )
 }
 
-/** 주소 검색(정확) → 장소 검색(대략) 순서로 좌표를 찾는다. 못 찾으면 null. */
 function locate(kakao, place) {
   const { services } = kakao.maps
   const ok = services.Status.OK
@@ -118,6 +109,7 @@ function locate(kakao, place) {
         if (p && valid(Number(p.y), Number(p.x))) {
           return resolve({ lat: Number(p.y), lng: Number(p.x), label: p.place_name || p.address_name, exact: false })
         }
+        // 확인된 좌표가 없으면 임의 마커를 만들지 않는다.
         resolve(null)
       })
     })

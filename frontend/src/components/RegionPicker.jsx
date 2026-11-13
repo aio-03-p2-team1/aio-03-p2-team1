@@ -2,14 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { KAKAO_JS_KEY, loadKakaoSdk } from '../lib/kakao.js'
 import { matchRegion } from '../lib/region.js'
 
-const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 } // 서울시청(지도 첫 화면 위치일 뿐, 값으로 쓰지 않음)
+const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 } // 지도 첫 화면의 중심일 뿐, 선택 위치로 저장하지 않는다.
 
-/**
- * 실종 지역 선택 모달.
- * 위: 카카오 주소 검색, 아래: 지도. 검색 결과나 지도를 누르면 그 위치의 주소와 시·도를 고른다.
- * 결과: { region: 공식 시·도 이름 | '전체', address, lat, lng }
- * allowAll=false 이면 '전체' 선택 버튼을 숨긴다(게시글 등록처럼 위치가 꼭 필요한 곳).
- */
 export default function RegionPicker({ open, regions, initial, onClose, onSelect, allowAll = true, title = '실종 지역 선택' }) {
   const mapBox = useRef(null)
   const kakaoRef = useRef(null)
@@ -33,7 +27,6 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
     map.panTo(pos)
   }, [])
 
-  // 좌표 → 주소·시도. 시도는 공식 목록 이름으로 맞추고, 못 맞추면 선택을 막는다.
   const pickCoord = useCallback(
     (lat, lng) => {
       const kakao = kakaoRef.current
@@ -86,7 +79,6 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
     const onKey = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-    // 모달을 열 때마다 지도를 새로 그린다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -104,7 +96,6 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
         setResults(rows.slice(0, 8).map((r) => ({ label: r.address_name, lat: Number(r.y), lng: Number(r.x) })))
         return
       }
-      // 주소로 못 찾으면 장소 이름(공원·역 등)으로 다시 찾는다.
       new kakao.maps.services.Places().keywordSearch(q, (places, pstatus) => {
         setSearching(false)
         if (pstatus === kakao.maps.services.Status.OK && places.length) {
