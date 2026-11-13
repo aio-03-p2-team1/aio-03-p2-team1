@@ -11,11 +11,11 @@ import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 import { useToast } from '../components/Toast.jsx'
+import { photoAnalysisError, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
 import { useRegions } from './useRegions.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const initialForm = () => ({ species: '', lost_date: today(), description: '' })
-const photoFormatError = 'JPG, PNG, WEBP 형식의 사진만 사용할 수 있어요.'
 export default function SearchPage() {
   const regions = useRegions()
   const toast = useToast()
@@ -81,15 +81,11 @@ export default function SearchPage() {
     event.target.value = ''
     if (!file) return
     const requestId = ++photoRequestId.current
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    const selectionError = photoSelectionError(file)
+    if (selectionError) {
       setPhotoFeedbackOpen(false)
       setPhotoAnalyzing(false)
-      return setPhotoMessage(photoFormatError)
-    }
-    if (file.size > 8 * 1024 * 1024) {
-      setPhotoFeedbackOpen(false)
-      setPhotoAnalyzing(false)
-      return setPhotoMessage('사진은 8MB 이하로 선택해 주세요.')
+      return setPhotoMessage(selectionError)
     }
     const oldAuto = photoFeatureText
     const oldSpecies = photoSpecies
@@ -113,8 +109,9 @@ export default function SearchPage() {
       const encoded = await readAsBase64(file)
       const result = await api('/photo-analysis', { method: 'POST', body: { image_base64: encoded } })
       if (requestId !== photoRequestId.current) return
-      if (!result.suitable) {
-        setPhotoMessage('다른 사진을 사용해 주세요.')
+      const unsuitableMessage = unsuitablePhotoMessage(result)
+      if (unsuitableMessage) {
+        setPhotoMessage(unsuitableMessage)
         return
       }
       const traits = [
@@ -138,10 +135,7 @@ export default function SearchPage() {
       setPhotoSpecies(result.species || '')
       setPhotoFeedbackOpen(true)
     } catch (err) {
-      if (requestId === photoRequestId.current) {
-        const isPhotoFormatError = ['invalid_photo', 'unsupported_photo_format'].includes(err.code)
-        setPhotoMessage(isPhotoFormatError ? photoFormatError : '오류가 발생했습니다.')
-      }
+      if (requestId === photoRequestId.current) setPhotoMessage(photoAnalysisError(err))
     } finally {
       if (requestId === photoRequestId.current) setPhotoAnalyzing(false)
     }
