@@ -99,8 +99,9 @@ async def analyze_photo(
         result = await ctx.photo_llm.analyze_photo(image_data, mime_type)
     except LlmError as exc:
         raise ApiError(502, exc.code, "사진을 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.")
-    result["analysis_ms"] = round((time.perf_counter() - started) * 1000)
-    return result
+    response = result.model_dump()
+    response["analysis_ms"] = round((time.perf_counter() - started) * 1000)
+    return response
 
 
 @router.get("/runs")

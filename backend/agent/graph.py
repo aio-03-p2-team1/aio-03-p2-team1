@@ -122,7 +122,7 @@ async def context(state: SearchState, config) -> dict:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("llm_feature_extract", {"model": llm.model}, exc.code, "자유 서술에서 특징 추출")]
             return update
-        update["llm_features"] = features
+        update["llm_features"] = features.model_dump()
         update["tool_calls"] = [
             _call(
                 "llm_feature_extract",

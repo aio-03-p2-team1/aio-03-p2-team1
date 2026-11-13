@@ -9,6 +9,7 @@ from PIL import Image
 
 from backend.agent.llm import LlmError
 from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
+from backend.agent.schema import PhotoAnalysisResponse
 from backend.main import create_app
 
 from .conftest import ORIGIN, build_ctx, signup
@@ -70,7 +71,20 @@ class FakePhotoAnalyzer:
         self.calls.append((image_data, mime_type))
         if self.error:
             raise self.error
-        return {"suitable": False, "message": "모델 내부 문구"}
+        return PhotoAnalysisResponse(
+            animal_present=False,
+            identifiable=False,
+            center_subject_clear=False,
+            suitable=False,
+            species="",
+            colors=[],
+            breed="",
+            sex="",
+            marks=[],
+            message="모델 내부 문구",
+            model="test-model",
+            prompt_version="photo-feature-v1",
+        )
 
 
 def photo_client(analyzer):

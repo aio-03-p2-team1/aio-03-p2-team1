@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-import json
 import logging
 import base64
 
 import httpx
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, ValidationError
+
+from backend.agent.schema import (
+    FeatureExtractionRequest,
+    FeatureExtractionModelResponse,
+    FeatureExtractionResponse,
+    PhotoAnalysisRequest,
+    PhotoAnalysisModelResponse,
+    PhotoAnalysisResponse,
+)
 
 log = logging.getLogger("dasimanna.llm")
 
@@ -67,18 +76,23 @@ class FeatureExtractor:
     def __init__(self, api_key: str, model: str, timeout: float = 30, transport=None, client=None):
         self.model = model
         http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if transport is not None else None
-        self._client = client or ChatOpenAI(
+        self._client = client if client is not None else ChatOpenAI(
             model=model,
             api_key=api_key,
             timeout=timeout,
             max_retries=0,
             http_async_client=http_client,
-            model_kwargs={"response_format": {"type": "json_object"}},
         )
 
-    async def _invoke_json(self, messages) -> dict:
+    async def _invoke_structured(self, messages: list, schema: type[BaseModel]) -> BaseModel:
         try:
-            response = await self._client.ainvoke(messages)
+            structured_client = self._client.with_structured_output(
+                schema,
+                method="json_schema",
+                strict=True,
+                include_raw=True,
+            )
+            result = await structured_client.ainvoke(messages)
         except Exception as exc:
             status = getattr(exc, "status_code", None)
             body = getattr(exc, "body", None)
@@ -94,83 +108,85 @@ class FeatureExtractor:
             if isinstance(exc, httpx.HTTPError) or "connection" in type(exc).__name__.lower():
                 raise LlmError("llm_network") from exc
             raise LlmError("llm_upstream") from exc
-        content = getattr(response, "content", None)
-        finish_reason = (getattr(response, "response_metadata", None) or {}).get("finish_reason")
-        if finish_reason not in (None, "stop") or not isinstance(content, str):
+        if not isinstance(result, dict) or result.get("parsing_error") is not None:
+            raise LlmError("llm_response")
+        raw = result.get("raw")
+        finish_reason = (getattr(raw, "response_metadata", None) or {}).get("finish_reason")
+        if finish_reason not in (None, "stop"):
             raise LlmError("llm_response")
         try:
-            data = json.loads(content)
-        except (ValueError, TypeError) as exc:
+            parsed = schema.model_validate(result.get("parsed"))
+        except (ValidationError, ValueError, TypeError) as exc:
             raise LlmError("llm_response") from exc
-        if not isinstance(data, dict):
-            raise LlmError("llm_response")
-        return data
+        return parsed
 
-    async def extract(self, description: str) -> dict:
-        data = await self._invoke_json(
-            [("system", SYSTEM_PROMPT), ("human", description[:1000])]
+    async def extract(self, description: str) -> FeatureExtractionResponse:
+        try:
+            request = FeatureExtractionRequest(description=description)
+        except ValidationError as exc:
+            raise LlmError("llm_request") from exc
+        response = await self._invoke_structured(
+            [("system", SYSTEM_PROMPT), ("human", request.description)],
+            FeatureExtractionModelResponse,
         )
-        colors = [c for c in data.get("colors") or [] if c in ALLOWED_COLORS]
-        sex = data.get("sex") if data.get("sex") in ("M", "F") else ""
-        marks = [str(m)[:20] for m in (data.get("marks") or []) if isinstance(m, str) and m.strip()][:6]
-        breed = str(data.get("breed") or "")[:30]
+        colors = [c for c in response.colors if c in ALLOWED_COLORS]
+        sex = response.sex if response.sex in ("M", "F") else ""
+        marks = [m[:20] for m in response.marks if m.strip()][:6]
+        breed = response.breed[:30]
         # 설명에 실제로 등장하지 않는 품종은 버린다(근거 없는 특징 생성 방지).
         if breed and breed.replace(" ", "") not in description.replace(" ", ""):
             breed = ""
-        return {"colors": colors, "breed": breed, "sex": sex, "marks": marks, "model": self.model, "prompt_version": PROMPT_VERSION}
+        return FeatureExtractionResponse(
+            colors=colors,
+            breed=breed,
+            sex=sex,
+            marks=marks,
+            model=self.model,
+            prompt_version=PROMPT_VERSION,
+        )
 
-    async def analyze_photo(self, image: bytes, mime_type: str) -> dict:
-        encoded = base64.b64encode(image).decode("ascii")
-        data = await self._invoke_json([
+    async def analyze_photo(self, image: bytes, mime_type: str) -> PhotoAnalysisResponse:
+        try:
+            request = PhotoAnalysisRequest(image=image, mime_type=mime_type)
+        except ValidationError as exc:
+            raise LlmError("llm_request") from exc
+        encoded = base64.b64encode(request.image).decode("ascii")
+        response = await self._invoke_structured([
             ("system", PHOTO_SYSTEM_PROMPT),
             ("human", [
                 {"type": "text", "text": "사진을 평가하고 지시에 맞는 JSON을 반환하세요."},
-                {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}", "detail": "high"}},
+                {"type": "image_url", "image_url": {"url": f"data:{request.mime_type};base64,{encoded}", "detail": "high"}},
             ]),
-        ])
-        confidence = data.get("confidence") if isinstance(data.get("confidence"), dict) else {}
+        ], PhotoAnalysisModelResponse)
+        data = response
+        confidence = data.confidence
 
         def confident(key: str) -> bool:
-            value = confidence.get(key)
+            value = getattr(confidence, key, None)
             return (
                 isinstance(value, (int, float))
                 and not isinstance(value, bool)
                 and PHOTO_CONFIDENCE_THRESHOLD <= value <= 1
             )
 
-        animal_present = data.get("animal_present") is True and confident("animal_present")
-        identifiable = data.get("identifiable") is True and confident("identifiable")
-        center_subject_clear = data.get("center_subject_clear") is True and confident("center_subject_clear")
-        raw_colors = data.get("colors") or []
-        raw_marks = data.get("marks") or []
-        if not isinstance(raw_colors, list) or not isinstance(raw_marks, list):
-            raise LlmError("llm_response")
+        animal_present = data.animal_present and confident("animal_present")
+        identifiable = data.identifiable and confident("identifiable")
+        center_subject_clear = data.center_subject_clear and confident("center_subject_clear")
         suitable = animal_present and identifiable and center_subject_clear
-        species = data.get("species") if suitable and confident("species") and data.get("species") in ("dog", "cat", "etc") else ""
+        species = data.species if suitable and confident("species") else ""
         colors = [
-            item["value"][:20]
-            for item in raw_colors
-            if isinstance(item, dict)
-            and isinstance(item.get("value"), str)
-            and item["value"] in ALLOWED_COLORS
-            and isinstance(item.get("confidence"), (int, float))
-            and not isinstance(item.get("confidence"), bool)
-            and PHOTO_CONFIDENCE_THRESHOLD <= item["confidence"] <= 1
+            item.value[:20]
+            for item in data.colors
+            if item.value in ALLOWED_COLORS and item.confidence >= PHOTO_CONFIDENCE_THRESHOLD
         ][:5]
-        sex = data.get("sex") if suitable and confident("sex") and data.get("sex") in ("M", "F") else ""
+        sex = data.sex if suitable and confident("sex") and data.sex in ("M", "F") else ""
         marks = [
-            item["value"][:30]
-            for item in raw_marks
-            if isinstance(item, dict)
-            and isinstance(item.get("value"), str)
-            and item["value"].strip()
-            and isinstance(item.get("confidence"), (int, float))
-            and not isinstance(item.get("confidence"), bool)
-            and PHOTO_CONFIDENCE_THRESHOLD <= item["confidence"] <= 1
+            item.value[:30]
+            for item in data.marks
+            if item.value.strip() and item.confidence >= PHOTO_CONFIDENCE_THRESHOLD
         ][:6]
-        breed = data.get("breed") if isinstance(data.get("breed"), str) else ""
-        breed = breed[:40] if suitable and confident("breed") else ""
-        message = (data.get("message") if isinstance(data.get("message"), str) else "")[:180]
+        breed = data.breed[:40] if suitable and confident("breed") else ""
+        message = data.message[:180]
         if not suitable and not message:
             message = (
                 "사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요."
@@ -179,17 +195,17 @@ class FeatureExtractor:
                 if not identifiable
                 else "찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요."
             )
-        return {
-            "animal_present": animal_present,
-            "identifiable": identifiable,
-            "center_subject_clear": center_subject_clear,
-            "suitable": suitable,
-            "species": species if suitable else "",
-            "colors": colors if suitable else [],
-            "breed": breed if suitable else "",
-            "sex": sex if suitable else "",
-            "marks": marks if suitable else [],
-            "message": message,
-            "model": self.model,
-            "prompt_version": PHOTO_PROMPT_VERSION,
-        }
+        return PhotoAnalysisResponse(
+            animal_present=animal_present,
+            identifiable=identifiable,
+            center_subject_clear=center_subject_clear,
+            suitable=suitable,
+            species=species if suitable else "",
+            colors=colors if suitable else [],
+            breed=breed if suitable else "",
+            sex=sex if suitable else "",
+            marks=marks if suitable else [],
+            message=message,
+            model=self.model,
+            prompt_version=PHOTO_PROMPT_VERSION,
+        )

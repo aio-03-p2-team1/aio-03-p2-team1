@@ -132,6 +132,7 @@ sequenceDiagram
 - 체크포인트: 한 요청 안에서 그래프가 끝까지 실행되고, 추가 질문 상태는 `thread` 문서에 저장되므로 재시작 후 같은 `thread_id` 로 이어 간다.
 - 요약 전략(토큰 예산·요약 임계값)은 **미구현**. 현재 LLM 입력은 단일 서술이라 요약이 필요하지 않다. 대화형 입력을 늘리면 추가한다.
 - 특징·사진 분석은 `ChatOpenAI`, 임베딩은 `OpenAIEmbeddings`를 사용한다. 각 어댑터 생성자는 LangChain 호환 클라이언트를 선택적으로 받아 테스트에서 모의 클라이언트를 주입할 수 있다. 기본 런타임은 API 키와 timeout으로 실제 LangChain 클라이언트를 구성한다.
+- 모델 요청·출력 규격은 `backend/agent/schema.py`의 Pydantic 모델로 정의한다. 요청은 모델 호출 전 검증하고, 응답은 `with_structured_output(..., method="json_schema", strict=True)`로 생성한 뒤 Pydantic 모델로 다시 검증한다. 특징 추출기 메서드는 dict 대신 응답 모델을 반환하며, 그래프 상태·HTTP 응답 경계에서만 직렬화한다.
 
 ## 6. 자가 성찰 (Activity)
 
