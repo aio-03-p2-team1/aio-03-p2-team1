@@ -146,3 +146,12 @@ button[disabled]{opacity:.65;cursor:progress}
 .post-description{margin:0;color:#4e473e;font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
 .danger-button{border-color:#ecc7bd;color:#a34a39}
 .primary-button.danger-button{background:#f6d8cf}
+
+/* 마이페이지: 검색 기록 페이지 나누기, 내가 쓴 게시글 */
+.my-posts-panel{margin-top:18px}
+.my-pager{display:flex;justify-content:center;flex-wrap:wrap;gap:6px;margin-top:16px}
+.my-pager button{min-width:34px;height:34px;padding:0 10px;border:1px solid #e3dccf;border-radius:8px;background:#fff;color:#5d554b;font-weight:700;cursor:pointer}
+.my-pager button.current{border-color:#e5c879;background:#fff4d2;color:#322d24}
+.my-pager button:disabled{opacity:.4;cursor:default}
+.my-dashboard .mini-items{grid-template-columns:repeat(4,1fr)}
+@media(max-width:760px){.my-dashboard .mini-items{grid-template-columns:repeat(2,1fr)}}
