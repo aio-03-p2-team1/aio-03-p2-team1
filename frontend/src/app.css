@@ -96,3 +96,20 @@ button[disabled]{opacity:.65;cursor:progress}
 
 @media(max-width:900px){.search-form-grid-v2{grid-template-columns:1fr}.search-form-grid-v2 .upload-box{min-height:150px}}
 @media(max-width:560px){.species-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.region-map{height:260px}.modal-foot .primary-button{width:100%}}
+
+/* 마이페이지 */
+.account-area a.account-name{text-decoration:none}
+.account-area a.account-name:hover{color:#a67c21}
+.profile-facts{display:grid;gap:8px;margin:18px 0 0;padding:14px 0 0;border-top:1px solid #eee8df}
+.profile-facts div{display:grid;grid-template-columns:64px 1fr;gap:8px;font-size:13px}
+.profile-facts dt{color:#8a837a}
+.profile-facts dd{margin:0;color:#3d3832;overflow-wrap:anywhere}
+.my-run-list{margin:0;padding:0;list-style:none}
+.my-run-list a{display:grid;gap:5px;padding:13px 15px;border:1px solid #eee8df;border-radius:10px;background:#fff;color:inherit;text-decoration:none;transition:border-color .15s}
+.my-run-list a:hover{border-color:#e5c879}
+.my-run-list strong{color:#3d3832;font-size:14px}
+.my-run-list span{color:#8a837a;font-size:12px;line-height:1.5}
+.run-status{display:inline-block;padding:1px 7px;border-radius:999px;background:#f1ece3;color:#6e665b;font-size:11px;font-style:normal;font-weight:700}
+.run-status-completed{background:#e7f2df;color:#3f5a2c}
+.run-status-partial,.run-status-awaiting_input{background:#fff0c4;color:#6e5932}
+.run-status-failed{background:#fbe3dd;color:#a34a39}

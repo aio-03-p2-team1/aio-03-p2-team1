@@ -7,6 +7,7 @@ import BoardPage from './pages/BoardPage.jsx'
 import DetailPage from './pages/DetailPage.jsx'
 import SearchPage from './pages/SearchPage.jsx'
 import AuthPage from './pages/AuthPage.jsx'
+import MyPage from './pages/MyPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 
 function RequireLogin({ children }) {
@@ -31,6 +32,14 @@ export default function App() {
             <RequireLogin>
               {/* 계정이 바뀌면 이전 계정의 화면 상태를 초기화한다 */}
               <SearchPage key={user?.email || 'guest'} />
+            </RequireLogin>
+          }
+        />
+        <Route
+          path="/my"
+          element={
+            <RequireLogin>
+              <MyPage key={user?.email || 'guest'} />
             </RequireLogin>
           }
         />

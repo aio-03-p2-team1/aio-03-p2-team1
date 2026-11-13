@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
-import { errorMessage, formatDate, formatDateTime, noticeTitle, scopeText, speciesLabel } from '../lib/format.js'
+import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
@@ -26,10 +26,19 @@ export default function SearchPage() {
   const [error, setError] = useState(null)
   const [history, setHistory] = useState([])
 
+  const [params] = useSearchParams()
+  const runParam = params.get('run')
+
   useEffect(() => {
     document.title = '다시 만나 · 우리 아이 찾기'
     loadHistory()
   }, [])
+
+  // 마이페이지 검색 기록에서 들어오면(?run=) 그 결과를 바로 보여 준다.
+  useEffect(() => {
+    if (runParam) openHistory(runParam)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runParam])
 
   function loadHistory() {
     api('/runs?limit=8').then((body) => setHistory(body.runs)).catch(() => setHistory([]))
@@ -175,9 +184,9 @@ export default function SearchPage() {
           {history.length === 0 && <span>아직 검색 기록이 없어요.</span>}
           {history.map((h) => (
             <button type="button" key={h.run_id} onClick={() => openHistory(h.run_id)}>
-              {speciesLabel(h.criteria?.species)} · {h.criteria?.region === 'all' ? '전체 지역' : h.criteria?.region || '지역 미입력'}
+              {runSummary(h.criteria)}
               <br />
-              {statusLabel(h.status)} · 후보 {h.candidate_count} · {formatDateTime(h.created_at)}
+              {runStatusLabel(h.status)} · 후보 {h.candidate_count} · {formatDateTime(h.created_at)}
             </button>
           ))}
         </div>
@@ -186,9 +195,6 @@ export default function SearchPage() {
   )
 }
 
-function statusLabel(status) {
-  return { completed: '완료', partial: '부분 결과', failed: '실패', awaiting_input: '추가 정보 필요' }[status] || status
-}
 
 function Results({ run, busy, error, onWiden }) {
   if (busy) return <p className="state-box">공고를 조회하고 후보를 비교하고 있어요…</p>

@@ -21,10 +21,11 @@ export default function Header() {
       <nav aria-label="주요 메뉴">
         <NavLink to="/" end>전체 공고</NavLink>
         <NavLink to="/search">우리 아이 찾기</NavLink>
+        <NavLink to="/my">마이페이지</NavLink>
       </nav>
       {user ? (
         <div className="account-area">
-          <span className="account-name">{user.name}님</span>
+          <Link className="account-name" to="/my">{user.name}님</Link>
           <button type="button" className="account-link" onClick={onLogout}>로그아웃</button>
         </div>
       ) : (

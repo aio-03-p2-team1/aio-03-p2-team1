@@ -583,3 +583,4 @@ Supabase 연결 설정:
 - 2026-11-12: 프로젝트 골격(백엔드·검색 그래프·인증·4개 화면)을 생성했다. 화면 설계에 맞춰 조회 전용 `GET /notices`, `GET /notices/{id}` 를 추가했다(docs/architecture.md 8장).
 - 2026-11-13: 배포 주소를 확정해 16장에 기록하고 `frontend/vercel.json` 에 `/api/v1` rewrite 를 추가했다.
 - 2026-11-13: 대표 배포 주소를 `dasi-manna.vercel.app` 으로 정하고(이전 주소는 리다이렉트) README 에 팀원용 시작 안내를 추가했다.
+- 2026-11-13: 헤더에 마이페이지(`/my`)를 추가했다. 내 정보와 검색 기록(`GET /runs`)을 보여 주며 새 API는 없다.

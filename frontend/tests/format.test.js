@@ -49,3 +49,13 @@ test('error message prefers server message then code table', () => {
   assert.match(errorMessage({ code: 'network' }), /연결하지 못했습니다/)
   assert.equal(errorMessage(null), '')
 })
+
+import { runStatusLabel, runSummary } from '../src/lib/format.js'
+
+test('run summary for search history', () => {
+  assert.equal(runSummary({ species: 'dog', region: '서울특별시', start_date: '2026-11-10' }), '강아지 · 서울특별시 · 2026.11.10부터')
+  assert.equal(runSummary({ species: 'all', region: 'all' }), '전체 · 전체 지역 · 기간 미입력')
+  assert.equal(runSummary(null), '종류 미입력 · 지역 미입력 · 기간 미입력')
+  assert.equal(runStatusLabel('awaiting_input'), '추가 정보 필요')
+  assert.equal(runStatusLabel('x'), '상태 미확인')
+})
