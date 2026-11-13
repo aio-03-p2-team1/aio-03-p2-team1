@@ -1,5 +1,6 @@
 // 백엔드 호출. 쿠키 세션을 쓰므로 credentials: 'include'. 토큰을 저장하지 않는다.
 const BASE = (import.meta.env?.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
+export const API_BASE = BASE
 
 export class ApiError extends Error {
   constructor(status, detail) {

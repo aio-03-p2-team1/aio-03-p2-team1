@@ -120,3 +120,14 @@ button[disabled]{opacity:.65;cursor:progress}
 
 /* 공고 상세 하단 버튼: 링크(<a>)로 된 보조 버튼 글자도 가운데 정렬 */
 .detail-page-actions .secondary-button{display:inline-flex;align-items:center;justify-content:center;text-align:center;text-decoration:none}
+
+/* 실종 정보 게시판 (PostBoardPage · PostDetailPage) */
+.field-error{color:#a34a39;font-size:12px;font-weight:500}
+.post-form-grid [aria-invalid=true]{border-color:#d89a8a}
+.post-photo-preview{display:block;max-width:220px;max-height:145px;margin-top:7px;border-radius:8px;object-fit:cover}
+.post-form .state-error{margin:16px 0 0}
+.detail-information .detail-copy{padding:0}
+.detail-information .detail-copy h2{margin:22px 0 8px;font-size:15px}
+.post-description{margin:0;color:#4e473e;font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.danger-button{border-color:#ecc7bd;color:#a34a39}
+.primary-button.danger-button{background:#f6d8cf}

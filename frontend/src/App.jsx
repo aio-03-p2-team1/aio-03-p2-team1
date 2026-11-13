@@ -8,6 +8,8 @@ import DetailPage from './pages/DetailPage.jsx'
 import SearchPage from './pages/SearchPage.jsx'
 import AuthPage from './pages/AuthPage.jsx'
 import MyPage from './pages/MyPage.jsx'
+import PostBoardPage from './pages/PostBoardPage.jsx'
+import PostDetailPage from './pages/PostDetailPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
 
 function RequireLogin({ children }) {
@@ -43,6 +45,9 @@ export default function App() {
             </RequireLogin>
           }
         />
+        {/* 실종 정보 게시판: 읽기는 공개, 등록은 화면 안에서 로그인 확인 */}
+        <Route path="/board" element={<PostBoardPage />} />
+        <Route path="/board/:postId" element={<PostDetailPage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

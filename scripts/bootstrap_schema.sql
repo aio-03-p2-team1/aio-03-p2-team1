@@ -6,7 +6,7 @@ create schema if not exists "aio-03-p2-team1-demo";
 
 create table if not exists "aio-03-p2-team1-demo".documents (
     owner      text        not null,
-    kind       text        not null check (kind in ('identity','thread','memory','saved','run','subscription','notification')),
+    kind       text        not null check (kind in ('identity','thread','memory','saved','run','subscription','notification','post')),
     id         text        not null,
     data       jsonb       not null,
     updated_at timestamptz not null default now(),
@@ -24,3 +24,9 @@ revoke all on all tables in schema "aio-03-p2-team1-demo" from anon, authenticat
 
 grant usage on schema "aio-03-p2-team1-demo" to service_role;
 grant select, insert, update, delete on "aio-03-p2-team1-demo".documents to service_role;
+
+-- 2026-11-13 실종 정보 게시판(kind=post) 추가.
+-- 이미 테이블을 만든 DB 는 아래로 check 제약을 바꾼다(제약 이름은 기본 이름 기준. 다르면 \d 로 확인).
+-- alter table "aio-03-p2-team1-demo".documents drop constraint if exists documents_kind_check;
+-- alter table "aio-03-p2-team1-demo".documents add constraint documents_kind_check
+--     check (kind in ('identity','thread','memory','saved','run','subscription','notification','post'));

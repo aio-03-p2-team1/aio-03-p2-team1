@@ -21,6 +21,7 @@ export default function Header() {
       <nav aria-label="주요 메뉴">
         <NavLink to="/" end>전체 공고</NavLink>
         <NavLink to="/search">우리 아이 찾기</NavLink>
+        <NavLink to="/board">실종 정보 게시판</NavLink>
         <NavLink to="/my">마이페이지</NavLink>
       </nav>
       {user ? (
