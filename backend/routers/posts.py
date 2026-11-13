@@ -139,6 +139,18 @@ async def list_posts(
     return {"items": items, "count": len(items), "scanned": len(rows), "scan_limit": LIST_SCAN}
 
 
+@router.get("/posts/mine")
+async def list_my_posts(user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    """마이페이지: 로그인 사용자가 쓴 게시글(최신순). 작성자 키는 서버 세션에서만 읽는다.
+
+    /posts/{post_id} 보다 먼저 등록해야 'mine' 이 게시글 ID 로 해석되지 않는다.
+    한 사람당 MAX_POSTS_PER_USER 개까지라 최신 LIST_SCAN 개 안에서 찾는다(등록 한도 계산과 같은 범위).
+    """
+    rows = await ctx.store.list(BOARD_OWNER, KIND, LIST_SCAN)
+    items = [_public(r["id"], r["data"], user.owner, detail=False) for r in rows if r["data"].get("author") == user.owner]
+    return {"items": items, "count": len(items), "limit": MAX_POSTS_PER_USER}
+
+
 @router.get("/posts/{post_id}")
 async def get_post(post_id: str, request: Request, ctx: AppContext = Depends(get_ctx)):
     data = await _get(ctx, post_id)

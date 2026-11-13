@@ -2,36 +2,39 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
-import { errorMessage, formatDateTime, runStatusLabel, runSummary, sourceLabel } from '../lib/format.js'
+import { errorMessage, formatDate, formatDateTime, paginate, runStatusLabel, runSummary, sourceLabel } from '../lib/format.js'
+import { postSpeciesLabel, postTitle } from '../lib/post.js'
 import { useToast } from '../components/Toast.jsx'
 
-const HISTORY_LIMIT = 50
+const HISTORY_LIMIT = 50 // 서버 GET /runs 의 최대 limit
+const PAGE_SIZE = 5
 
-// 마이페이지 — 디자인: dasimanna-cards-my.html (내 정보 · 검색 기록)
+/** 목록 하나를 불러오는 작은 상태 묶음: loading | ready | error */
+function useList(path, pick) {
+  const [state, setState] = useState({ status: 'loading', items: [], error: null })
+  function load() {
+    setState((s) => ({ ...s, status: 'loading' }))
+    api(path)
+      .then((body) => setState({ status: 'ready', items: pick(body), error: null }))
+      .catch((error) => setState({ status: 'error', items: [], error }))
+  }
+  // 마운트 때 한 번 불러온다(계정이 바뀌면 App 이 key 로 페이지를 새로 만든다).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(load, [])
+  return { ...state, reload: load }
+}
+
+// 마이페이지 — 디자인: dasimanna-cards-my.html (내 정보 · 검색 기록 · 내가 쓴 게시글)
 export default function MyPage() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
-  const [runs, setRuns] = useState([])
-  const [status, setStatus] = useState('loading')
-  const [error, setError] = useState(null)
-
-  function load() {
-    setStatus('loading')
-    api(`/runs?limit=${HISTORY_LIMIT}`)
-      .then((body) => {
-        setRuns(body.runs)
-        setStatus('ready')
-      })
-      .catch((err) => {
-        setError(err)
-        setStatus('error')
-      })
-  }
+  const runs = useList(`/runs?limit=${HISTORY_LIMIT}`, (b) => b.runs)
+  const posts = useList('/posts/mine', (b) => b.items)
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     document.title = '다시 만나 · 마이페이지'
-    load()
   }, [])
 
   async function onLogout() {
@@ -40,8 +43,9 @@ export default function MyPage() {
     navigate('/')
   }
 
-  const latest = runs[0]
-  const completed = runs.filter((r) => r.status === 'completed' || r.status === 'partial').length
+  const latest = runs.items[0]
+  const completed = runs.items.filter((r) => r.status === 'completed' || r.status === 'partial').length
+  const shown = paginate(runs.items, page, PAGE_SIZE)
 
   return (
     <main className="page-main my-page">
@@ -51,7 +55,7 @@ export default function MyPage() {
       <div className="page-heading">
         <span className="eyebrow">나의 다시 만나</span>
         <h1>마이페이지</h1>
-        <p>내 정보와 우리 아이 찾기 검색 기록을 볼 수 있어요. 기록은 내 계정에만 저장돼요.</p>
+        <p>내 정보와 검색 기록, 내가 쓴 실종 정보 게시글을 볼 수 있어요. 검색 기록은 내 계정에만 저장돼요.</p>
       </div>
 
       <section className="panel my-dashboard" aria-labelledby="dashboard-title">
@@ -60,8 +64,9 @@ export default function MyPage() {
         </div>
         <div className="mini-items">
           <div><span>최근 검색</span><strong>{latest ? runSummary(latest.criteria) : '기록 없음'}</strong></div>
-          <div><span>검색 기록</span><strong>{status === 'ready' ? `${runs.length}건${runs.length >= HISTORY_LIMIT ? ' 이상' : ''}` : '—'}</strong></div>
-          <div><span>결과를 받은 검색</span><strong>{status === 'ready' ? `${completed}건` : '—'}</strong></div>
+          <div><span>검색 기록</span><strong>{runs.status === 'ready' ? `${runs.items.length}건${runs.items.length >= HISTORY_LIMIT ? ' 이상' : ''}` : '—'}</strong></div>
+          <div><span>결과를 받은 검색</span><strong>{runs.status === 'ready' ? `${completed}건` : '—'}</strong></div>
+          <div><span>내가 쓴 게시글</span><strong>{posts.status === 'ready' ? `${posts.items.length}개` : '—'}</strong></div>
         </div>
       </section>
 
@@ -87,24 +92,41 @@ export default function MyPage() {
               <div><span className="eyebrow">다시 찾아보기</span><h2 id="my-history-title">검색 기록</h2></div>
               <Link className="text-link" to="/search">새 검색 ↗</Link>
             </div>
-            {status === 'loading' && <p className="my-empty">검색 기록을 불러오고 있어요…</p>}
-            {status === 'error' && (
-              <p className="my-empty" role="alert">
-                {errorMessage(error)} <button type="button" className="text-action" onClick={load}>다시 시도</button>
-              </p>
+            <ListState list={runs} empty="아직 검색 기록이 없어요. 우리 아이 찾기에서 검색해 보세요." loading="검색 기록을 불러오고 있어요…" />
+            {runs.status === 'ready' && runs.items.length > 0 && (
+              <>
+                <ul className="my-list my-run-list">
+                  {shown.items.map((r) => (
+                    <li key={r.run_id}>
+                      <Link to={`/search?run=${encodeURIComponent(r.run_id)}`}>
+                        <strong>{runSummary(r.criteria)}</strong>
+                        <span>
+                          <em className={`run-status run-status-${r.status}`}>{runStatusLabel(r.status)}</em>
+                          {' '}후보 {r.candidate_count}마리 · 판단 수정 {r.reflection_count ?? 0}회 · {sourceLabel(r.data_source)} · {formatDateTime(r.created_at)}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <Pager page={shown.page} pages={shown.pages} onChange={setPage} label="검색 기록 페이지" />
+              </>
             )}
-            {status === 'ready' && runs.length === 0 && (
-              <p className="my-empty">아직 검색 기록이 없어요. 우리 아이 찾기에서 검색해 보세요.</p>
-            )}
-            {status === 'ready' && runs.length > 0 && (
+          </section>
+
+          <section className="panel my-posts-panel" aria-labelledby="my-posts-title">
+            <div className="my-section-head">
+              <div><span className="eyebrow">실종 정보 게시판</span><h2 id="my-posts-title">내가 쓴 게시글</h2></div>
+              <Link className="text-link" to="/board">게시판 가기 ↗</Link>
+            </div>
+            <ListState list={posts} empty="아직 쓴 게시글이 없어요. 실종 정보 게시판에서 우리 아이를 알려 보세요." loading="게시글을 불러오고 있어요…" />
+            {posts.status === 'ready' && posts.items.length > 0 && (
               <ul className="my-list my-run-list">
-                {runs.map((r) => (
-                  <li key={r.run_id}>
-                    <Link to={`/search?run=${encodeURIComponent(r.run_id)}`}>
-                      <strong>{runSummary(r.criteria)}</strong>
+                {posts.items.map((p) => (
+                  <li key={p.id}>
+                    <Link to={`/board/${encodeURIComponent(p.id)}`}>
+                      <strong>{postTitle(p)}</strong>
                       <span>
-                        <em className={`run-status run-status-${r.status}`}>{runStatusLabel(r.status)}</em>
-                        {' '}후보 {r.candidate_count}마리 · 판단 수정 {r.reflection_count ?? 0}회 · {sourceLabel(r.data_source)} · {formatDateTime(r.created_at)}
+                        {postSpeciesLabel(p.species)}{p.breed ? ` · ${p.breed}` : ''} · {p.region} · 실종 {formatDate(p.lost_date)} · 등록 {formatDateTime(p.created_at)}
                       </span>
                     </Link>
                   </li>
@@ -115,5 +137,33 @@ export default function MyPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+function ListState({ list, empty, loading }) {
+  if (list.status === 'loading') return <p className="my-empty">{loading}</p>
+  if (list.status === 'error') {
+    return (
+      <p className="my-empty" role="alert">
+        {errorMessage(list.error)} <button type="button" className="text-action" onClick={list.reload}>다시 시도</button>
+      </p>
+    )
+  }
+  if (list.items.length === 0) return <p className="my-empty">{empty}</p>
+  return null
+}
+
+function Pager({ page, pages, onChange, label }) {
+  if (pages <= 1) return null
+  return (
+    <nav className="my-pager" aria-label={label}>
+      <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="이전 페이지">‹</button>
+      {Array.from({ length: pages }, (_, i) => i + 1).map((n) => (
+        <button key={n} type="button" className={n === page ? 'current' : ''} aria-current={n === page ? 'page' : undefined} onClick={() => onChange(n)}>
+          {n}
+        </button>
+      ))}
+      <button type="button" disabled={page >= pages} onClick={() => onChange(page + 1)} aria-label="다음 페이지">›</button>
+    </nav>
   )
 }

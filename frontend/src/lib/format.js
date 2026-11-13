@@ -104,3 +104,11 @@ export function runSummary(criteria) {
   const since = c.start_date ? `${formatDate(c.start_date)}부터` : '기간 미입력'
   return `${species} · ${region} · ${since}`
 }
+
+/** 목록 페이지 나누기. page 는 1부터. 범위를 벗어나면 가장 가까운 페이지로 맞춘다. */
+export function paginate(items, page, size) {
+  const list = Array.isArray(items) ? items : []
+  const pages = Math.max(1, Math.ceil(list.length / size))
+  const current = Math.min(Math.max(1, Math.floor(Number(page) || 1)), pages)
+  return { items: list.slice((current - 1) * size, current * size), page: current, pages }
+}
