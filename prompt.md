@@ -378,6 +378,7 @@ Supabase 연결 설정:
 | `GET/POST /subscriptions` · `DELETE /subscriptions/{key}` | 알림 신청 |
 | `GET /notifications` | 발송 이력 |
 | `GET /posts` · `GET /posts/{id}` · `GET /posts/{id}/photo` · `POST /posts` · `DELETE /posts/{id}` | 실종 정보 게시판(읽기 공개, 작성 로그인, 삭제 작성자) |
+| `GET /posts/mine` | 내가 쓴 게시글(로그인, 마이페이지) |
 
 - 각 API의 요청/응답 모델, 오류 코드, 인증, 소유권 검사를 문서화한다.
 - 클라이언트가 보낸 사용자 ID로는 타인 데이터에 접근할 수 없게 한다.
@@ -604,3 +605,4 @@ Supabase 연결 설정:
 - 2026-11-13: 대표 배포 주소를 `dasi-manna.vercel.app` 으로 정하고(이전 주소는 리다이렉트) README 에 팀원용 시작 안내를 추가했다.
 - 2026-11-13: 헤더에 마이페이지(`/my`)를 추가했다. 내 정보와 검색 기록(`GET /runs`)을 보여 주며 새 API는 없다.
 - 2026-11-13: 실종 정보 게시판(`/board`, `/posts` API)을 추가했다. 게시글은 공개 데이터로 공용 소유자 키 아래 `kind=post` 로 저장하며, 운영 Supabase 는 `documents.kind` check 제약에 `post` 를 추가해야 한다(`scripts/bootstrap_schema.sql`).
+- 2026-11-13: 마이페이지 검색 기록을 5개씩 페이지로 나누고, 내가 쓴 게시글 목록(`GET /posts/mine`)을 추가했다.
