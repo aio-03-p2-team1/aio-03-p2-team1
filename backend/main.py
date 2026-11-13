@@ -25,6 +25,8 @@ def build_context(settings: Settings) -> AppContext:
     from redis import asyncio as aioredis
 
     from backend.agent.llm import FeatureExtractor
+    from backend.agent.embeddings import Embedder
+    from backend.agent.search_cache import SearchCache
     from backend.auth.sessions import SessionStore
     from backend.storage import build_store
     from backend.tools.animal_api import AnimalApi, SampleAnimalApi
@@ -56,6 +58,8 @@ def build_context(settings: Settings) -> AppContext:
         kakao=KakaoGeocoder(kakao_key, timeout=min(timeout, 15)),
         llm=llm,
         photo_llm=photo_llm,
+        embedder=Embedder(settings.openai_api_key.get_secret_value(), timeout=timeout) if settings.openai_api_key else None,
+        search_cache=SearchCache(redis),
     )
 
 

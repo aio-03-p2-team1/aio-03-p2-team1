@@ -1,4 +1,4 @@
-"""후보 필터·점수 (prompt.md 9장).
+"""후보 필터·특징 점수·RRF 순위 결합 (prompt.md 9장).
 
 - 지역·기간·종류 필터를 먼저 적용한다(이미 API 인자로 걸었더라도 응답을 다시 확인).
 - 선택 정보는 가중치로 점수화한다. 누락 필드는 '미확인'으로, 불일치와 구분한다.
@@ -6,17 +6,53 @@
 
 가중치: 품종 3, 털색 3(겹치는 색 하나 이상), 성별 2, 특징 키워드 1개당 1(최대 3)
 동점: 점수 내림차순 → 실종일과 발견일이 가까운 순 → 공고 식별자 오름차순
+실제 검색은 이 규칙 순위와 임베딩 코사인 순위를 RRF(k=60)로 결합한다.
 """
 
 from __future__ import annotations
 
 import re
+import math
 from datetime import date
 from typing import Any
 
 WEIGHTS = {"breed": 3, "color": 3, "sex": 2, "keyword": 1}
 MAX_KEYWORD_POINTS = 3
-TOP_K = 10
+TOP_K = 300
+RRF_K = 60
+
+
+def feature_text(item: dict) -> str:
+    return " · ".join(f"{key}: {item[key]}" for key in
+                     ("species", "breed", "color", "sex", "age", "size", "weight", "description", "special_mark")
+                     if item.get(key))[:2000] or "동물 특징 미확인"
+
+
+def cosine(left, right):
+    if len(left) != len(right) or not left:
+        raise ValueError("벡터 차원이 다릅니다")
+    left_norm, right_norm = math.hypot(*left), math.hypot(*right)
+    if not left_norm or not right_norm or not math.isfinite(left_norm + right_norm):
+        raise ValueError("유효하지 않은 벡터")
+    return sum((a / left_norm) * (b / right_norm) for a, b in zip(left, right))
+
+
+def fuse_rrf(lexical, semantic_scores):
+    semantic = sorted(lexical, key=lambda item: (-semantic_scores[item["id"]], item["id"]))
+    lexical_positions, semantic_positions = {}, {}
+    for pos, item in enumerate(lexical, 1):
+        lexical_positions.setdefault(item["id"], pos)
+    for pos, item in enumerate(semantic, 1):
+        semantic_positions.setdefault(item["id"], pos)
+    result = []
+    for item in lexical:
+        identifier = item["id"]
+        rrf = 1 / (RRF_K + lexical_positions[identifier]) + 1 / (RRF_K + semantic_positions[identifier])
+        result.append({**item, "lexical_score": item["score"], "score": rrf,
+                       "semantic_score": semantic_scores[identifier],
+                       "rrf_ranks": {"lexical": lexical_positions[identifier], "semantic": semantic_positions[identifier]}})
+    result.sort(key=lambda item: (-item["score"], lexical_positions[item["id"]], item["id"]))
+    return [{**item, "rank": index} for index, item in enumerate(result, 1)]
 
 COLOR_SYNONYMS = {
     "갈색": "갈색", "브라운": "갈색", "밤색": "갈색", "초코": "갈색",

@@ -50,7 +50,8 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool | None = None
     auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
-    max_search_pages: int = Field(default=3, ge=1, le=10)
+    # 이전 배포 설정 호환용. 맞춤 검색은 요구사항에 따라 1,000건 1페이지로 고정한다.
+    max_search_pages: int = Field(default=1, ge=1, le=10)
     max_reflections: int = Field(default=2, ge=0, le=3)
     max_tool_calls: int = Field(default=30, ge=10, le=60)
     request_timeout_seconds: int = Field(default=60, ge=10, le=120)

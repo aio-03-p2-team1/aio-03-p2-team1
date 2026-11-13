@@ -3,6 +3,7 @@ import Header from './components/Header.jsx'
 import Footer from './components/Footer.jsx'
 import { ToastProvider } from './components/Toast.jsx'
 import { useAuth } from './lib/auth.jsx'
+import { SearchViewProvider } from './lib/searchView.jsx'
 import BoardPage from './pages/BoardPage.jsx'
 import DetailPage from './pages/DetailPage.jsx'
 import SearchPage from './pages/SearchPage.jsx'
@@ -23,6 +24,7 @@ export default function App() {
   return (
     <ToastProvider>
       <Header />
+      <SearchViewProvider key={user?.email || 'guest'}>
       <Routes>
         <Route path="/" element={<BoardPage />} />
         <Route path="/notices/:noticeId" element={<DetailPage />} />
@@ -46,6 +48,7 @@ export default function App() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </SearchViewProvider>
       <Footer />
     </ToastProvider>
   )
