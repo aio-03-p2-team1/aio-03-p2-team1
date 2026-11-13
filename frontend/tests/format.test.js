@@ -59,3 +59,14 @@ test('run summary for search history', () => {
   assert.equal(runStatusLabel('awaiting_input'), '추가 정보 필요')
   assert.equal(runStatusLabel('x'), '상태 미확인')
 })
+
+import { paginate } from '../src/lib/format.js'
+
+test('paginate search history by 5', () => {
+  const list = Array.from({ length: 12 }, (_, i) => i + 1)
+  assert.deepEqual(paginate(list, 1, 5), { items: [1, 2, 3, 4, 5], page: 1, pages: 3 })
+  assert.deepEqual(paginate(list, 3, 5), { items: [11, 12], page: 3, pages: 3 })
+  assert.equal(paginate(list, 9, 5).page, 3)
+  assert.equal(paginate(list, 0, 5).page, 1)
+  assert.deepEqual(paginate([], 1, 5), { items: [], page: 1, pages: 1 })
+})

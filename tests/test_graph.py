@@ -8,7 +8,7 @@ from backend.storage.sqlite import SqliteStore
 from backend.tools.animal_api import AnimalApiError, SampleAnimalApi
 from backend.tools.kakao import KakaoGeocoder
 
-from .conftest import FakeAnimal, api_item, make_settings
+from .conftest import FakeAnimal, FakeEmbedder, api_item, make_settings
 
 OWNER = "owner-a"
 START = (date.today() - timedelta(days=7)).isoformat()
@@ -25,6 +25,7 @@ def deps(animal=None, **settings):
         "animal": animal or SampleAnimalApi(),
         "kakao": KakaoGeocoder(None),
         "llm": None,
+        "embedder": FakeEmbedder(),
         "sleep": _nosleep,
     }
 
@@ -126,10 +127,10 @@ def test_empty_all_region_is_completed_with_scope():
 
 
 def test_partial_scope_when_page_limit_reached():
-    pages = [[api_item(i + p * 50) for i in range(50)] for p in range(4)]
+    pages = [[api_item(i) for i in range(1001)]]
     run = search(deps(FakeAnimal(pages=pages), max_search_pages=1), {"species": "dog", "region": "전체", "lost_date": START})
     assert run["scope"]["complete"] is False and run["partial"] is True
-    assert len(run["candidates"]) == 10
+    assert len(run["candidates"]) == 300
 
 
 def test_memory_fills_only_optional_features():

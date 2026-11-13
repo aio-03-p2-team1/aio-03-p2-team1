@@ -139,3 +139,20 @@ def test_create_blocked_from_unknown_origin():
         signup(client)
         res = client.post("/api/v1/posts", json=body(), headers={"Origin": "https://evil.example"})
         assert res.status_code == 403 and res.json()["detail"]["code"] == "origin_not_allowed"
+
+
+def test_my_posts_requires_login_and_lists_only_mine():
+    with new_client() as client:
+        assert client.get("/api/v1/posts/mine").status_code == 401
+        signup(client, "a@example.com")
+        client.post("/api/v1/posts", json=body(pet_name="초코"))
+        client.post("/api/v1/posts", json=body(pet_name="보리"))
+        client.post("/api/v1/auth/logout")
+        signup(client, "b@example.com")
+        client.post("/api/v1/posts", json=body(pet_name="나비", species="cat"))
+        mine = client.get("/api/v1/posts/mine").json()
+        assert [i["pet_name"] for i in mine["items"]] == ["나비"]
+        assert all(i["mine"] for i in mine["items"]) and "author" not in mine["items"][0]
+        client.post("/api/v1/auth/logout")
+        client.post("/api/v1/auth/login", json={"email": "a@example.com", "password": "password123"})
+        assert sorted(i["pet_name"] for i in client.get("/api/v1/posts/mine").json()["items"]) == ["보리", "초코"]

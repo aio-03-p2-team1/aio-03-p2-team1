@@ -40,6 +40,8 @@ class SearchState(TypedDict, total=False):
     # 기억·컨텍스트
     memory_used: dict[str, Any]
     llm_features: dict[str, Any]
+    semantic_scores: dict[str, float] | None
+    ranking_method: str
     context_summary: dict[str, Any]
     # 계획·실행
     plan: list[dict[str, Any]]

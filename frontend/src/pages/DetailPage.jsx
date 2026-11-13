@@ -34,11 +34,7 @@ export default function DetailPage() {
     setStatus('loading')
     setPhotoIndex(0)
     const load = runId
-      ? api(`/runs/${encodeURIComponent(runId)}`).then((run) => {
-          const found = (run.candidates || []).find((c) => c.id === noticeId)
-          if (!found) throw Object.assign(new Error('후보를 찾을 수 없어요.'), { code: 'candidate_not_found' })
-          return found
-        })
+      ? api(`/runs/${encodeURIComponent(runId)}/candidates/${encodeURIComponent(noticeId)}`)
       : api(`/notices/${encodeURIComponent(noticeId)}`, { auth: false })
     load
       .then((data) => {
@@ -52,7 +48,7 @@ export default function DetailPage() {
       })
   }, [noticeId, runId, user])
 
-  const back = runId ? '/search' : '/'
+  const back = runId ? `/search?run=${encodeURIComponent(runId)}&page=${encodeURIComponent(params.get('page') || '1')}` : '/'
   const backLabel = runId ? '← 검색 결과로' : '← 전체 공고'
 
   if (status === 'loading') {

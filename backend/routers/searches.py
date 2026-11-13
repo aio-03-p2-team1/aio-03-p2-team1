@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
+from backend.agent.llm import LlmError
+from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
 from backend.agent.runner import run_search
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import AppContext, current_user, get_ctx
@@ -17,6 +20,7 @@ from backend.tools.kakao import KakaoError
 router = APIRouter(tags=["searches"])
 
 LOCATION_LIMIT_PER_MINUTE = 30
+PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
 
 
 class SearchCriteria(BaseModel):
@@ -42,8 +46,23 @@ class SearchBody(BaseModel):
     reflection_enabled: bool = True
 
 
+class PhotoAnalysisBody(BaseModel):
+    image_base64: str = Field(min_length=1, max_length=((MAX_IMAGE_BYTES + 2) // 3) * 4)
+
+
 def _deps(ctx: AppContext) -> dict[str, Any]:
-    return {"settings": ctx.settings, "store": ctx.store, "animal": ctx.animal, "kakao": ctx.kakao, "llm": ctx.llm}
+    return {"settings": ctx.settings, "store": ctx.store, "animal": ctx.animal, "kakao": ctx.kakao, "llm": ctx.llm,
+            "embedder": ctx.embedder, "search_cache": ctx.search_cache}
+
+
+def page_result(run, page=1, page_size=20):
+    candidates = run.get("candidates") or []
+    total = len(candidates)
+    pages = max(1, (total + page_size - 1) // page_size)
+    if page > pages:
+        raise ApiError(422, "invalid_page", "검색 결과 페이지 범위를 벗어났습니다.")
+    return {**run, "candidates": candidates[(page - 1) * page_size:page * page_size],
+            "pagination": {"page": page, "page_size": page_size, "total": total, "pages": pages}}
 
 
 @router.post("/searches")
@@ -56,7 +75,34 @@ async def create_search(body: SearchBody, user: SessionUser = Depends(current_us
     }
     run = await run_search(_deps(ctx), user.owner, request)
     remember_items(run.get("candidates") or [])
-    return run
+    return page_result(run)
+
+
+@router.post("/photo-analysis")
+async def analyze_photo(
+    body: PhotoAnalysisBody,
+    user: SessionUser = Depends(current_user),
+    ctx: AppContext = Depends(get_ctx),
+):
+    if not ctx.photo_llm:
+        raise ApiError(503, "photo_analysis_not_configured", "사진 분석 기능을 사용할 수 없습니다.")
+    try:
+        limited = await ctx.sessions.hit_rate_limit(f"photo-analysis:{user.owner}", PHOTO_ANALYSIS_LIMIT_PER_MINUTE, 60)
+    except AuthUnavailable:
+        raise ApiError(503, "auth_unavailable", "로그인 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+    if limited:
+        raise ApiError(429, "photo_analysis_rate_limited", "사진 분석 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.")
+    try:
+        image_data, mime_type = decode_and_validate(body.image_base64)
+    except InvalidPhoto as exc:
+        raise ApiError(422, exc.code, exc.message)
+    started = time.perf_counter()
+    try:
+        result = await ctx.photo_llm.analyze_photo(image_data, mime_type)
+    except LlmError as exc:
+        raise ApiError(502, exc.code, "사진을 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.")
+    result["analysis_ms"] = round((time.perf_counter() - started) * 1000)
+    return result
 
 
 @router.get("/runs")
@@ -88,8 +134,15 @@ async def _owned_run(ctx: AppContext, user: SessionUser, run_id: str) -> dict:
 
 
 @router.get("/runs/{run_id}")
-async def get_run(run_id: str, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
-    return await _owned_run(ctx, user, run_id)
+async def get_run(run_id: str, page: int = Query(default=1, ge=1), page_size: int = Query(default=20, ge=1, le=40),
+                  user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    run = await _owned_run(ctx, user, run_id)
+    # 소유자를 저장소에서 확인한 뒤에만 조건 캐시를 읽는다. 만료 후에도 저장된 이력으로 페이지를 제공한다.
+    if ctx.search_cache and run.get("cache_key"):
+        snapshot = await ctx.search_cache.get(run["cache_key"])
+        if snapshot and snapshot.get("snapshot_id") == run.get("snapshot_id"):
+            run = {**run, "candidates": snapshot["candidates"]}
+    return page_result(run, page, page_size)
 
 
 @router.get("/runs/{run_id}/candidates/{candidate_id}/location")
@@ -122,3 +175,12 @@ async def candidate_location(
         candidate["location"] = result
         await ctx.store.put(user.owner, "run", run_id, run)
     return {**result, "cached": False}
+
+
+@router.get("/runs/{run_id}/candidates/{candidate_id}")
+async def candidate_detail(run_id: str, candidate_id: str, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    run = await _owned_run(ctx, user, run_id)
+    candidate = next((c for c in run.get("candidates") or [] if c["id"] == candidate_id), None)
+    if not candidate:
+        raise ApiError(404, "candidate_not_found", "후보를 찾을 수 없습니다.")
+    return candidate

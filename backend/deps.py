@@ -23,6 +23,9 @@ class AppContext:
     animal: Any  # backend.tools.animal_api.AnimalApi
     kakao: Any  # backend.tools.kakao.KakaoGeocoder
     llm: Any  # backend.agent.llm.FeatureExtractor | None
+    photo_llm: Any = None  # backend.agent.llm.FeatureExtractor | None
+    embedder: Any = None
+    search_cache: Any = None
 
 
 def get_ctx(request: Request) -> AppContext:
