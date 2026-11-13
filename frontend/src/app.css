@@ -63,11 +63,25 @@ button[disabled]{opacity:.65;cursor:progress}
 /* 우리 아이 찾기 입력 영역 v2: 사진 | (종류 버튼 · 특징과 상황 · 실종 지역/날짜) */
 .search-form-grid-v2{grid-template-columns:minmax(200px,.75fr) minmax(0,2fr)}
 .search-form-grid-v2 .upload-box{min-height:100%}
+.photo-upload-column{display:flex;flex-direction:column;min-width:0}
+.photo-upload-column .upload-box{flex:1}
+.photo-analysis-message{margin:9px 2px 0;color:#8d573e;font-size:12px;line-height:1.55}
 .search-fields-v2{display:flex;flex-direction:column;gap:14px;min-width:0}
 .search-fields-v2 .search-description textarea{min-height:120px}
 .search-fields-v2 .form-pair label,.search-fields-v2 .search-description{margin-top:0}
 .field-block{display:flex;flex-direction:column;gap:6px;min-width:0}
 .field-label{color:#59554e;font-size:12px;font-weight:700}
+.photo-analyzing{position:relative;z-index:1;padding:5px 9px;border-radius:999px;background:#fffdfa;color:#605744!important;box-shadow:0 2px 10px #0002}
+.upload-box input[type=file]{position:absolute;inset:0;z-index:2;width:100%;height:100%;max-width:none;opacity:0;cursor:pointer}
+.upload-box img{pointer-events:none}
+.upload-box img~span:not(.photo-analyzing){position:absolute;z-index:1;bottom:10px;padding:5px 9px;border-radius:999px;background:#fffdfaE8;color:#5d564b}
+.upload-box .photo-analyzing{position:absolute;z-index:3;bottom:10px}
+.photo-feedback-popup{position:fixed;z-index:90;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;justify-content:center;gap:18px;width:50vw;max-width:900px;padding:13px 42px 13px 18px;border:1px solid #e9dfca;border-radius:14px;background:#fffdfa;box-shadow:0 8px 30px #33281735}
+.photo-feedback-question{color:#403a31;font-size:14px;font-weight:700;text-align:center}
+.photo-feedback-actions{display:flex;flex:none;gap:8px}
+.photo-feedback-actions button{min-height:38px;padding:7px 12px;border:1px solid #e3ded6;border-radius:9px;background:#fff;color:#51483d;font:inherit;font-size:13px;font-weight:700;white-space:nowrap}
+.photo-feedback-actions button:hover,.photo-feedback-actions button.selected{border-color:#d0b66f;background:#fbf4df}
+.photo-feedback-close{position:absolute;top:7px;right:9px;width:26px;height:26px;border:0;background:transparent;color:#8c8377;font-size:20px;line-height:1}
 
 .species-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
 .species-option{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 12px;border:1px solid #e3ded6;border-radius:10px;background:#fff;color:#6f6a63;font:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:border-color .15s,background .15s}
@@ -100,6 +114,7 @@ button[disabled]{opacity:.65;cursor:progress}
 
 @media(max-width:900px){.search-form-grid-v2{grid-template-columns:1fr}.search-form-grid-v2 .upload-box{min-height:150px}}
 @media(max-width:560px){.species-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.region-map{height:260px}.modal-foot .primary-button{width:100%}}
+@media(max-width:760px){.photo-feedback-popup{width:80vw;max-width:none;flex-direction:column;gap:10px;padding:14px 34px 14px 16px}.photo-feedback-question{font-size:13px}.photo-feedback-actions{width:100%;justify-content:center}.photo-feedback-actions button{flex:1;min-height:40px}}
 
 /* 마이페이지 */
 .account-area a.account-name{text-decoration:none}
