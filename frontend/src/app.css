@@ -113,3 +113,14 @@ button[disabled]{opacity:.65;cursor:progress}
 .run-status-completed{background:#e7f2df;color:#3f5a2c}
 .run-status-partial,.run-status-awaiting_input{background:#fff0c4;color:#6e5932}
 .run-status-failed{background:#fbe3dd;color:#a34a39}
+
+/* 실종 정보 게시판 (PostBoardPage · PostDetailPage) */
+.field-error{color:#a34a39;font-size:12px;font-weight:500}
+.post-form-grid [aria-invalid=true]{border-color:#d89a8a}
+.post-photo-preview{display:block;max-width:220px;max-height:145px;margin-top:7px;border-radius:8px;object-fit:cover}
+.post-form .state-error{margin:16px 0 0}
+.detail-information .detail-copy{padding:0}
+.detail-information .detail-copy h2{margin:22px 0 8px;font-size:15px}
+.post-description{margin:0;color:#4e473e;font-size:15px;line-height:1.7;white-space:pre-wrap;overflow-wrap:anywhere}
+.danger-button{border-color:#ecc7bd;color:#a34a39}
+.primary-button.danger-button{background:#f6d8cf}
