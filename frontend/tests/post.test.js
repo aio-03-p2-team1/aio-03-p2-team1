@@ -27,6 +27,12 @@ test('future and too-old dates are rejected', () => {
   assert.equal(validatePost({ ...ok, lost_date: TODAY }, TODAY).lost_date, undefined)
 })
 
+test('location must be picked on the map (not 전체)', () => {
+  assert.ok(validatePost({ ...ok, region: '전체' }, TODAY).region.includes('지도'))
+  assert.ok(validatePost({ ...ok, lost_place: 'x'.repeat(101) }, TODAY).region)
+  assert.equal(validatePost({ ...ok, lost_place: '서울특별시 강서구 화곡동' }, TODAY).region, undefined)
+})
+
 test('species must be a concrete kind (not 전체)', () => {
   assert.ok(validatePost({ ...ok, species: 'all' }, TODAY).species)
   assert.equal(postSpeciesLabel('cat'), '고양이')

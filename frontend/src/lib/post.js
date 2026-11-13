@@ -34,7 +34,9 @@ export function validatePost(form, today = localDate()) {
   if (!name) errors.pet_name = '반려동물 이름을 적어 주세요.'
   else if (name.length > 20) errors.pet_name = '이름은 20자 이내로 적어 주세요.'
   if (!POST_SPECIES.some((o) => o.value === form.species)) errors.species = '동물 종류를 선택해 주세요.'
-  if (!String(form.region || '').trim()) errors.region = '실종 지역을 선택해 주세요.'
+  const region = String(form.region || '').trim()
+  if (!region || region === '전체') errors.region = '실종 위치를 지도에서 선택해 주세요.'
+  if (String(form.lost_place || '').trim().length > 100) errors.region = '실종 위치 주소가 너무 길어요.'
   if (!/^\d{4}-\d{2}-\d{2}$/.test(form.lost_date || '')) {
     errors.lost_date = '실종 날짜를 선택해 주세요.'
   } else if (form.lost_date > today) {

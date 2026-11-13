@@ -91,6 +91,7 @@ export default function PostDetailPage() {
             <Fact label="종류" value={postSpeciesLabel(post.species)} />
             <Fact label="품종" value={post.breed} />
             <Fact label="실종 지역" value={post.region} />
+            <Fact label="실종 위치" value={post.lost_place} />
             <Fact label="실종 날짜" value={formatDate(post.lost_date)} />
           </dl>
           <div className="detail-copy">
