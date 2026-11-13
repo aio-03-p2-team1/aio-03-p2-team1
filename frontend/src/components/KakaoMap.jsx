@@ -1,43 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { KAKAO_JS_KEY, loadKakaoSdk } from '../lib/kakao.js'
 import { kakaoSearchUrl } from '../lib/format.js'
-
-const JS_KEY = import.meta.env.VITE_KAKAO_JS_KEY
-let sdkPromise = null
-
-// SDK 는 autoload=false 로 페이지당 한 번만 로드해 재사용한다. 실패하면 다음 시도에서 다시 로드한다.
-function loadSdk() {
-  if (window.kakao?.maps?.LatLng) return Promise.resolve(window.kakao)
-  if (!sdkPromise) {
-    sdkPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script')
-      script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(JS_KEY)}&autoload=false`
-      script.async = true
-      script.onload = () => {
-        if (!window.kakao?.maps) return reject(new Error('sdk'))
-        window.kakao.maps.load(() => resolve(window.kakao))
-      }
-      script.onerror = () => {
-        script.remove()
-        reject(new Error('sdk'))
-      }
-      document.head.appendChild(script)
-    }).catch((err) => {
-      sdkPromise = null
-      throw err
-    })
-  }
-  return sdkPromise
-}
 
 /** lat/lng 가 있을 때만 마커를 찍는다. 지도를 못 쓰면 카카오맵 주소 검색 링크로 대체한다. */
 export default function KakaoMap({ lat, lng, address, title }) {
   const box = useRef(null)
-  const [state, setState] = useState(JS_KEY ? 'loading' : 'no_key')
+  const [state, setState] = useState(KAKAO_JS_KEY ? 'loading' : 'no_key')
 
   const draw = useCallback(() => {
-    if (!JS_KEY) return
+    if (!KAKAO_JS_KEY) return
     setState('loading')
-    loadSdk()
+    loadKakaoSdk()
       .then((kakao) => {
         if (!box.current) return
         const center = new kakao.maps.LatLng(lat, lng)

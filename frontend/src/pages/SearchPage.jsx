@@ -3,18 +3,23 @@ import { Link } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, scopeText, speciesLabel } from '../lib/format.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
+import RegionPicker from '../components/RegionPicker.jsx'
+import SpeciesPicker from '../components/SpeciesPicker.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
 
-const EMPTY = { pet_name: '', species: '', region: '', lost_date: '', description: '' }
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+// 실종 날짜 기본값은 오늘. 지역은 모달에서 고른 위치(공식 시·도 + 주소)를 쓴다.
+const initialForm = () => ({ species: '', lost_date: today(), description: '' })
 
 // 우리 아이 찾기 — 디자인: dasimanna-cards-search.html
 export default function SearchPage() {
   const regions = useRegions()
   const toast = useToast()
-  const [form, setForm] = useState(EMPTY)
+  const [form, setForm] = useState(initialForm)
+  const [location, setLocation] = useState(null) // { region, address, lat?, lng? }
+  const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useState('')
   const [run, setRun] = useState(null)
   const [busy, setBusy] = useState(false)
@@ -64,12 +69,14 @@ export default function SearchPage() {
     event.preventDefault()
     const criteria = {}
     for (const [k, v] of Object.entries(form)) if (v.trim()) criteria[k] = v.trim()
+    if (location?.region) criteria.region = location.region
+    if (location?.address) criteria.lost_place = location.address
     // 이어지는 질문에 답하는 중이면 같은 세션(thread)으로 보낸다.
     submit(criteria, run?.status === 'awaiting_input' ? run.thread_id : undefined)
   }
 
   function widenRegion() {
-    setForm((f) => ({ ...f, region: '전체' }))
+    setLocation({ region: '전체', address: '' })
     submit({ region: '전체' }, run.thread_id)
   }
 
@@ -94,46 +101,38 @@ export default function SearchPage() {
 
       <form className="panel search-form search-form-wide" onSubmit={onSubmit} noValidate>
         <div className="panel-title"><span>01</span><h2>사진과 정보 입력</h2></div>
-        <div className="search-form-grid">
+        <div className="search-form-grid search-form-grid-v2">
           <label className="upload-box">
             사진 올리기
             <input type="file" accept="image/*" onChange={onPhoto} />
             <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '선택한 사진은 이 화면에서만 보여요'}</span>
             {photo && <img src={photo} alt="올린 반려동물 사진" />}
           </label>
-          <div className="search-fields">
-            <div className="form-pair">
-              <label>이름<input value={form.pet_name} onChange={set('pet_name')} placeholder="예: 보리" maxLength={25} /></label>
-              <label>
-                <span>종류 <em className="req">필수</em></span>
-                <select value={form.species} onChange={set('species')}>
-                  <option value="">선택</option>
-                  <option value="dog">개</option>
-                  <option value="cat">고양이</option>
-                  <option value="etc">기타</option>
-                  <option value="all">전체</option>
-                </select>
-              </label>
+          <div className="search-fields-v2">
+            <div className="field-block">
+              <span className="field-label">종류 <em className="req">필수</em></span>
+              <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => ({ ...f, species }))} />
             </div>
+            <label className="search-description">
+              특징과 상황
+              <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
+            </label>
             <div className="form-pair">
-              <label>
-                <span>실종 지역 <em className="req">필수</em></span>
-                <select value={form.region} onChange={set('region')}>
-                  <option value="">선택</option>
-                  <option value="전체">전체 지역</option>
-                  {regions.list.map((r) => <option key={r.code} value={r.name}>{r.name}</option>)}
-                </select>
-              </label>
+              <div className="field-block">
+                <span className="field-label">실종 지역 <em className="req">필수</em></span>
+                <button type="button" className={`region-trigger${location ? ' filled' : ''}`} onClick={() => setRegionOpen(true)} aria-haspopup="dialog">
+                  <span aria-hidden="true">⌖</span>
+                  {location
+                    ? location.region === '전체' ? '전체 지역' : location.address || location.region
+                    : '실종 지역 선택'}
+                </button>
+              </div>
               <label>
                 <span>실종 날짜 <em className="req">필수</em></span>
                 <input type="date" value={form.lost_date} max={today()} onChange={set('lost_date')} />
               </label>
             </div>
           </div>
-          <label className="search-description">
-            특징과 상황
-            <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
-          </label>
         </div>
         <div className="search-form-bottom">
           <p className="fineprint">
@@ -143,6 +142,16 @@ export default function SearchPage() {
           <button className="primary-button" type="submit" disabled={busy}>{busy ? '찾는 중…' : '후보 찾아보기 ↗'}</button>
         </div>
       </form>
+      <RegionPicker
+        open={regionOpen}
+        regions={regions.list}
+        initial={location}
+        onClose={() => setRegionOpen(false)}
+        onSelect={(value) => {
+          setLocation(value)
+          setRegionOpen(false)
+        }}
+      />
 
       <section className="search-results-section" aria-labelledby="results-title">
         <div className="section-head">
