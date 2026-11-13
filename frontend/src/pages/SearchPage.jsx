@@ -15,6 +15,7 @@ import { useRegions } from './useRegions.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const initialForm = () => ({ species: '', lost_date: today(), description: '' })
+const photoFormatError = 'JPG, PNG, WEBP 형식의 사진만 사용할 수 있어요.'
 export default function SearchPage() {
   const regions = useRegions()
   const toast = useToast()
@@ -83,7 +84,7 @@ export default function SearchPage() {
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setPhotoFeedbackOpen(false)
       setPhotoAnalyzing(false)
-      return setPhotoMessage('JPG, PNG, WEBP 사진을 선택해 주세요.')
+      return setPhotoMessage(photoFormatError)
     }
     if (file.size > 8 * 1024 * 1024) {
       setPhotoFeedbackOpen(false)
@@ -113,7 +114,7 @@ export default function SearchPage() {
       const result = await api('/photo-analysis', { method: 'POST', body: { image_base64: encoded } })
       if (requestId !== photoRequestId.current) return
       if (!result.suitable) {
-        setPhotoMessage(result.message || '사진에서 동물을 선명하게 확인하지 못했어요. 동물이 중심에 보이는 사진을 올려 주세요.')
+        setPhotoMessage('다른 사진을 사용해 주세요.')
         return
       }
       const traits = [
@@ -137,7 +138,10 @@ export default function SearchPage() {
       setPhotoSpecies(result.species || '')
       setPhotoFeedbackOpen(true)
     } catch (err) {
-      if (requestId === photoRequestId.current) setPhotoMessage(errorMessage(err))
+      if (requestId === photoRequestId.current) {
+        const isPhotoFormatError = ['invalid_photo', 'unsupported_photo_format'].includes(err.code)
+        setPhotoMessage(isPhotoFormatError ? photoFormatError : '오류가 발생했습니다.')
+      }
     } finally {
       if (requestId === photoRequestId.current) setPhotoAnalyzing(false)
     }
