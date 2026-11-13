@@ -159,3 +159,13 @@ button[disabled]{opacity:.65;cursor:progress}
 .my-pager button:disabled{opacity:.4;cursor:default}
 .my-dashboard .mini-items{grid-template-columns:repeat(4,1fr)}
 @media(max-width:760px){.my-dashboard .mini-items{grid-template-columns:repeat(2,1fr)}}
+
+/* 공고 상세: 구조 위치 지도 버튼과 작은 지도 창 */
+.rescue-location{position:relative;display:inline-flex;align-items:center;flex-wrap:wrap;gap:6px}
+.rescue-map-button{display:inline-grid;place-items:center;width:30px;height:30px;padding:0;border:1px solid #e3dccf;border-radius:8px;background:#fff;font-size:16px;line-height:1;cursor:pointer}
+.rescue-map-button:hover,.rescue-map-button[aria-expanded="true"]{border-color:#e5c879;background:#fff4d2}
+.rescue-map-popover{position:absolute;top:calc(100% + 8px);left:0;z-index:30;display:grid;gap:8px;width:min(320px,80vw);padding:12px;border:1px solid #e7e0d5;border-radius:12px;background:#fff;box-shadow:0 12px 30px rgba(52,48,43,.18);font-weight:400}
+.rescue-map-head{display:flex;align-items:center;justify-content:space-between;font-size:14px}
+.rescue-map-head .modal-close{width:28px;height:28px;font-size:18px}
+.rescue-map-box{width:100%;height:200px;border-radius:9px;background:#f3eee5}
+.rescue-map-popover .map-note{margin:0;font-size:12px}
