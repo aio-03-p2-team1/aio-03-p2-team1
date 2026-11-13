@@ -15,7 +15,7 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | --- | --- | --- |
 | `/` 전체 공고 | `img/dasimanna-cards-board.html` | `GET /notices`, `GET /regions` |
 | `/notices/:id` 공고 상세 | `img/dasimanna-cards-detail.html` | `GET /notices/{id}` 또는 `GET /runs/{run_id}` + 위치 API |
-| `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /searches`, `GET /runs`, `GET /runs/{id}`. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
+| `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
 | `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다. 새 API 없음 |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 
@@ -69,6 +69,7 @@ flowchart TD
 | 조건 충분 | `animal_search` 를 페이지 단위로 `MAX_SEARCH_PAGES` 까지 | 페이지·건수 |
 | live 모드 + 자유 서술 있음 | `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
 | 검증 통과 + 카카오 키 + 주소 | 상위 3개만 `kakao_geocode` | 후보 ID |
+| 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 OpenAI 비전) | 적합성 판정·특징 JSON |
 
 호출 한도 `MAX_TOOL_CALLS` 를 넘으면 `tool_budget` 으로 멈춘다. 상세·보호센터 전용 공공 API 는 없으므로 검색 응답 필드에서 정규화한다(만들어내지 않음).
 
@@ -161,6 +162,7 @@ flowchart LR
 | `GET /notices` · `GET /notices/{id}` | 없음 | `animal_*`, `notice_not_cached` (화면 설계로 추가한 조회 전용 경로) |
 | `POST /auth/register` · `login` · `GET /auth/me` · `POST /auth/logout` | 쿠키 | `email_taken`, `invalid_credentials`, `login_rate_limited`, `auth_unavailable` |
 | `POST /searches` | 필요 | `not_authenticated`, `invalid_request` |
+| `POST /photo-analysis` | 필요 | `photo_analysis_not_configured`, `photo_analysis_rate_limited`, `invalid_photo`, `photo_too_large`, `photo_too_many_pixels`, `unsupported_photo_format`, `llm_*` |
 | `GET /runs` · `GET /runs/{id}` | 필요(소유자) | `run_not_found` |
 | `GET /runs/{id}/candidates/{cid}/location` | 필요(소유자) | `candidate_not_found`, `location_*`(502), `location_rate_limited` |
 | `GET/POST /saved-searches` · `DELETE /saved-searches/{key}` | 필요 | `saved_search_not_found` |
@@ -172,7 +174,14 @@ flowchart LR
 ## 9. 미구현·미확정
 
 - 알림(구독·Discord DM·발송 이력), 브라우저 푸시
-- 사진 분석(업로드 사진은 화면에서만 미리보기)
 - 대화 요약 전략
 - 배포 주소(Render 서비스 URL, Vercel 도메인)와 `vercel.json` API rewrite, 운영 `CORS_ORIGINS`
 - 구조동물 API 응답 필드는 문서 기준으로 정규화했고, 실제 키 응답 확인이 필요하다(`docs/test-report.md`).
+
+### 사진 분석 흐름
+
+- 브라우저에서 JPG·PNG·WEBP, 8MB 이하 파일을 고르고 base64 JSON으로 `POST /photo-analysis`에 보낸다. 서버는 인증 사용자별 분당 5회로 제한한다.
+- `backend/agent/photo.py`가 Pillow로 실제 포맷·파일 무결성을 확인하고, 픽셀 수가 2,000만을 넘으면 거부한다. 파일은 처리 후 저장하지 않는다.
+- `backend/agent/llm.py`의 `PHOTO_SYSTEM_PROMPT`가 동물 존재, 외형 식별 가능 여부, 특정 동물의 중심·구분 가능 여부를 각각 판단한다. 세 조건과 각 자동 입력 특징 신뢰도가 0.8 이상인 값만 반환한다.
+- 분석 특징은 검색 폼에 입력되고 사용자가 수정할 수 있다. 낮은 신뢰도·분석 오류는 업로드 영역 아래에 표시한다. 폼 입력에 성공하면 `PhotoFeedbackPopup`이 하단 중앙에 나타난다(데스크톱 50vw, 모바일 80vw). 좋아요·싫어요 값은 현재 화면 상태에만 반영하고 서버에 저장하지 않는다.
+- 사진 분석에는 `OPENAI_API_KEY`가 필요하며, local 모드에서도 키가 설정된 경우 사용할 수 있다. 설정이 없으면 503 오류를 반환한다.

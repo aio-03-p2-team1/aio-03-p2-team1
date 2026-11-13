@@ -43,6 +43,11 @@ def build_context(settings: Settings) -> AppContext:
         if settings.app_mode == "live" and settings.openai_api_key
         else None
     )
+    photo_llm = llm or (
+        FeatureExtractor(settings.openai_api_key.get_secret_value(), settings.openai_model, timeout=timeout)
+        if settings.openai_api_key
+        else None
+    )
     return AppContext(
         settings=settings,
         store=build_store(settings),
@@ -50,6 +55,7 @@ def build_context(settings: Settings) -> AppContext:
         animal=animal,
         kakao=KakaoGeocoder(kakao_key, timeout=min(timeout, 15)),
         llm=llm,
+        photo_llm=photo_llm,
     )
 
 
