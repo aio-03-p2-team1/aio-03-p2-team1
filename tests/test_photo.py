@@ -83,7 +83,7 @@ class FakePhotoAnalyzer:
             marks=[],
             message="모델 내부 문구",
             model="test-model",
-            prompt_version="photo-feature-v1",
+            prompt_version="photo-feature-v2",
         )
 
 

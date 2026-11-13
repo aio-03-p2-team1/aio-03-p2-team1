@@ -55,7 +55,10 @@ def test_photo_analysis_uses_injected_langchain_client():
         "animal_present": True,
         "identifiable": True,
         "center_subject_clear": True,
-        "confidence": {key: 0.95 for key in ("animal_present", "identifiable", "center_subject_clear", "species")},
+        "confidence": {
+            key: 0.95
+            for key in ("animal_present", "identifiable", "center_subject_clear", "species", "breed", "sex")
+        },
         "species": "dog",
         "colors": [],
         "marks": [],
