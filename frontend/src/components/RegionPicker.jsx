@@ -8,8 +8,9 @@ const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 } // 서울시청(지도 첫
  * 실종 지역 선택 모달.
  * 위: 카카오 주소 검색, 아래: 지도. 검색 결과나 지도를 누르면 그 위치의 주소와 시·도를 고른다.
  * 결과: { region: 공식 시·도 이름 | '전체', address, lat, lng }
+ * allowAll=false 이면 '전체' 선택 버튼을 숨긴다(게시글 등록처럼 위치가 꼭 필요한 곳).
  */
-export default function RegionPicker({ open, regions, initial, onClose, onSelect }) {
+export default function RegionPicker({ open, regions, initial, onClose, onSelect, allowAll = true, title = '실종 지역 선택' }) {
   const mapBox = useRef(null)
   const kakaoRef = useRef(null)
   const mapRef = useRef(null)
@@ -136,7 +137,7 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal region-modal" role="dialog" aria-modal="true" aria-labelledby="region-modal-title">
         <div className="modal-head">
-          <h2 id="region-modal-title">실종 지역 선택</h2>
+          <h2 id="region-modal-title">{title}</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="닫기">×</button>
         </div>
 
@@ -189,9 +190,11 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
           <div className="region-picked" aria-live="polite">
             {state === 'ready' ? (picked ? <>선택한 위치 <strong>{picked.address || picked.region}</strong></> : '아직 선택한 위치가 없어요.') : null}
           </div>
-          <button type="button" className="text-action" onClick={() => onSelect({ region: '전체', address: '' })}>
-            지역 상관없이 전체에서 찾기
-          </button>
+          {allowAll && (
+            <button type="button" className="text-action" onClick={() => onSelect({ region: '전체', address: '' })}>
+              지역 상관없이 전체에서 찾기
+            </button>
+          )}
           <button type="button" className="primary-button" disabled={!canConfirm} onClick={confirm}>선택 완료</button>
         </div>
       </div>
