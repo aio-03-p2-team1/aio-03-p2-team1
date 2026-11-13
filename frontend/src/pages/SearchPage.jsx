@@ -194,7 +194,7 @@ export default function SearchPage() {
       <div className="page-heading">
         <span className="eyebrow">사진과 설명으로 찾기</span>
         <h1>우리 아이를 알려주세요</h1>
-        <p>기억나는 정보를 입력하면 실제 보호소 공고에서 닮은 후보를 찾아 근거와 함께 보여 드려요.</p>
+        <p>반려동물의 정보와 실종 지역을 입력하면 비슷한 공고를 찾아드려요.</p>
       </div>
 
       <form className="panel search-form search-form-wide" onSubmit={onSubmit} noValidate>
@@ -204,7 +204,7 @@ export default function SearchPage() {
             <label className="upload-box">
               사진 올리기
               <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhoto} />
-              <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '찾을 동물이 중심에 선명하게 보이는 JPG·PNG·WEBP (최대 8MB)'}</span>
+            <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '찾을 동물이 중심에 선명하게 보이는 사진 (JPG, PNG 또는 WEBP · 최대 8MB)'}</span>
               {photo && <img src={photo} alt="올린 반려동물 사진" />}
               {photoAnalyzing && <span className="photo-analyzing">사진 특징을 살펴보고 있어요…</span>}
             </label>
@@ -238,7 +238,7 @@ export default function SearchPage() {
         </div>
         <div className="search-form-bottom">
           <p className="fineprint">
-            사진을 OpenAI 분석 요청에 보내 보이는 특징을 입력란에 채워요. 이미지는 서비스에 저장하지 않으며, 입력된 내용은 직접 고치거나 다른 사진으로 다시 분석할 수 있어요.
+            사진을 살펴보고 확인된 특징을 입력란에 적어드려요. 사진은 저장하지 않으며, 입력된 특징은 직접 고칠 수 있어요.
             빈 칸이 있으면 검색 전에 먼저 물어볼게요.
           </p>
           <button className="primary-button" type="submit" disabled={busy}>{busy ? '찾는 중…' : '후보 찾아보기 ↗'}</button>
@@ -267,7 +267,7 @@ export default function SearchPage() {
           <div>
             <span className="eyebrow">닮은 후보 살펴보기</span>
             <h2 id="results-title">검색 결과 {run?.data_source && <SourceBadge source={run.data_source} />}</h2>
-            <p>{run?.scope ? scopeText(run.scope) : '최대 1,000건을 비교해 상위 300건을 페이지로 보여 드려요.'}</p>
+            {run?.scope && <p>{scopeText(run.scope)}</p>}
           </div>
         </div>
         <Results run={run} busy={busy} error={error} onWiden={widenRegion} />
@@ -290,7 +290,7 @@ export default function SearchPage() {
             <button type="button" key={h.run_id} onClick={() => openHistory(h.run_id)}>
               {runSummary(h.criteria)}
               <br />
-              {runStatusLabel(h.status)} · 후보 {h.candidate_count} · {formatDateTime(h.created_at)}
+              {runStatusLabel(h.status)} · 비슷한 공고 {h.candidate_count}건 · {formatDateTime(h.created_at)}
             </button>
           ))}
         </div>
@@ -321,22 +321,14 @@ function Results({ run, busy, error, onWiden }) {
   }
   if (!run) return <p className="empty-results">아직 검색하지 않았어요.</p>
 
-  const meta = (
-    <p className="run-meta">
-      도구 호출 {run.tool_call_count ?? run.tool_calls?.length ?? 0}회 · 판단 수정 {run.reflection_count ?? 0}회 · 통신 재시도 {run.retry_count ?? 0}회
-      {run.reflections?.length > 0 && ` · 수정 내용: ${run.reflections.map((r) => r.strategy).join(', ')}`}
-    </p>
-  )
-
   if (run.status === 'awaiting_input') {
     const widen = run.questions?.some((q) => q.field === 'region' && run.scope)
     return (
       <div className="panel question-panel" role="status">
         <strong>조금만 더 알려 주세요</strong>
         <ul>{run.questions?.map((q) => <li key={q.field + q.message}>{q.message}</li>)}</ul>
-        <p className="fineprint">위 입력란을 채우고 다시 검색하면 앞서 입력한 조건과 합쳐서 이어서 찾아요.</p>
+        <p className="fineprint">위 입력란에 내용을 추가한 뒤 다시 검색해 주세요.</p>
         {widen && <button type="button" className="primary-button" onClick={onWiden}>전체 지역으로 넓혀 찾기</button>}
-        {meta}
       </div>
     )
   }
@@ -351,7 +343,7 @@ function Results({ run, busy, error, onWiden }) {
         </div>
       )}
       {run.status === 'partial' && !run.error && (
-        <p className="state-box">검증에서 해결하지 못한 문제가 있어 부분 결과로 표시해요.</p>
+        <p className="state-box">일부 결과만 확인했어요. 조건을 바꿔 다시 검색해 주세요.</p>
       )}
       {run.status !== 'failed' && candidates.length === 0 && (
         <p className="empty-results">
@@ -364,16 +356,15 @@ function Results({ run, busy, error, onWiden }) {
             <Link key={c.id} className="result-card" to={`/notices/${encodeURIComponent(c.id)}?run=${run.run_id}&page=${run.pagination?.page || 1}`}>
               <NoticePhoto item={c} variant="notice" />
               <span className="result-card-body">
-                <span className="sample-label">{c.rank}순위 · {run.ranking_method === 'rrf' ? `RRF ${c.score.toFixed(5)}` : `점수 ${c.score}`}</span>
+                <span className="sample-label">{c.rank}순위</span>
                 <strong>{noticeTitle(c)}</strong>
                 <small>{c.happen_place || '발견 장소 미확인'} · {formatDate(c.happen_date)}</small>
-                <small>{c.evidence?.matched?.length ? c.evidence.matched.join(' · ') : '일치 근거 없음(조건 범위 안의 공고)'}</small>
+                <small>{c.evidence?.matched?.length ? c.evidence.matched.join(' · ') : '확인된 특징이 없어요. 공고 내용을 살펴봐 주세요.'}</small>
               </span>
             </Link>
           ))}
         </div>
       )}
-      {meta}
     </>
   )
 }
