@@ -55,3 +55,44 @@ button[disabled]{opacity:.65;cursor:progress}
 .sample-photo.photo-6{background-position:65.93% 88.57%}.sample-photo.photo-7{background-position:96.56% 88.57%}
 .notice-photo-img{object-fit:cover;background:#eee8dd}
 .post-thumb.sample-photo{height:auto;aspect-ratio:390/171}
+
+/* 우리 아이 찾기 입력 영역 v2: 사진 | (종류 버튼 · 특징과 상황 · 실종 지역/날짜) */
+.search-form-grid-v2{grid-template-columns:minmax(200px,.75fr) minmax(0,2fr)}
+.search-form-grid-v2 .upload-box{min-height:100%}
+.search-fields-v2{display:flex;flex-direction:column;gap:14px;min-width:0}
+.search-fields-v2 .search-description textarea{min-height:120px}
+.search-fields-v2 .form-pair label,.search-fields-v2 .search-description{margin-top:0}
+.field-block{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field-label{color:#59554e;font-size:12px;font-weight:700}
+
+.species-picker{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.species-option{display:flex;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 12px;border:1px solid #e3ded6;border-radius:10px;background:#fff;color:#6f6a63;font:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:border-color .15s,background .15s}
+.species-option:hover{border-color:#b9c9b4}
+.species-option .species-paw{fill:currentColor;flex:none;opacity:.75}
+.species-option.selected{border-color:#9db797;background:#eef4ec;color:#2f4a2c;font-weight:800}
+.species-option.selected .species-paw{opacity:1}
+.species-check{font-size:15px;font-weight:700}
+.species-option:focus-visible,.region-trigger:focus-visible{outline:3px solid #c9dcc4;outline-offset:2px}
+
+.region-trigger{display:flex;align-items:center;gap:8px;width:100%;min-height:42px;padding:10px 12px;border:1px solid #e3ded6;border-radius:8px;background:#fff;color:#8a8379;font:inherit;font-size:14px;text-align:left;cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.region-trigger.filled{color:#34302b}
+.region-trigger span{color:#a67c21;font-size:16px}
+
+.modal-backdrop{position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:16px;background:rgba(40,34,26,.45)}
+.modal{width:min(680px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:22px;border-radius:16px;background:#fffdfa;box-shadow:0 20px 60px rgba(40,30,15,.25)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.modal-head h2{margin:0;font-size:19px}
+.modal-close{border:0;background:transparent;color:#7b7368;font-size:26px;line-height:1;cursor:pointer}
+.region-search{display:flex;gap:8px}
+.region-search input{flex:1;min-width:0;min-height:44px;padding:10px 12px;border:1px solid #e3ded6;border-radius:8px;font-size:14px}
+.region-results{margin:8px 0 0;padding:0;max-height:180px;overflow:auto;list-style:none;border:1px solid #eee8df;border-radius:8px;background:#fff}
+.region-results button{display:block;width:100%;padding:10px 12px;border:0;border-bottom:1px solid #f2ede5;background:transparent;font:inherit;font-size:13px;text-align:left;cursor:pointer}
+.region-results button:hover{background:#faf6ee}
+.region-map{width:100%;height:340px;margin-top:12px;border:1px solid #e7e0d5;border-radius:12px;background:#f3eee5}
+.region-fallback select{width:100%;min-height:44px;margin-top:8px;padding:10px;border:1px solid #e3ded6;border-radius:8px}
+.modal-foot{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+.region-picked{flex:1;min-width:200px;color:#5d564c;font-size:13px}
+.region-picked strong{color:#2f4a2c}
+
+@media(max-width:900px){.search-form-grid-v2{grid-template-columns:1fr}.search-form-grid-v2 .upload-box{min-height:150px}}
+@media(max-width:560px){.species-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.region-map{height:260px}.modal-foot .primary-button{width:100%}}
