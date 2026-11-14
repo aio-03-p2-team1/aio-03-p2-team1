@@ -3,12 +3,14 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
-import { postSpeciesLabel, postTitle } from '../lib/post.js'
+import { isLostReport, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
 import { useToast } from '../components/Toast.jsx'
 import { PostPhoto } from './PostBoardPage.jsx'
 
+// 회원 글(/board/:postId)과 공공데이터 분실 신고(/board/lost/:lostId)를 같은 화면으로 보여 준다.
 export default function PostDetailPage() {
-  const { postId } = useParams()
+  const { postId, lostId } = useParams()
+  const apiPath = lostId ? `/posts/lost/${encodeURIComponent(lostId)}` : `/posts/${encodeURIComponent(postId)}`
   const { user } = useAuth()
   const navigate = useNavigate()
   const toast = useToast()
@@ -20,7 +22,7 @@ export default function PostDetailPage() {
 
   useEffect(() => {
     setStatus('loading')
-    api(`/posts/${encodeURIComponent(postId)}`, { auth: false })
+    api(apiPath, { auth: false })
       .then((data) => {
         setPost(data)
         setStatus('ready')
@@ -30,7 +32,7 @@ export default function PostDetailPage() {
         setError(err)
         setStatus('error')
       })
-  }, [postId, user])
+  }, [apiPath, user])
 
   async function remove() {
     setDeleting(true)
@@ -61,6 +63,7 @@ export default function PostDetailPage() {
     )
   }
 
+  const lost = isLostReport(post)
   return (
     <main className="page-main post-detail-page">
       <div className="breadcrumb">
@@ -71,30 +74,45 @@ export default function PostDetailPage() {
         <div>
           {post.mine && <span className="sample-label">내 글</span>}
           <h1>{postTitle(post)}</h1>
-          <p>실종 정보 게시판 · {post.region}</p>
+          <p>{lost ? '공공데이터 분실 신고' : '실종 정보 게시판'} · {post.region}</p>
         </div>
         <Link className="text-link" to="/board">← 게시판으로</Link>
       </div>
       <div className="post-detail-layout">
         <div className="post-detail-media">
           <PostPhoto post={post} main />
-          <p>{post.has_photo ? '작성자가 올린 사진이에요.' : '사진이 없는 게시글이에요.'}</p>
+          <p>{!post.has_photo ? '사진이 없는 게시글이에요.' : lost ? '분실 신고에 등록된 사진이에요.' : '작성자가 올린 사진이에요.'}</p>
         </div>
         <section className="detail-information" aria-label="실종 정보">
           <div className="detail-status">
             <span className="sample-label">실종</span>
-            <span>등록 {formatDateTime(post.created_at)}</span>
+            {post.created_at && <span>등록 {formatDateTime(post.created_at)}</span>}
           </div>
-          <dl className="detail-facts">
-            <Fact label="이름" value={post.pet_name} />
-            <Fact label="종류" value={postSpeciesLabel(post.species)} />
-            <Fact label="품종" value={post.breed} />
-            <Fact label="실종 지역" value={post.region} />
-            <Fact label="실종 위치" value={post.lost_place} />
-            <Fact label="실종 날짜" value={formatDate(post.lost_date)} />
-          </dl>
+          {lost ? (
+            // 분실 신고: 신고자·연락처·칩 번호·상세 주소는 서버에서 이미 빠져 있다.
+            <dl className="detail-facts">
+              <Fact label="종류" value={postSpeciesLabel(post.species)} />
+              <Fact label="품종" value={post.breed} />
+              <Fact label="색" value={post.color} />
+              <Fact label="성별" value={sexLabel(post.sex)} />
+              <Fact label="나이" value={post.age} />
+              <Fact label="분실 지역" value={post.region} />
+              <Fact label="분실 주소" value={post.lost_place} />
+              <Fact label="분실 장소" value={post.happen_place} />
+              <Fact label="분실 날짜" value={formatDate(post.lost_date)} />
+            </dl>
+          ) : (
+            <dl className="detail-facts">
+              <Fact label="이름" value={post.pet_name} />
+              <Fact label="종류" value={postSpeciesLabel(post.species)} />
+              <Fact label="품종" value={post.breed} />
+              <Fact label="실종 지역" value={post.region} />
+              <Fact label="실종 위치" value={post.lost_place} />
+              <Fact label="실종 날짜" value={formatDate(post.lost_date)} />
+            </dl>
+          )}
           <div className="detail-copy">
-            <h2>특징과 마지막으로 본 장소</h2>
+            <h2>{lost ? '특징' : '특징과 마지막으로 본 장소'}</h2>
             <p className="post-description">{post.description}</p>
           </div>
           <div className="detail-page-actions">
@@ -111,7 +129,11 @@ export default function PostDetailPage() {
               </>
             )}
           </div>
-          <p className="fineprint">작성자가 직접 올린 정보예요. 보호소 공고가 아니며, 내용은 다시 만나가 확인하지 않았어요.</p>
+          <p className="fineprint">
+            {lost
+              ? '출처: 국가동물보호정보시스템 분실 신고(공공데이터포털). 개인정보(신고자·연락처 등)는 표시하지 않아요.'
+              : '작성자가 직접 올린 정보예요. 보호소 공고가 아니며, 내용은 다시 만나가 확인하지 않았어요.'}
+          </p>
         </section>
       </div>
     </main>

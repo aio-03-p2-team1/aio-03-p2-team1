@@ -3,7 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { api, API_BASE } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate } from '../lib/format.js'
-import { localDate, MAX_PHOTO_BYTES, dataUrlBytes, POST_SPECIES, postPhotoPath, postTitle, validatePost } from '../lib/post.js'
+import {
+  BOARD_PERIODS, DEFAULT_BOARD_DAYS, boardSummary, localDate, MAX_PHOTO_BYTES, dataUrlBytes, POST_SPECIES,
+  postPath, postPhotoPath, postTitle, validatePost
+} from '../lib/post.js'
+import Pagination from '../components/Pagination.jsx'
 import RegionPicker from '../components/RegionPicker.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
@@ -16,6 +20,8 @@ export default function PostBoardPage() {
   const regions = useRegions()
   const [species, setSpecies] = useState('all')
   const [region, setRegion] = useState('')
+  const [days, setDays] = useState(DEFAULT_BOARD_DAYS) // 분실 날짜 기준 최근 며칠
+  const [page, setPage] = useState(1)
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -28,7 +34,8 @@ export default function PostBoardPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    const query = new URLSearchParams({ species })
+    // 필터·페이지는 서버가 캐시된 목록에서 처리한다(외부 API 를 다시 부르지 않음).
+    const query = new URLSearchParams({ species, days: String(days), page: String(page) })
     if (region) query.set('region', region)
     setStatus('loading')
     api(`/posts?${query}`, { auth: false, signal: controller.signal })
@@ -43,7 +50,15 @@ export default function PostBoardPage() {
         setStatus('error')
       })
     return () => controller.abort()
-  }, [species, region, reload, user])
+  }, [species, region, days, page, reload, user])
+
+  // 필터를 바꾸면 첫 페이지부터 다시 본다.
+  function changeFilter(setter) {
+    return (e) => {
+      setter(e.target.value)
+      setPage(1)
+    }
+  }
 
   function openForm() {
     if (!user) {
@@ -66,7 +81,7 @@ export default function PostBoardPage() {
         <div>
           <span className="eyebrow">함께 찾는 공간</span>
           <h1>실종 정보 게시판</h1>
-          <p>잃어버린 반려동물의 정보를 등록하고 동네 게시글을 살펴보세요.</p>
+          <p>잃어버린 반려동물의 정보를 등록하고, 회원 글과 공공데이터 분실 신고를 함께 살펴보세요.</p>
         </div>
         <button type="button" className="primary-button" onClick={openForm} aria-expanded={formOpen}>
           실종 정보 등록 ↗
@@ -91,26 +106,36 @@ export default function PostBoardPage() {
             <h2 id="posts-title">등록된 실종 정보</h2>
             <p>
               게시글을 선택하면 상세 페이지로 이동합니다.
-              {data && ` 최근 게시글 ${data.scanned}건 중 조건에 맞는 ${data.count}건`}
+              {data && ` ${boardSummary(data)}`}
             </p>
           </div>
           <div className="filters">
             <label>
               동물 종류
-              <select value={species} onChange={(e) => setSpecies(e.target.value)}>
+              <select value={species} onChange={changeFilter(setSpecies)}>
                 <option value="all">전체</option>
                 {POST_SPECIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
             <label>
               지역
-              <select value={region} onChange={(e) => setRegion(e.target.value)} disabled={!regions.list.length}>
+              <select value={region} onChange={changeFilter(setRegion)} disabled={!regions.list.length}>
                 <option value="">전체 지역</option>
                 {regions.list.map((r) => <option key={r.code} value={r.name}>{r.name}</option>)}
               </select>
             </label>
+            <label>
+              기간
+              <select value={days} onChange={changeFilter((v) => setDays(Number(v)))}>
+                {BOARD_PERIODS.map((d) => <option key={d} value={d}>최근 {d}일</option>)}
+              </select>
+            </label>
           </div>
         </div>
+        {/* 분실 신고를 못 불러왔으면 회원 글만 보이는 이유를 알린다(빈 결과와 구분) */}
+        {status === 'ready' && ['unavailable', 'loading'].includes(data.lost?.status) && (
+          <p className="fineprint" role="status">{data.lost.message}</p>
+        )}
 
         {status === 'loading' && <p className="state-box">게시글을 불러오고 있어요…</p>}
         {status === 'error' && (
@@ -122,13 +147,13 @@ export default function PostBoardPage() {
         )}
         {status === 'ready' && data.items.length === 0 && (
           <p className="empty-results">
-            {species === 'all' && !region ? '아직 등록된 실종 정보가 없어요. 첫 게시글을 등록해 보세요.' : '선택한 조건의 게시글이 없어요.'}
+            {species === 'all' && !region ? '이 기간에 등록된 실종 정보가 없어요. 기간을 넓히거나 첫 게시글을 등록해 보세요.' : '선택한 조건의 게시글이 없어요.'}
           </p>
         )}
         {status === 'ready' && data.items.length > 0 && (
           <div className="board-list" aria-live="polite">
             {data.items.map((post) => (
-              <Link key={post.id} className="post-card" to={`/board/${post.id}`}>
+              <Link key={post.id} className="post-card" to={postPath(post)}>
                 <PostPhoto post={post} />
                 <span className="post-card-body">
                   {post.mine && <span className="sample-label">내 글</span>}
@@ -140,6 +165,9 @@ export default function PostBoardPage() {
             ))}
           </div>
         )}
+        {status === 'ready' && (
+          <Pagination page={data.page} pages={data.pages} onChange={(n) => { setPage(n); window.scrollTo(0, 0) }} />
+        )}
       </section>
     </main>
   )
@@ -150,12 +178,15 @@ export function PostPhoto({ post, main = false }) {
   if (!post.has_photo || failed) {
     return <span className={main ? 'post-detail-empty' : 'post-thumb'}>사진 없음</span>
   }
+  // 분실 신고 사진은 공공데이터 사진 주소(photo_url)를 바로 쓰고, 회원 글 사진은 우리 서버에서 받는다.
   return (
     <img
       className={main ? undefined : 'post-thumb post-thumb-img'}
-      src={API_BASE + postPhotoPath(post.id)}
-      alt={`${post.pet_name} 사진`}
+      src={post.photo_url || API_BASE + postPhotoPath(post.id)}
+      alt={`${postTitle(post).replace(' 찾습니다', '')} 사진`}
       loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />
   )

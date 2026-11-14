@@ -18,8 +18,9 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/notices/:id` 공고 상세 | `img/dasimanna-cards-detail.html` | `GET /notices/{id}` 또는 `GET /runs/{run_id}` + 위치 API. '구조 위치' 옆 🗺️ 버튼은 구조 위치 글(`happen_place`)을 브라우저 카카오 SDK(주소 검색 → 장소 검색)로 찾아 작은 지도 창에 표시(좌표 저장 안 함, 못 찾으면 카카오맵 링크만). 창 밖 클릭·Esc 로 닫힘 |
 | `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
 | `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다 |
-| `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts`, `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
+| `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 20건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
 | `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자) |
+| `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음 |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 
 ## 2. StateGraph
@@ -182,12 +183,20 @@ flowchart LR
 | `GET /runs/{id}/candidates/{cid}/location` | 필요(소유자) | `candidate_not_found`, `location_*`(502), `location_rate_limited` |
 | `GET/POST /saved-searches` · `DELETE /saved-searches/{key}` | 필요 | `saved_search_not_found` |
 | `GET /memory/{pid}` · `PUT /memory` · `DELETE /memory/{pid}` | 필요 | `memory_not_found` |
-| `GET /posts` · `GET /posts/{id}` · `GET /posts/{id}/photo` | 없음(공개) | `post_not_found`, `photo_not_found` |
+| `GET /posts` · `GET /posts/{id}` · `GET /posts/{id}/photo` | 없음(공개) | `post_not_found`, `photo_not_found`. 목록 응답 `lost.status`: `ok`·`loading`·`unavailable`(+`error_code` `lost_*`)·`not_configured` |
+| `GET /posts/lost/{id}` | 없음(공개) | `post_not_found`, `lost_*`(502) |
 | `GET /posts/mine` | 필요 | `not_authenticated`. 로그인 사용자가 쓴 글만(작성자 키는 세션에서 읽음, 응답에 미포함) |
 | `POST /posts` · `DELETE /posts/{id}` | 필요(삭제는 작성자만) | `not_authenticated`, `lost_date_future`, `lost_date_too_old`, `photo_invalid`, `photo_too_large`(413), `post_limit`(429), `post_forbidden`(403) |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 
 실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다.
+
+**공공데이터 분실 신고 합치기** (`backend/tools/lost_animal_api.py`, `backend/tools/lost_feed.py`, `AppContext.lost`)
+- 출처: 분실동물 조회 서비스 `lossInfo`(`LOST_ANIMAL_API_KEY`). 키가 없으면 `ctx.lost=None` 이고 게시판은 회원 글만 보여 준다(샘플로 채우지 않음).
+- 변환(`normalize_lost`): `happenDt`→`lost_date`, `happenAddr`→`lost_place`, `happenPlace`→`happen_place`, `kindCd`→`breed`, `colorCd`, `sexCd`, `age`, `orgNm`→`region`, `popfile`→`photo_url`(https), `specialMark`→`description`(전화번호 형태는 "(연락처 생략)"). **`callName`·`callTel`·`rfidCd`·`happenAddrDtl` 은 버린다**(응답·캐시에 없음). 축종 필드가 없어 요청한 `upkind` 로 `species` 를 붙인다. 고유 번호가 없어 원본 값으로 `lost-YYYYMMDD-해시12` ID 를 계산한다(같은 신고는 같은 ID).
+- 속도: 기간마다 개·고양이·기타 3번만 동시에 호출(`numOfRows=1000`)하고, 종류·지역 필터와 페이지는 메모리에서 처리한다. 기간별 10분 캐시, 1시간 안이면 이전 목록을 바로 주고 뒤에서 갱신, 같은 기간 동시 요청은 한 번만 호출, 첫 조회는 8초까지만 기다리고 넘으면 회원 글 먼저 응답(`lost.status=loading`). 상세는 기억한 목록에서 찾고, 없으면 ID 의 날짜 하루만 다시 조회한다.
+- 목록은 회원 글과 분실 신고를 `lost_date` 최신순으로 합친다. 기간(`days`, 기본 30일)은 두 출처에 모두 적용한다. 지역은 앞부분 비교(회원 글 `region`=시도, 분실 신고 `region`=`orgNm`)다.
+- 분실 신고 호출이 실패해도 회원 글은 보여 주고 `lost.status=unavailable` 로 알린다(빈 결과로 위장하지 않음).
 
 모든 변경 요청은 Origin 을 검사해 `403 origin_not_allowed` 로 막고, 응답에는 `Cache-Control: no-store` 를 붙인다.
 
