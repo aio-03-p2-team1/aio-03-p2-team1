@@ -1,10 +1,3 @@
-"""로그인 없이 쓰는 API: /health · /regions · /notices (메인 공고 목록·상세).
-
-/notices 는 화면 설계(메인=공고 목록, 목록 선택→상세)에 맞춰 추가한 조회 전용 경로다.
-공공 API 에 상세 엔드포인트가 없으므로 상세는 목록 조회 때 받은 항목을 서버 캐시에서 돌려준다.
-캐시에 없으면(서버 재시작 등) 404 notice_not_cached 로 응답하고 값을 만들어내지 않는다.
-"""
-
 from __future__ import annotations
 
 import time
@@ -39,7 +32,7 @@ def _remember(items: list[dict]) -> None:
 
 
 def remember_items(items: list[dict]) -> None:
-    """검색 실행 결과도 상세 캐시에 넣는다(공용)."""
+
     _remember(items)
 
 

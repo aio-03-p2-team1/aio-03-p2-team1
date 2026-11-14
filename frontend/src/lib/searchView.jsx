@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 
 const SearchViewContext = createContext(null)
 
-// Routes 바깥에 두어 상세 페이지 방문 시에도 유지한다. 계정 변경 시 provider key로 초기화한다.
 export function SearchViewProvider({ children }) {
   const [view, setView] = useState({})
   const scrolls = useRef(new Map())

@@ -1,14 +1,3 @@
-"""검색 StateGraph (prompt.md 7장).
-
-START → analyze ─[누락·오류]→ ask → END(awaiting_input)
-          └→ context → plan → execute → rank → validate
-                ─[문제 있음·성찰 활성·한도 이내]→ reflect ─→ execute | rank | ask
-                ─[통과 또는 수정 불가]→ locate → finalize → END(completed | partial | failed)
-
-의존성(도구·저장소·설정)은 config["configurable"] 으로 전달한다.
-노드는 상태의 변경분만 돌려준다. tool_calls · reflections · trace 는 누적 필드다.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -62,9 +51,6 @@ def _now() -> str:
 
 def _call(tool: str, args: dict[str, Any], outcome: str, reason: str, **extra) -> dict[str, Any]:
     return {"tool": tool, "args": args, "outcome": outcome, "reason": reason, "at": _now(), **extra}
-
-
-# --------------------------------------------------------------------------- nodes
 
 
 async def analyze(state: SearchState, config) -> dict:
@@ -136,7 +122,7 @@ async def context(state: SearchState, config) -> dict:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("llm_feature_extract", {"model": llm.model}, exc.code, "자유 서술에서 특징 추출")]
             return update
-        update["llm_features"] = features
+        update["llm_features"] = features.model_dump()
         update["tool_calls"] = [
             _call(
                 "llm_feature_extract",
@@ -309,7 +295,7 @@ async def rank_node(state: SearchState, config) -> dict:
 
 async def validate(state: SearchState, config) -> dict:
     criteria = state["criteria"]
-    # plan 에서 바로 넘어온 인자 매핑 오류는 그대로 판단한다(아직 조회 전).
+
     carried = [i for i in (state.get("issues") or []) if i["type"] == "arg_mapping"]
     if carried:
         return {"issues": carried, "trace": ["validate"]}
@@ -332,7 +318,6 @@ async def validate(state: SearchState, config) -> dict:
     if not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
     return {"issues": issues, "trace": ["validate"]}
-
 
 FIXES = {
     "duplicates": {"strategy": "dedupe_and_rerank", "next": "rank", "fix": {"dedupe": True}},
@@ -464,9 +449,6 @@ async def finalize(state: SearchState, config) -> dict:
     }
 
 
-# --------------------------------------------------------------------------- graph
-
-
 def build_graph():
     g = StateGraph(SearchState)
     g.add_node("analyze", analyze)
@@ -500,6 +482,5 @@ def build_graph():
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()
-
 
 GRAPH = build_graph()

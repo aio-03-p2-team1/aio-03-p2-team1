@@ -1,16 +1,14 @@
-"""검색·실행 이력·보호센터 위치 API (로그인 필요, 소유자 격리)."""
-
 from __future__ import annotations
 
 import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
 
 from backend.agent.llm import LlmError
-from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
+from backend.agent.photo import InvalidPhoto, decode_and_validate
 from backend.agent.runner import run_search
+from backend.schemas.api import PhotoAnalysisBody, PhotoAnalysisResponse, SearchBody
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
@@ -21,33 +19,6 @@ router = APIRouter(tags=["searches"])
 
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
-
-
-class SearchCriteria(BaseModel):
-    species: str | None = Field(default=None, max_length=10)
-    region: str | None = Field(default=None, max_length=30)
-    start_date: str | None = Field(default=None, max_length=10)
-    end_date: str | None = Field(default=None, max_length=10)
-    lost_date: str | None = Field(default=None, max_length=10)
-    pet_name: str | None = Field(default=None, max_length=30)
-    breed: str | None = Field(default=None, max_length=40)
-    color: str | None = Field(default=None, max_length=40)
-    sex: str | None = Field(default=None, max_length=4)
-    age: str | None = Field(default=None, max_length=20)
-    size: str | None = Field(default=None, max_length=20)
-    lost_place: str | None = Field(default=None, max_length=100)
-    description: str | None = Field(default=None, max_length=1000)
-
-
-class SearchBody(BaseModel):
-    criteria: SearchCriteria = SearchCriteria()
-    thread_id: str | None = Field(default=None, max_length=64, pattern=r"^[0-9a-f]{8,64}$")
-    profile_id: str | None = Field(default=None, max_length=40, pattern=r"^[\w-]{1,40}$")
-    reflection_enabled: bool = True
-
-
-class PhotoAnalysisBody(BaseModel):
-    image_base64: str = Field(min_length=1, max_length=((MAX_IMAGE_BYTES + 2) // 3) * 4)
 
 
 def _deps(ctx: AppContext) -> dict[str, Any]:
@@ -78,7 +49,7 @@ async def create_search(body: SearchBody, user: SessionUser = Depends(current_us
     return page_result(run)
 
 
-@router.post("/photo-analysis")
+@router.post("/photo-analysis", response_model=PhotoAnalysisResponse)
 async def analyze_photo(
     body: PhotoAnalysisBody,
     user: SessionUser = Depends(current_user),
@@ -101,8 +72,10 @@ async def analyze_photo(
         result = await ctx.photo_llm.analyze_photo(image_data, mime_type)
     except LlmError as exc:
         raise ApiError(502, exc.code, "사진을 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.")
-    result["analysis_ms"] = round((time.perf_counter() - started) * 1000)
-    return result
+    return PhotoAnalysisResponse(
+        **result.model_dump(),
+        analysis_ms=round((time.perf_counter() - started) * 1000),
+    )
 
 
 @router.get("/runs")
@@ -162,7 +135,7 @@ async def candidate_location(
         raise ApiError(404, "candidate_not_found", "후보를 찾을 수 없습니다.")
     if candidate.get("source") == "sample":
         return {"status": "unavailable", "reason": "sample"}
-    address = (candidate.get("care") or {}).get("address")  # 클라이언트 입력이 아닌 저장된 결과에서 읽는다
+    address = (candidate.get("care") or {}).get("address")
     cached = candidate.get("location") or {}
     if cached.get("status") == "ok" and cached.get("address") == (address or "").strip():
         return {**cached, "cached": True}

@@ -1,4 +1,3 @@
-// 화면 표시용 순수 함수. node --test 로 시험한다(tests/format.test.js).
 
 export const SPECIES_OPTIONS = [
   { value: 'dog', label: '개' },
@@ -19,14 +18,12 @@ export function neuterLabel(code) {
   return { Y: '예', N: '아니오', U: '미상' }[code] ?? '미확인'
 }
 
-/** '2026-11-10' → '2026.11.10'. 값이 없으면 '미확인'. */
 export function formatDate(value) {
   if (!value) return '미확인'
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
   return m ? `${m[1]}.${m[2]}.${m[3]}` : String(value)
 }
 
-/** ISO 시각 → 'YYYY.MM.DD HH:mm' (브라우저 현지 시간). */
 export function formatDateTime(value) {
   if (!value) return '미확인'
   const d = new Date(value)
@@ -43,7 +40,6 @@ export function noticeTitle(item) {
   return item?.breed || item?.kind_name || '보호 동물 공고'
 }
 
-/** 검색 범위 설명. 일부만 조회했으면 그렇게 말한다(전체 검색으로 표현하지 않음). */
 export function scopeText(scope) {
   if (!scope) return ''
   const region = !scope.region || scope.region === 'all' ? '전체 지역' : scope.region
@@ -96,7 +92,6 @@ export function runStatusLabel(status) {
   return RUN_STATUS_LABEL[status] || '상태 미확인'
 }
 
-/** 검색 기록 한 줄 요약: '강아지 · 서울특별시 · 2026.11.10부터' */
 export function runSummary(criteria) {
   const c = criteria || {}
   const species = c.species ? speciesLabel(c.species).replace(/^개$/, '강아지') : '종류 미입력'
@@ -105,7 +100,6 @@ export function runSummary(criteria) {
   return `${species} · ${region} · ${since}`
 }
 
-/** 목록 페이지 나누기. page 는 1부터. 범위를 벗어나면 가장 가까운 페이지로 맞춘다. */
 export function paginate(items, page, size) {
   const list = Array.isArray(items) ? items : []
   const pages = Math.max(1, Math.ceil(list.length / size))

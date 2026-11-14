@@ -6,9 +6,10 @@
 ## 1. 전체 구성
 
 ```text
-React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 ──▶ 도구(구조동물 API · 카카오 · OpenAI)
+React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 ──▶ 도구(구조동물 API · 카카오 · LangChain OpenAI)
                            │                     │
                            ├─ Redis: 세션·호출 제한   └─ 저장소(SQLite | Supabase documents)
+                           └─ (선택) LangSmith: 그래프·모델 실행 추적
 ```
 
 | 화면(라우트) | 디자인 원본 | 사용하는 API |
@@ -69,9 +70,9 @@ flowchart TD
 | 필수 조건(종류·지역·기간) 누락·오류 | 도구 호출 없이 질문 | `questions` |
 | 지역이 '전체'가 아님 | `animal_regions` → 공식 시도 코드 매핑 | `tool_calls[].reason` |
 | 조건 충분 | `animal_search(page=1, rows=1000)` 1회(통신 재시도 별도) | 페이지·건수 |
-| live 모드 + 자유 서술 있음 | `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
+| live 모드 + 자유 서술 있음 | LangChain `ChatOpenAI` 기반 `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
 | 검증 통과 + 카카오 키 + 주소 | 상위 3개만 `kakao_geocode` | 후보 ID |
-| 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 OpenAI 비전) | 적합성 판정·특징 JSON |
+| 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 LangChain `ChatOpenAI` 비전) | 적합성 판정·특징 JSON |
 
 호출 한도 `MAX_TOOL_CALLS` 를 넘으면 `tool_budget` 으로 멈춘다. 상세·보호센터 전용 공공 API 는 없으므로 검색 응답 필드에서 정규화한다(만들어내지 않음).
 
@@ -82,13 +83,13 @@ sequenceDiagram
   participant U as 사용자
   participant API as FastAPI /searches
   participant G as Graph
-  participant LLM as OpenAI
+  participant LLM as LangChain OpenAI
   participant AN as 구조동물 API
   participant K as 카카오
   U->>API: 조건 입력
   API->>G: run_search(owner, criteria, thread_id)
   G->>G: analyze (누락이면 질문 후 종료)
-  G->>LLM: 서술 → {colors, breed, sex, marks} (JSON)
+  G->>LLM: ChatOpenAI 서술 → {colors, breed, sex, marks} (JSON)
   LLM-->>G: 특징(설명에 없는 품종은 폐기)
   G->>AN: sido_v2 (지역 코드)
   G->>AN: abandonmentPublic_v2 page 1..N
@@ -131,6 +132,15 @@ sequenceDiagram
 - 모델 입력은 자유 서술(최대 1,000자)뿐이다. 이메일·연락처·키는 넣지 않는다.
 - 체크포인트: 한 요청 안에서 그래프가 끝까지 실행되고, 추가 질문 상태는 `thread` 문서에 저장되므로 재시작 후 같은 `thread_id` 로 이어 간다.
 - 요약 전략(토큰 예산·요약 임계값)은 **미구현**. 현재 LLM 입력은 단일 서술이라 요약이 필요하지 않다. 대화형 입력을 늘리면 추가한다.
+- 특징·사진 분석은 `ChatOpenAI`, 임베딩은 `OpenAIEmbeddings`를 사용한다. 각 어댑터 생성자는 LangChain 호환 클라이언트를 선택적으로 받아 테스트에서 모의 클라이언트를 주입할 수 있다. 기본 런타임은 API 키와 timeout으로 실제 LangChain 클라이언트를 구성한다.
+- 모델 입출력 규격은 `backend/schemas/llm.py`, HTTP 요청·응답 규격은 `backend/schemas/api.py`의 Pydantic 모델로 정의한다. LLM 응답은 `with_structured_output(..., method="json_schema", strict=True)`로 생성한 뒤 검증하고, 사진 분석 결과는 HTTP 응답 모델로 변환할 때 사용자 안내 문구를 구성한다. 그래프 상태·HTTP 응답 경계에서만 dict로 직렬화한다.
+
+## 5.1 LangSmith 추적
+
+- LangSmith 추적은 설정으로 켜고 끄며, 기본값과 환경변수는 [development.md](development.md#환경변수)에서 관리한다.
+- FastAPI 설정이 `.env`에서 읽은 `LANGSMITH_*` 값을 프로세스 환경에 전달한다. LangGraph 검색 실행과 그 안의 LangChain 모델 호출은 같은 LangSmith 프로젝트로 추적된다. 조건 캐시 적중은 그래프를 호출하지 않으므로 그래프 추적이 생기지 않는다.
+- 추적에는 그래프 입력·출력과 모델 입력·출력이 포함될 수 있다. 검색 조건의 자유 서술, 공고 후보 데이터 및 내부 `owner` 식별자가 포함될 수 있으므로 프로젝트 접근 권한과 LangSmith 데이터 보존 정책을 관리한다. API 키 등 설정 비밀 값은 그래프 입력에 넣지 않는다.
+- 이 연동은 관측/추적만 제공한다. 평가자, 데이터셋, 프롬프트 관리 및 운영 알림은 별도 구성 사항이다.
 
 ## 6. 자가 성찰 (Activity)
 
@@ -153,7 +163,9 @@ flowchart LR
 
 ## 7. 후보 정렬 규칙
 
-`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. 이 규칙 순위와 전체 공고 임베딩의 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
+`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
+
+털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다.
 
 ## 8. 백엔드 API 계약 (요약)
 
@@ -183,20 +195,22 @@ flowchart LR
 
 - 알림(구독·Discord DM·발송 이력), 브라우저 푸시
 - 대화 요약 전략
-- 배포 주소(Render 서비스 URL, Vercel 도메인)와 `vercel.json` API rewrite, 운영 `CORS_ORIGINS`
 - 구조동물 API 응답 필드는 문서 기준으로 정규화했고, 실제 키 응답 확인이 필요하다(`docs/test-report.md`).
+
+개발·환경변수·배포 설정은 [docs/development.md](development.md)를 참고한다.
 
 ### 사진 분석 흐름
 
 - 브라우저에서 JPG·PNG·WEBP, 8MB 이하 파일을 고르고 base64 JSON으로 `POST /photo-analysis`에 보낸다. 서버는 인증 사용자별 분당 5회로 제한한다.
 - `backend/agent/photo.py`가 Pillow로 실제 포맷·파일 무결성을 확인하고, 픽셀 수가 2,000만을 넘으면 거부한다. 파일은 처리 후 저장하지 않는다.
-- `backend/agent/llm.py`의 `PHOTO_SYSTEM_PROMPT`가 동물 존재, 외형 식별 가능 여부, 특정 동물의 중심·구분 가능 여부를 각각 판단한다. 세 조건과 각 자동 입력 특징 신뢰도가 0.8 이상인 값만 반환한다.
+- `backend/agent/llm.py`의 `PHOTO_SYSTEM_PROMPT`가 동물 존재, 외형 식별 가능 여부, 특정 동물의 중심·구분 가능 여부를 각각 판단한다. 색상 허용값은 `schema.py`의 `Color` 리터럴에서 템플릿으로 주입하며, 여러 색상과 각각의 confidence를 반환하도록 한다. 세 적합성 조건과 각 자동 입력 특징 신뢰도가 0.8 이상인 값만 반환한다.
+- 프롬프트 버전은 글 특징 추출 `feature-extract-v3`, 사진 분석 지침은 수정 이력 v3를 기준으로 관리한다. 사용자 서술·사진 속 문구를 명령으로 취급하지 않고, 불확실한 품종·성별·색상은 비우도록 안내한다. 사진 신뢰도는 근거 강도 기준을 제시하고 0.8 미만 값을 자동 입력에서 제외한다. 모델 계층은 정규화된 판정 사유 코드를 반환하고, API는 `reason_code`를 응답하며 프론트엔드가 사용자 안내 문구로 매핑한다. 사진 분석 응답에는 사용되지 않는 모델명·프롬프트 버전은 포함하지 않는다.
 - 분석 특징은 검색 폼에 입력되고 사용자가 수정할 수 있다. 낮은 신뢰도·분석 오류는 업로드 영역 아래에 표시한다. 폼 입력에 성공하면 `PhotoFeedbackPopup`이 하단 중앙에 나타난다(데스크톱 50vw, 모바일 80vw). 좋아요·싫어요 값은 현재 화면 상태에만 반영하고 서버에 저장하지 않는다.
 - 사진 분석에는 `OPENAI_API_KEY`가 필요하며, local 모드에서도 키가 설정된 경우 사용할 수 있다. 설정이 없으면 503 오류를 반환한다.
 
 ## 10. 조건 캐시·RRF·페이지네이션 (v0.2)
 
-- 실행 전 현재 요청 → 세션 → 확인된 기억을 병합·정규화한 뒤 사용자 ID, 조건, 출처, 모델, 성찰 옵션, 버전을 정렬 JSON으로 직렬화하여 SHA-256 해시 키(`meet-again:search:<digest>`)를 만든다. 필수 조건이 빠지거나 잘못되면 캐시/공고 조회 없이 기존 질문 흐름으로 간다.
+- 실행 전 현재 요청 → 세션 → 확인된 기억을 병합·정규화한 뒤 사용자 ID, 조건, 출처, 모델, 성찰 옵션, 버전을 정렬 JSON으로 직렬화하여 SHA-256 해시 키(`meet-again:search:<digest>`)를 만든다. 색상 토큰 사전 변경은 검색 캐시 버전을 바꿔 구 규칙의 결과가 재사용되지 않게 한다. 필수 조건이 빠지거나 잘못되면 캐시/공고 조회 없이 기존 질문 흐름으로 간다.
 - Redis GET이 적중하면 그래프·공공 API·LLM·임베딩을 실행하지 않는다. 응답마다 새로운 사용자별 run/thread 기록을 만들되 실제 호출 수는 0으로 기록한다.
 - 미적중은 Redis NX 잠금 후 다시 GET한다. 그래프 실행은 최대 120초, 잠금은 150초이며 대기는 최대 125초다. 잠금 소유 토큰을 WATCH로 확인한 뒤 해제한다. Redis 장애는 503, 잠금 대기 초과는 409, 실행 시간 초과는 504다.
 - 공고는 1,000건 한 페이지를 조회한다. 실제 전체가 더 크면 `scope.complete=false`와 실제 조회 건수를 표시한다. API 통신 실패 재시도 규칙은 유지한다. `MAX_SEARCH_PAGES`는 호환용 필드이며 조회량에 영향을 주지 않는다.

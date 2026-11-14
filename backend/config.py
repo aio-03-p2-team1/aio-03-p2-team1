@@ -1,4 +1,4 @@
-"""환경변수 설정 (prompt.md 14장).
+"""환경변수 설정.
 
 - pydantic-settings로 검증한다.
 - live 모드에서 필수 값이 비어 있으면 시작 단계에서 누락 항목 *이름만* 알리고 멈춘다.
@@ -15,8 +15,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ConfigError(RuntimeError):
-    """설정 누락·형식 오류. 메시지에는 변수 이름만 담는다."""
-
+    pass
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -32,7 +31,11 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-6-luna"
 
-    # ANIMAL_API_KEY 우선, 별칭 ANIMAL_API_SERVICE_KEY 지원 (6.1)
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "dasimanna"
+    langsmith_endpoint: str | None = None
+
     animal_api_key: SecretStr | None = Field(
         default=None, validation_alias=AliasChoices("ANIMAL_API_KEY", "ANIMAL_API_SERVICE_KEY")
     )
@@ -50,7 +53,6 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool | None = None
     auth_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 
-    # 이전 배포 설정 호환용. 맞춤 검색은 요구사항에 따라 1,000건 1페이지로 고정한다.
     max_search_pages: int = Field(default=1, ge=1, le=10)
     max_reflections: int = Field(default=2, ge=0, le=3)
     max_tool_calls: int = Field(default=30, ge=10, le=60)
@@ -59,6 +61,7 @@ class Settings(BaseSettings):
     @field_validator(
         "supabase_service_role_key",
         "openai_api_key",
+        "langsmith_api_key",
         "animal_api_key",
         "kakao_rest_api_key",
         "discord_bot_token",
@@ -73,7 +76,7 @@ class Settings(BaseSettings):
     @field_validator("animal_api_base_url")
     @classmethod
     def _force_https(cls, value: str) -> str:
-        # 포털 예시의 http:// 를 HTTPS로 보정 (6.1)
+
         value = value.strip().rstrip("/")
         if value.startswith("http://"):
             value = "https://" + value[len("http://") :]
@@ -84,7 +87,7 @@ class Settings(BaseSettings):
     def _check_redis_url(cls, value: str) -> str:
         value = value.strip()
         if not value.startswith(("redis://", "rediss://", "unix://")):
-            # 17장: CIDR 등을 넣으면 기동 실패. 값은 출력하지 않는다.
+
             raise ValueError("REDIS_URL은 redis:// · rediss:// · unix:// 형식의 접속 URL이어야 합니다")
         return value
 
@@ -104,6 +107,8 @@ class Settings(BaseSettings):
                 missing.append("ANIMAL_API_KEY")
             if missing:
                 raise ConfigError("실제 연동 모드 설정 누락: " + ", ".join(missing))
+        if self.langsmith_tracing and self.langsmith_api_key is None:
+            raise ConfigError("LANGSMITH_TRACING=true 이면 LANGSMITH_API_KEY가 필요합니다")
         return self
 
     @property
@@ -118,7 +123,7 @@ class Settings(BaseSettings):
 
     @property
     def animal_data_source(self) -> Literal["api", "sample"]:
-        """코드가 계산하는 값 (14장: 환경변수로 넣지 않는다)."""
+
         return "api" if self.animal_api_key is not None else "sample"
 
 

@@ -1,8 +1,5 @@
 import asyncio
-import json
-
 import fakeredis
-import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -117,17 +114,20 @@ def test_pagination_detail_and_owner_isolation_without_new_tool_calls():
         assert client.get(f"/api/v1/runs/{identifier}/candidates/{candidate}").status_code == 404
 
 
-def test_embedding_transport_reorders_vectors_and_validates_response():
-    def handler(request):
-        data = json.loads(request.content)
-        assert data["model"] == "text-embedding-3-small"
-        return httpx.Response(200, json={"data": [
-            {"index": i, "embedding": [float(i + 1)] * DIMENSIONS} for i in reversed(range(len(data["input"])))
-        ]})
-    result = asyncio.run(Embedder("test", transport=httpx.MockTransport(handler)).embed(["a", "b"]))
+def test_embedding_client_is_injectable_and_validates_vectors():
+    class FakeEmbeddings:
+        async def aembed_documents(self, texts):
+            return [[float(i + 1)] * DIMENSIONS for i, _ in enumerate(texts)]
+
+    result = asyncio.run(Embedder("test", client=FakeEmbeddings()).embed(["a", "b"]))
     assert result[0][0] == 1 and result[1][0] == 2
+
+    class EmptyEmbeddings:
+        async def aembed_documents(self, texts):
+            return []
+
     with pytest.raises(LlmError, match="llm_response"):
-        asyncio.run(Embedder("test", transport=httpx.MockTransport(lambda r: httpx.Response(200, json={"data": []}))).embed(["a"]))
+        asyncio.run(Embedder("test", client=EmptyEmbeddings()).embed(["a"]))
 
 
 def test_redis_failure_stops_before_public_api():

@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage } from '../lib/format.js'
 
-// 로그인·회원가입 — 디자인: dasimanna-cards-auth.html
 export default function AuthPage() {
   const [params] = useSearchParams()
   const [tab, setTab] = useState(params.get('tab') === 'signup' ? 'signup' : 'login')
@@ -50,7 +49,7 @@ export default function AuthPage() {
 }
 
 function safeNext(value) {
-  // 외부 주소로 보내지 않는다.
+  // 로그인 후 외부 주소로 이동하지 않도록 한다.
   return value && value.startsWith('/') && !value.startsWith('//') ? value : '/'
 }
 

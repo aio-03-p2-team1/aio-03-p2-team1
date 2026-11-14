@@ -9,7 +9,6 @@ export function AuthProvider({ children }) {
   const [expired, setExpired] = useState(false)
 
   useEffect(() => {
-    // 새로고침 시 /auth/me 로 로그인 상태를 복원한다.
     api('/auth/me', { auth: false })
       .then(setUser)
       .catch(() => setUser(null))

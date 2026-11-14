@@ -1,5 +1,3 @@
-"""요청 조건 정규화·검증 (prompt.md 4장 입력 검증, 8장 기억 적용 순서)."""
-
 from __future__ import annotations
 
 from datetime import date
@@ -49,7 +47,7 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
 
 
 def normalize(raw: dict[str, Any], today: date | None = None) -> tuple[dict[str, Any], list[str], list[dict[str, str]]]:
-    """반환: (정규화 조건, 누락 필수 항목, 입력 오류)."""
+
     today = today or date.today()
     criteria: dict[str, Any] = {}
     missing: list[str] = []

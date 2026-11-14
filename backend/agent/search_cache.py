@@ -1,4 +1,3 @@
-"""사용자·조건별 상위 300건 스냅샷, 고정 TTL 600초. 벡터는 저장하지 않는다."""
 import asyncio
 import hashlib
 import json
@@ -11,7 +10,7 @@ from redis.exceptions import RedisError
 from backend.errors import ApiError
 
 TTL = 600
-VERSION = "rrf-v1"
+VERSION = "rrf-color-v2"
 
 
 def condition_key(owner, criteria, *, source, model, reflection=True):

@@ -1,4 +1,4 @@
-"""구조동물 조회 서비스 API 도구 (prompt.md 6.1).
+"""구조동물 조회 서비스 API 도구.
 
 - 지역 목록: sido_v2, 공고 검색: abandonmentPublic_v2
 - 실제 응답에 없는 상세·보호센터 엔드포인트를 만들지 않는다.
@@ -27,7 +27,6 @@ SEX_LABEL = {"M": "수컷", "F": "암컷", "Q": "미상"}
 
 
 class AnimalApiError(RuntimeError):
-    """code: animal_auth · animal_rate_limit · animal_timeout · animal_network · animal_upstream · animal_response"""
 
     def __init__(self, code: str, status: int | None = None, result_code: str | None = None):
         super().__init__(code)
@@ -53,7 +52,7 @@ class SearchPage:
     page: int
     rows: int
     fetched_at: str
-    source: str  # "api" | "sample"
+    source: str
     params: dict[str, Any] = field(default_factory=dict)
 
 
@@ -78,7 +77,7 @@ def _https(url: str | None) -> str | None:
 
 
 def short_region_name(full: str) -> str:
-    """'서울특별시' → '서울', '경상남도' → '경남' 처럼 화면용 짧은 이름."""
+
     table = {
         "서울": "서울", "부산": "부산", "대구": "대구", "인천": "인천", "광주": "광주", "대전": "대전",
         "울산": "울산", "세종": "세종", "경기": "경기", "강원": "강원", "충청북": "충북", "충청남": "충남",
@@ -127,7 +126,7 @@ def normalize_item(raw: dict[str, Any], fetched_at: str, source: str = "api") ->
 
 def _items_of(body: dict[str, Any]) -> list[dict[str, Any]]:
     items = body.get("items")
-    if not items:  # 빈 결과는 "" 또는 None 으로 온다
+    if not items:
         return []
     item = items.get("item") if isinstance(items, dict) else None
     if item is None:
@@ -136,7 +135,6 @@ def _items_of(body: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 class AnimalApi:
-    """실제 API 클라이언트. transport 는 테스트에서 모의 응답을 넣을 때 쓴다."""
 
     source = "api"
 
@@ -148,6 +146,9 @@ class AnimalApi:
         self._key = key
         self._client = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout, transport=transport)
         self._regions: tuple[float, list[Region]] | None = None
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         query = {"serviceKey": self._key, "_type": "json", **{k: v for k, v in params.items() if v is not None}}
@@ -207,7 +208,7 @@ class AnimalApi:
         params = {
             "bgnde": start.strftime("%Y%m%d"),
             "endde": end.strftime("%Y%m%d"),
-            "upkind": UPKIND.get(species),  # 'all' 이면 None → 축종 필터 생략
+            "upkind": UPKIND.get(species),
             "upr_cd": region_code,
             "pageNo": page,
             "numOfRows": rows,
@@ -221,16 +222,13 @@ class AnimalApi:
             total = len(items)
         return SearchPage(items=items, total_count=total, page=page, rows=rows, fetched_at=fetched, source="api", params=params)
 
-
-# ---------------------------------------------------------------------------
 # 샘플 데이터: ANIMAL_API_KEY 가 없을 때만 사용하며 화면에 '샘플'로 표시한다.
 # 공고 번호·연락처는 실제 값처럼 보이지 않도록 SAMPLE- 접두사와 빈 연락처를 쓴다.
-# ---------------------------------------------------------------------------
 
 SAMPLE_REGIONS = [Region(code=f"sample-{n}", name=n) for n in ("서울특별시", "경기도", "인천광역시", "부산광역시", "대전광역시", "광주광역시", "울산광역시")]
 
 _SAMPLE_ROWS = [
-    # photo, upKindCd, kindNm, sex, color, region, place, days_ago, special
+
     (0, "417000", "푸들 믹스", "F", "갈색", "서울특별시", "서울 강서구 공원", 2, "갈색 곱슬털의 소형견, 회색 목줄 착용"),
     (1, "417000", "믹스견", "M", "아이보리", "경기도", "경기 수원시 거리", 3, "아이보리색 털의 어린 강아지, 작은 체구"),
     (2, "417000", "말티푸 믹스", "F", "회색·흰색", "부산광역시", "부산 해운대구", 4, "회색과 흰색이 섞인 털, 중소형견"),
@@ -272,7 +270,6 @@ def sample_items(today: date | None = None) -> list[dict[str, Any]]:
 
 
 class SampleAnimalApi:
-    """키가 없을 때 쓰는 샘플 소스. 필터는 실제 API 와 같은 의미로 적용한다."""
 
     source = "sample"
 

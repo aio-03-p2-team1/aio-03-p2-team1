@@ -16,7 +16,7 @@
 - [ ] 위 항목을 바꿨다면 관련 담당자와 조율하고 docs/architecture.md를 갱신함
 
 ## 검증
-- [ ] `uv run pytest` 통과
+- [ ] `uv run pytest backend/tests` 통과
 - [ ] `cd frontend && npm test && npm run build` 통과
 - [ ] 정상 요청 실제 실행 결과 확인
 - [ ] 오류 요청(정보 부족/도구 실패 등) 실행 결과 확인

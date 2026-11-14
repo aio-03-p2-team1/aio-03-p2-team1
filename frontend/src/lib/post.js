@@ -1,4 +1,3 @@
-// 실종 정보 게시판 화면용 순수 함수. node --test 로 시험한다(tests/post.test.js).
 
 export const POST_SPECIES = [
   { value: 'dog', label: '강아지' },
@@ -13,7 +12,6 @@ export function postSpeciesLabel(value) {
   return POST_SPECIES.find((o) => o.value === value)?.label ?? '미확인'
 }
 
-/** 로컬 날짜 'YYYY-MM-DD' (date input 값과 같은 형식). */
 export function localDate(d = new Date()) {
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -23,10 +21,6 @@ function daysBetween(a, b) {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000)
 }
 
-/**
- * 등록 폼 검사. 서버도 같은 규칙으로 다시 검사한다(클라이언트 값을 믿지 않음).
- * 반환: { 필드이름: 메시지 } — 비어 있으면 통과.
- */
 export function validatePost(form, today = localDate()) {
   const errors = {}
   const name = String(form.pet_name || '').trim()
@@ -50,7 +44,6 @@ export function validatePost(form, today = localDate()) {
   return errors
 }
 
-/** data URL 의 실제 바이트 수(base64 길이로 계산). */
 export function dataUrlBytes(dataUrl) {
   const comma = String(dataUrl || '').indexOf(',')
   if (comma < 0) return 0
@@ -59,12 +52,10 @@ export function dataUrlBytes(dataUrl) {
   return Math.floor((b64.length * 3) / 4) - pad
 }
 
-/** 게시글 사진 주소(API 가 이미지 바이트를 돌려준다). */
 export function postPhotoPath(id) {
   return `/posts/${encodeURIComponent(id)}/photo`
 }
 
-/** 받침이 있으면 '을', 없으면 '를'. 한글이 아니면 '을(를)'. */
 export function objectParticle(word) {
   const code = String(word || '').trim().slice(-1).charCodeAt(0)
   if (!(code >= 0xac00 && code <= 0xd7a3)) return '을(를)'

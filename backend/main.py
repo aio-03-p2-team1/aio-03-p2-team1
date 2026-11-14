@@ -1,8 +1,7 @@
-"""FastAPI 앱 진입점: uvicorn backend.main:app"""
-
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -19,6 +18,20 @@ from backend.storage import StorageError
 log = logging.getLogger("dasimanna")
 API_PREFIX = "/api/v1"
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _configure_langsmith(settings: Settings) -> None:
+    """Expose .env-backed settings to LangSmith's environment-based tracer."""
+    os.environ["LANGSMITH_TRACING"] = str(settings.langsmith_tracing).lower()
+    os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+    if settings.langsmith_api_key:
+        os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key.get_secret_value()
+    else:
+        os.environ.pop("LANGSMITH_API_KEY", None)
+    if settings.langsmith_endpoint:
+        os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    else:
+        os.environ.pop("LANGSMITH_ENDPOINT", None)
 
 
 def build_context(settings: Settings) -> AppContext:
@@ -64,7 +77,8 @@ def build_context(settings: Settings) -> AppContext:
 
 
 def create_app(ctx: AppContext | None = None) -> FastAPI:
-    settings = ctx.settings if ctx else get_settings()  # live 필수 값 누락 시 여기서 멈춘다
+    settings = ctx.settings if ctx else get_settings()
+    _configure_langsmith(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -76,7 +90,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             settings.storage_backend,
             settings.animal_data_source,
         )
-        yield
+        try:
+            yield
+        finally:
+            ctx = getattr(app.state, "ctx", None)
+            if ctx is not None:
+                await ctx.aclose()
 
     app = FastAPI(title="다시 만나 API", version="0.1.0", lifespan=lifespan, docs_url=API_PREFIX + "/docs", openapi_url=API_PREFIX + "/openapi.json")
     app.state.ctx = ctx
@@ -131,15 +150,11 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         app.include_router(router, prefix=API_PREFIX)
     return app
 
-
 _app: FastAPI | None = None
 
 
-def __getattr__(name):  # pragma: no cover - uvicorn 진입점
-    """`backend.main:app` 을 처음 읽을 때 앱을 만든다.
+def __getattr__(name):
 
-    테스트가 모듈을 import 할 때 .env 설정 검증이 먼저 일어나지 않게 하기 위함이다.
-    """
     global _app
     if name == "app":
         if _app is None:
