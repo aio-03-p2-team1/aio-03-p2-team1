@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     )
     animal_api_base_url: str = "https://apis.data.go.kr/1543061/abandonmentPublicService_v2"
 
+    # 분실동물 조회 서비스(실종 정보 게시판용). 구조동물 키와 별도 변수로 둔다.
+    # 키가 없으면 게시판은 회원 글만 보여 준다(샘플 데이터로 채우지 않음).
+    lost_animal_api_key: SecretStr | None = None
+    lost_animal_api_base_url: str = "https://apis.data.go.kr/1543061/lossInfoService"
+
     kakao_rest_api_key: SecretStr | None = None
 
     discord_bot_token: SecretStr | None = None
@@ -63,6 +68,7 @@ class Settings(BaseSettings):
         "openai_api_key",
         "langsmith_api_key",
         "animal_api_key",
+        "lost_animal_api_key",
         "kakao_rest_api_key",
         "discord_bot_token",
         mode="before",
@@ -73,7 +79,7 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("animal_api_base_url")
+    @field_validator("animal_api_base_url", "lost_animal_api_base_url")
     @classmethod
     def _force_https(cls, value: str) -> str:
 

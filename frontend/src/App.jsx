@@ -49,6 +49,8 @@ export default function App() {
         />
         {/* 실종 정보 게시판: 읽기는 공개, 등록은 화면 안에서 로그인 확인 */}
         <Route path="/board" element={<PostBoardPage />} />
+        {/* 공공데이터 분실 신고 상세(회원 글과 같은 화면, 주소만 구분) */}
+        <Route path="/board/lost/:lostId" element={<PostDetailPage />} />
         <Route path="/board/:postId" element={<PostDetailPage />} />
         <Route path="/login" element={<AuthPage />} />
         <Route path="*" element={<NotFoundPage />} />

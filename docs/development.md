@@ -40,6 +40,8 @@
 | `LANGSMITH_ENDPOINT` | 선택 설정. LangSmith SaaS 외 별도 endpoint를 쓸 때 지정 |
 | `ANIMAL_API_KEY` | 공공데이터포털 키. 별칭 `ANIMAL_API_SERVICE_KEY`도 지원하며 두 값이 있으면 이 변수가 우선 |
 | `ANIMAL_API_BASE_URL` | 구조동물 API 주소 |
+| `LOST_ANIMAL_API_KEY` | 공공데이터포털 분실동물 조회 서비스 키(실종 정보 게시판). 없으면 게시판은 회원 글만 표시 |
+| `LOST_ANIMAL_API_BASE_URL` | 분실동물 API 주소(기본값 `https://apis.data.go.kr/1543061/lossInfoService`) |
 | `KAKAO_REST_API_KEY` | 보호센터 주소의 좌표 변환 |
 | `REDIS_URL` | Redis 연결 URL. 로컬 기본 `redis://127.0.0.1:6380/0` |
 | `AUTH_SESSION_TTL_SECONDS` | 세션 만료 시간(초); 기본 `86400` |

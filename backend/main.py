@@ -44,6 +44,8 @@ def build_context(settings: Settings) -> AppContext:
     from backend.storage import build_store
     from backend.tools.animal_api import AnimalApi, SampleAnimalApi
     from backend.tools.kakao import KakaoGeocoder
+    from backend.tools.lost_animal_api import LostAnimalApi
+    from backend.tools.lost_feed import LostFeed
 
     timeout = settings.request_timeout_seconds
     redis = aioredis.from_url(settings.redis_url, socket_connect_timeout=3, socket_timeout=3)
@@ -73,6 +75,11 @@ def build_context(settings: Settings) -> AppContext:
         photo_llm=photo_llm,
         embedder=Embedder(settings.openai_api_key.get_secret_value(), timeout=timeout) if settings.openai_api_key else None,
         search_cache=SearchCache(redis),
+        # 키가 있을 때만 분실 신고를 게시판에 합친다. 없으면 회원 글만(샘플로 채우지 않음).
+        lost=LostFeed(LostAnimalApi(settings.lost_animal_api_base_url, settings.lost_animal_api_key.get_secret_value(),
+                                    timeout=min(timeout, 20)))
+        if settings.lost_animal_api_key
+        else None,
     )
 
 
