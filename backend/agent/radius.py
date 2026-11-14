@@ -68,7 +68,8 @@ async def _coord(kakao, address: str, counter: dict[str, int]) -> tuple[float, f
         return None
     counter["requests"] += 1
     try:
-        result = await kakao.geocode(key)
+        # 동 이름은 법정동·행정동이 함께 나와 여러 건이 된다. 반경 중심·관할 근사에는 첫 문서를 쓴다.
+        result = await kakao.geocode(key, allow_ambiguous=True)
     except KakaoError:
         counter["errors"] += 1
         return None

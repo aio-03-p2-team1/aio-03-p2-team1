@@ -27,6 +27,9 @@ COORDS = {
 }
 
 
+AMBIGUOUS = {LOST_PLACE}
+
+
 @pytest.fixture(autouse=True)
 def _clear_coord_cache():
     radius_mod._COORD_CACHE.clear()
@@ -44,7 +47,10 @@ def kakao(calls=None, fail=()):
         if query not in COORDS:
             return httpx.Response(200, json={"documents": []})
         lat, lng = COORDS[query]
-        return httpx.Response(200, json={"documents": [{"x": str(lng), "y": str(lat)}]})
+        docs = [{"x": str(lng), "y": str(lat)}]
+        if query in AMBIGUOUS:  # 동 이름: 법정동 + 행정동(1동, 2동)이 함께 나오는 실제 응답 형태
+            docs += [{"x": str(lng + 0.01), "y": str(lat + 0.01)}, {"x": str(lng - 0.01), "y": str(lat - 0.01)}]
+        return httpx.Response(200, json={"documents": docs})
 
     return KakaoGeocoder("test-key", transport=httpx.MockTransport(handler))
 
@@ -169,3 +175,19 @@ def test_radius_step_is_validated():
     assert normalize({"radius_step": "2"})[0]["radius_step"] == 2
     assert "radius_step" not in normalize({"radius_step": "9"})[0]
     assert "radius_step" not in normalize({"radius_step": "-1"})[0]
+
+
+def test_dong_name_with_multiple_documents_still_sets_center():
+    # 실제 카카오: "서울특별시 마포구 망원동" → 망원동·망원1동·망원2동 3건. 첫 문서를 중심으로 쓴다.
+    animal = FakeAnimal(pages=[items("서울특별시 강서구", "서울특별시 노원구")])
+    run = search(deps(animal, kakao()), base(days=2))
+    assert run["radius"]["applied"] is True
+    assert run["radius"]["center"] == {"lat": COORDS[LOST_PLACE][0], "lng": COORDS[LOST_PLACE][1]}
+
+
+def test_geocode_default_still_rejects_ambiguous_address():
+    # 보호센터 마커용 기본 조회는 여러 건이면 여전히 좌표를 쓰지 않는다.
+    result = asyncio.run(kakao().geocode(LOST_PLACE))
+    assert result == {"status": "unavailable", "reason": "address_ambiguous"}
+    first = asyncio.run(kakao().geocode(LOST_PLACE, allow_ambiguous=True))
+    assert first["status"] == "ok" and first["ambiguous"] == 3
