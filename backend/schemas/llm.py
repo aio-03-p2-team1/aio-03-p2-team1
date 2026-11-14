@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from backend.schemas.common import Color, Sex, Species, StrictSchema
+from backend.schemas.common import Color, MAX_IMAGE_BYTES, Sex, Species, StrictSchema
 
 
 class FeatureExtractionRequest(StrictSchema):
@@ -22,7 +22,7 @@ class FeatureExtractionRequest(StrictSchema):
 
 
 class PhotoAnalysisRequest(StrictSchema):
-    image: bytes = Field(min_length=1, max_length=8 * 1024 * 1024)
+    image: bytes = Field(min_length=1, max_length=MAX_IMAGE_BYTES)
     mime_type: Literal["image/jpeg", "image/png", "image/webp"]
 
 

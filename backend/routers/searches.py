@@ -4,12 +4,11 @@ import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
 
 from backend.agent.llm import LlmError
-from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
+from backend.agent.photo import InvalidPhoto, decode_and_validate
 from backend.agent.runner import run_search
-from backend.schemas.api import PhotoAnalysisResponse, SearchCriteria
+from backend.schemas.api import PhotoAnalysisBody, PhotoAnalysisResponse, SearchBody
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
@@ -26,17 +25,6 @@ PHOTO_ANALYSIS_MESSAGES = {
 
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
-
-
-class SearchBody(BaseModel):
-    criteria: SearchCriteria = SearchCriteria()
-    thread_id: str | None = Field(default=None, max_length=64, pattern=r"^[0-9a-f]{8,64}$")
-    profile_id: str | None = Field(default=None, max_length=40, pattern=r"^[\w-]{1,40}$")
-    reflection_enabled: bool = True
-
-
-class PhotoAnalysisBody(BaseModel):
-    image_base64: str = Field(min_length=1, max_length=((MAX_IMAGE_BYTES + 2) // 3) * 4)
 
 
 def _deps(ctx: AppContext) -> dict[str, Any]:

@@ -4,9 +4,8 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
 
-from backend.schemas.api import SearchCriteria
+from backend.schemas.api import MemoryBody, SavedSearchBody
 from backend.auth.sessions import SessionUser
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
@@ -16,11 +15,6 @@ router = APIRouter(tags=["memory"])
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-class SavedSearchBody(BaseModel):
-    title: str = Field(default="", max_length=40)
-    criteria: SearchCriteria
 
 
 @router.get("/saved-searches")
@@ -41,12 +35,6 @@ async def create_saved(body: SavedSearchBody, user: SessionUser = Depends(curren
 async def delete_saved(key: str, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     if not await ctx.store.delete(user.owner, "saved", key):
         raise ApiError(404, "saved_search_not_found", "저장한 검색을 찾을 수 없습니다.")
-
-
-class MemoryBody(BaseModel):
-    profile_id: str = Field(pattern=r"^[\w-]{1,40}$")
-    # 사용자가 직접 확인한 특징만 저장한다(모델 추정값 금지).
-    confirmed: SearchCriteria
 
 
 @router.get("/memory/{profile_id}")

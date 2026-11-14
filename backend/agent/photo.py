@@ -8,7 +8,8 @@ from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
 
-MAX_IMAGE_BYTES = 8 * 1024 * 1024
+from backend.schemas.common import MAX_IMAGE_BYTES
+
 MAX_IMAGE_PIXELS = 20_000_000
 SUPPORTED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
 

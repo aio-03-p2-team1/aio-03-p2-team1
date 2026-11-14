@@ -16,11 +16,11 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from pydantic import BaseModel, Field, field_validator
 
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
+from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody
 
 router = APIRouter(tags=["posts"])
 
@@ -29,7 +29,7 @@ KIND = "post"
 LIST_SCAN = 200
 LIST_LIMIT = 60
 MAX_POSTS_PER_USER = 10
-MAX_PHOTO_BYTES = 400 * 1024
+MAX_PHOTO_BYTES = MAX_POST_PHOTO_BYTES
 MAX_LOST_DAYS = 365
 PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _DATA_URL = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$")
@@ -45,22 +45,6 @@ def _now() -> str:
 def kst_today() -> date:
     """실종 날짜 검사 기준일. 서버(UTC)와 사용자(한국) 날짜가 다른 새벽 시간대에도 오늘을 허용한다."""
     return datetime.now(KST).date()
-
-
-class PostBody(BaseModel):
-    pet_name: str = Field(min_length=1, max_length=20)
-    species: Literal["dog", "cat", "etc"]
-    region: str = Field(min_length=1, max_length=20)
-    lost_place: str = Field(default="", max_length=100)
-    lost_date: date
-    breed: str = Field(default="", max_length=30)
-    description: str = Field(min_length=5, max_length=1000)
-    photo: str | None = Field(default=None, max_length=MAX_PHOTO_BYTES * 2)
-
-    @field_validator("pet_name", "region", "lost_place", "breed", "description")
-    @classmethod
-    def _strip(cls, value: str) -> str:
-        return value.strip()
 
 
 def _decode_photo(photo: str) -> tuple[str, bytes]:

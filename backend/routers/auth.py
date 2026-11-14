@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 from email_validator import EmailNotValidError, validate_email
 from fastapi import APIRouter, Depends, Request, Response
 from pwdlib import PasswordHash
-from pydantic import BaseModel, Field
 
 from backend.auth.sessions import AuthUnavailable, SessionUser, owner_key
 from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
+from backend.schemas.api import LoginBody, RegisterBody, UserOut
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 hasher = PasswordHash.recommended()
@@ -17,22 +17,6 @@ hasher = PasswordHash.recommended()
 INVALID_LOGIN = "이메일 또는 비밀번호가 올바르지 않습니다."
 LOGIN_LIMIT = 10
 LOGIN_WINDOW_SECONDS = 600
-
-
-class RegisterBody(BaseModel):
-    name: str = Field(min_length=1, max_length=30)
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=8, max_length=128)
-
-
-class LoginBody(BaseModel):
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=128)
-
-
-class UserOut(BaseModel):
-    name: str
-    email: str
 
 
 def _normalize_email(raw: str) -> str:
