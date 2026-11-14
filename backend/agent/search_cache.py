@@ -10,7 +10,7 @@ from redis.exceptions import RedisError
 from backend.errors import ApiError
 
 TTL = 600
-VERSION = "rrf-v1"
+VERSION = "rrf-color-v2"
 
 
 def condition_key(owner, criteria, *, source, model, reflection=True):
