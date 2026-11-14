@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-Color = Literal["갈색", "흰색", "검정", "회색", "크림", "노랑", "주황", "삼색", "고등어"]
+Color = Literal["갈색", "흰색", "검정", "회색", "크림", "노랑", "주황", "황갈색", "삼색", "고등어"]
 Sex = Literal["M", "F", ""]
 Species = Literal["dog", "cat", "etc", ""]
 
