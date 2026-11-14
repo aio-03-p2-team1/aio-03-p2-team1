@@ -137,7 +137,7 @@ sequenceDiagram
 
 ## 5.1 LangSmith 추적
 
-- LangSmith 추적은 `LANGSMITH_TRACING=true`일 때만 활성화하며 기본값은 비활성화다. 활성화하려면 `LANGSMITH_API_KEY`가 필요하다. `LANGSMITH_PROJECT`는 기본 `dasimanna`; `LANGSMITH_ENDPOINT`는 기본 LangSmith SaaS 주소를 쓰므로 셀프 호스팅 등 별도 주소가 있을 때만 지정한다.
+- LangSmith 추적은 설정으로 켜고 끄며, 기본값과 환경변수는 [development.md](development.md#환경변수)에서 관리한다.
 - FastAPI 설정이 `.env`에서 읽은 `LANGSMITH_*` 값을 프로세스 환경에 전달한다. LangGraph 검색 실행과 그 안의 LangChain 모델 호출은 같은 LangSmith 프로젝트로 추적된다. 조건 캐시 적중은 그래프를 호출하지 않으므로 그래프 추적이 생기지 않는다.
 - 추적에는 그래프 입력·출력과 모델 입력·출력이 포함될 수 있다. 검색 조건의 자유 서술, 공고 후보 데이터 및 내부 `owner` 식별자가 포함될 수 있으므로 프로젝트 접근 권한과 LangSmith 데이터 보존 정책을 관리한다. API 키 등 설정 비밀 값은 그래프 입력에 넣지 않는다.
 - 이 연동은 관측/추적만 제공한다. 평가자, 데이터셋, 프롬프트 관리 및 운영 알림은 별도 구성 사항이다.
@@ -165,7 +165,7 @@ flowchart LR
 
 `backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
-털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다. 사용자 표현과 API 원문에 같은 사전을 적용해 색상·무늬 별칭을 영어 표준 토큰으로 변환한다. 원문은 보존하며, 공고별 정규화 컬럼은 추가하지 않는다.
+털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다.
 
 ## 8. 백엔드 API 계약 (요약)
 

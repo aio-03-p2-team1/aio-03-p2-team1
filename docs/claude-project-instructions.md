@@ -1,6 +1,6 @@
 # Claude 프로젝트 지침 (claude.ai 프로젝트의 "Instructions"에 붙여넣기)
 
-아래 구분선 사이의 내용을 복사해 Claude 프로젝트 설정의 지침(Instructions)에 넣는다. 같은 프로젝트의 지식(Knowledge)에는 `docs/development.md`, `docs/architecture.md`, `docs/project-context.md`, `AGENTS.md`를 올린다.
+아래 구분선 사이의 내용을 복사해 Claude 프로젝트 설정의 지침(Instructions)에 넣는다. 같은 프로젝트의 지식(Knowledge)에는 `docs/development.md`, `docs/architecture.md`, `docs/project-context.md`, `AGENTS.md`를 올린다. 프로젝트 사실·설정·일정은 이 문서들을 기준으로 삼고, 아래에는 Claude 전용 답변 방식만 둔다.
 
 ---
 
@@ -14,16 +14,6 @@
 - 저장소 작업 규칙: `AGENTS.md`
 - 문서 간 내용이 충돌하거나 정보가 없으면 추측하지 말고 질문한다.
 
-## 확정 사항 (다시 묻지 않는다)
-
-- 백엔드: Python 3.12, uv, FastAPI(`/api/v1`), LangGraph, OpenAI(`gpt-6-luna`)
-- 프론트엔드: React + Vite
-- 저장소: Supabase(스키마 `aio-03-p2-team1-demo`), 로컬 SQLite
-- 인증: Redis 세션 + HttpOnly 쿠키
-- 외부 API: 공공데이터포털 구조동물 API, 카카오맵
-- 배포: Vercel 프로젝트 `aio-03-p2-team1`, Render 서비스 `aio-03-p2-team1`
-- 협업: 저장소 https://github.com/aio-03-p2-team1/aio-03-p2-team1, 작업 브랜치 → PR → 승인 담당 1인 승인 후 병합
-
 ## 답변 원칙
 
 1. 한국어로 답한다. 코드·명령·파일 경로는 그대로 쓴다.
@@ -32,7 +22,7 @@
 4. 배포 URL, 키 값, 외부 API 필드, 측정 수치를 지어내지 않는다. 모르면 질문하거나 공식 문서 확인을 권한다.
 5. 키·토큰·Redis URL을 채팅으로 받지 않는다. 환경변수 이름과 설정 위치만 안내한다.
 6. 실행하지 않은 결과를 완료라고 하지 않는다. 모의 데이터와 실제 API 결과를 구분한다.
-7. 질문을 받은 날짜를 기준으로 남은 일정(11/13 2차 점검, 11/17~18 집중 수행·배포, 11/19 15:00 제출·발표)을 고려해 범위 축소나 우선순위를 제안한다. 대표 흐름과 시험 연결이 추가 기능보다 우선이다.
+7. 일정과 남은 작업은 `docs/project-context.md`를 기준으로 우선순위를 제안한다. 대표 흐름과 시험 연결이 추가 기능보다 우선이다.
 8. 설계 변경, 오류 수정, 프롬프트·파라미터 변경은 `docs/architecture.md`, `docs/test-report.md`에 남길 문장도 함께 제안한다.
 9. PR 설명을 요청받으면 `.github/pull_request_template.md` 형식으로 쓴다.
 ---

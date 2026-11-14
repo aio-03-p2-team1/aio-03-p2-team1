@@ -23,19 +23,9 @@ docs/             아키텍처 설계서, 시험 결과 보고서, 평가 데이
 
 디렉터리와 기능 범위는 실제 요구와 팀 우선순위를 확인한 뒤 정한다.
 
-## 명령
+## 개발·검증 명령
 
-```bash
-uv sync                                                      # 백엔드 의존성
-uv run uvicorn backend.main:app --reload --port 8000         # 백엔드 실행
-uv run pytest                                                # 백엔드 테스트
-docker compose up -d redis                                   # 로컬 Redis (127.0.0.1:6380)
-cd frontend && npm ci && npm run dev                         # 프론트 (http://127.0.0.1:5173)
-cd frontend && npm test && npm run build                     # 프론트 테스트·빌드
-```
-
-PR을 올리기 전에 `uv run pytest`와 `npm test && npm run build`가 통과해야 한다.
-PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 검사를 실행한다. `backend`·`frontend` 검사가 실패하면 병합하지 않는다. 의존성을 바꾸면 `uv.lock`, `frontend/package-lock.json`을 함께 커밋한다.
+실행 환경과 로컬 명령은 [docs/development.md](docs/development.md)를 기준으로 한다. PR 전 검증·CI·의존성 잠금 파일 규칙도 해당 문서를 참고한다.
 
 ## Git 협업 규칙 (PR + 1인 승인)
 
@@ -92,11 +82,4 @@ PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 �
 
 ## 배포
 
-| 대상 | 플랫폼 | 이름 |
-| --- | --- | --- |
-| 프론트엔드 | Vercel | 프로젝트 `aio-03-p2-team1` (Root `frontend`) |
-| 백엔드 | Render | 서비스 `aio-03-p2-team1` |
-
-- 배포 주소는 `docs/development.md`의 확정값을 사용한다. Preview·커스텀 도메인은 확인 없이 추가하지 않는다.
-- 환경변수 변경은 저장만으로 반영되지 않는다. 재배포까지 해야 한다.
-- 자주 발생한 개발·배포 설정 오류와 해결책은 `docs/development.md`를 본다.
+플랫폼·주소·설정과 배포 시 유의사항은 [docs/development.md](docs/development.md)를 기준으로 한다. Preview·커스텀 도메인과 원격 변경은 사용자 확인 없이 추가하지 않는다.
