@@ -79,7 +79,6 @@ for _token, _words in {
 
 # A few source spellings carry more than one feature in one unbroken word.
 _COMPOUND_ALIASES = {
-    "blue&gold": {"colors": frozenset({"BLUE", "GOLD"})},
     "블루멀": {"colors": frozenset({"BLUE"}), "patterns": frozenset({"MERLE"})},
     "치즈태비": {"colors": frozenset({"ORANGE"}), "patterns": frozenset({"TABBY"})},
     "흰노색": {"colors": frozenset({"WHITE", "YELLOW"})},
