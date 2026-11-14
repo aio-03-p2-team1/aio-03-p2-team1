@@ -165,7 +165,7 @@ flowchart LR
 
 `backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
-털색의 단어 기반 매칭 흐름, 정규화 원칙 및 DB 원문 분포는 [color-normalization.md](color-normalization.md)를 참고한다. API 원문과 사용자 표현에 같은 정규화 규칙을 적용하는 설계이며, 구현 갱신은 후속 작업이다.
+털색·무늬 단어 토큰화 규칙과 DB 원문 분포는 [color-normalization.md](color-normalization.md)를 참고한다. 사용자 표현과 API 원문에 같은 규칙을 적용해 원문 어휘를 토큰으로 뽑으며, 동의어를 표준색으로 치환하지 않는다.
 
 ## 8. 백엔드 API 계약 (요약)
 

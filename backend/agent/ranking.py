@@ -5,6 +5,8 @@ import math
 from datetime import date
 from typing import Any
 
+from backend.agent.color_tokenizer import tokenize_color_words
+
 WEIGHTS = {"breed": 3, "color": 3, "sex": 2, "keyword": 1}
 MAX_KEYWORD_POINTS = 3
 TOP_K = 300
@@ -43,27 +45,12 @@ def fuse_rrf(lexical, semantic_scores):
     result.sort(key=lambda item: (-item["score"], lexical_positions[item["id"]], item["id"]))
     return [{**item, "rank": index} for index, item in enumerate(result, 1)]
 
-COLOR_SYNONYMS = {
-    "갈색": "갈색", "브라운": "갈색", "밤색": "갈색", "초코": "갈색",
-    "흰색": "흰색", "하얀": "흰색", "백색": "흰색", "화이트": "흰색", "흰": "흰색",
-    "검은": "검정", "검정": "검정", "흑색": "검정", "블랙": "검정", "까만": "검정",
-    "회색": "회색", "그레이": "회색", "잿빛": "회색",
-    "크림": "크림", "베이지": "크림", "아이보리": "크림",
-    "노란": "노랑", "노랑": "노랑", "황색": "노랑", "골드": "노랑",
-    "주황": "주황", "오렌지": "주황", "치즈": "주황",
-    "삼색": "삼색", "고등어": "고등어", "턱시도": "검정",
-}
 STOPWORDS = {"있음", "있어요", "있습니다", "입니다", "그리고", "약간", "조금", "정도", "같은", "착용"}
 
 
 def color_tokens(text: str | None) -> set[str]:
-    if not text:
-        return set()
-    found = set()
-    for word, canonical in COLOR_SYNONYMS.items():
-        if word in text:
-            found.add(canonical)
-    return found
+    tokens = tokenize_color_words(text)
+    return tokens["colors"] | tokens["patterns"]
 
 
 def keywords(text: str | None) -> list[str]:
@@ -72,7 +59,7 @@ def keywords(text: str | None) -> list[str]:
     words = re.findall(r"[가-힣A-Za-z]{2,}", text)
     out = []
     for w in words:
-        if w in STOPWORDS or w in COLOR_SYNONYMS:
+        if w in STOPWORDS or color_tokens(w):
             continue
         if w not in out:
             out.append(w)
@@ -107,12 +94,20 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
         else:
             mismatched.append(f"품종: {item['breed']}")
 
-    wanted_colors = color_tokens(criteria.get("color")) | color_tokens(criteria.get("description")) | set(features.get("colors") or [])
-    if wanted_colors:
-        have = color_tokens(item.get("color")) | color_tokens(item.get("special_mark"))
+    wanted = tokenize_color_words(criteria.get("color"))
+    described = tokenize_color_words(criteria.get("description"))
+    wanted_colors = wanted["colors"] | described["colors"]
+    wanted_patterns = wanted["patterns"] | described["patterns"]
+    wanted_color_words = wanted_colors | wanted_patterns
+    if wanted_color_words:
+        have_color = tokenize_color_words(item.get("color"))
+        have_mark = tokenize_color_words(item.get("special_mark"))
+        have_colors = have_color["colors"] | have_mark["colors"]
+        have_patterns = have_color["patterns"] | have_mark["patterns"]
+        have = have_colors | have_patterns
         if not item.get("color") and not item.get("special_mark"):
             unknown.append("털색")
-        elif wanted_colors & have:
+        elif wanted_color_words & have:
             points += WEIGHTS["color"]
             matched.append(f"털색: {item.get('color') or '특징에 표기'}")
         else:
