@@ -15,7 +15,7 @@
 ```text
 backend/          FastAPI 앱(`/api/v1`), LangGraph 그래프, 도구, 인증, 저장소 어댑터
 frontend/         React + Vite
-tests/            백엔드 pytest
+backend/tests/    백엔드 pytest
 frontend/tests/   프론트 node --test
 scripts/          Supabase 스키마 SQL, 평가 스크립트
 docs/             아키텍처 설계서, 시험 결과 보고서, 평가 데이터, 프로젝트 컨텍스트

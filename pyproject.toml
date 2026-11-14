@@ -29,13 +29,13 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["backend/tests"]
 addopts = "-q"
 pythonpath = ["."]
 
 [tool.ruff]
 target-version = "py312"
-src = ["backend", "tests"]
+src = ["backend"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

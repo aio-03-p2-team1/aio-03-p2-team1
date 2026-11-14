@@ -84,8 +84,8 @@ npm run dev
 로컬 검증 명령:
 
 ```bash
-uv run ruff check backend tests
-uv run pytest
+uv run ruff check backend
+uv run pytest backend/tests
 cd frontend && npm test && npm run build
 ```
 
