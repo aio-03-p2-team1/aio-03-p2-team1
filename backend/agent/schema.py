@@ -85,7 +85,6 @@ class PhotoAnalysisModelResponse(StrictSchema):
     breed: str
     sex: Sex
     marks: list[PhotoFeature]
-    message: str
 
 
 class PhotoAnalysisResponse(StrictSchema):

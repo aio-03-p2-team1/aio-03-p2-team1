@@ -81,9 +81,9 @@ class FakePhotoAnalyzer:
             breed="",
             sex="",
             marks=[],
-            message="모델 내부 문구",
+            message="사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요.",
             model="test-model",
-            prompt_version="photo-feature-v2",
+            prompt_version="photo-feature-v3",
         )
 
 
@@ -119,6 +119,7 @@ def test_photo_analysis_passes_valid_image_and_returns_unsuitable_result():
         response = client.post("/api/v1/photo-analysis", json={"image_base64": encoded_image(data)})
     assert response.status_code == 200
     assert response.json()["suitable"] is False
+    assert response.json()["message"] == "사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요."
     assert response.json()["analysis_ms"] >= 0
     assert analyzer.calls == [(data, "image/png")]
 

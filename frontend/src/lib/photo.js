@@ -15,5 +15,8 @@ export function photoAnalysisError(error) {
 }
 
 export function unsuitablePhotoMessage(result) {
-  return result?.suitable ? '' : PHOTO_UNSUITABLE_MESSAGE
+  if (result?.suitable) return ''
+  return typeof result?.message === 'string' && result.message.trim()
+    ? result.message.trim()
+    : PHOTO_UNSUITABLE_MESSAGE
 }

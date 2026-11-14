@@ -4,7 +4,14 @@ import asyncio
 
 import pytest
 
-from backend.agent.llm import FeatureExtractor, LlmError
+from backend.agent.llm import (
+    COLOR_VALUES_TEXT,
+    PHOTO_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    FeatureExtractor,
+    LlmError,
+)
+from backend.agent.schema import PhotoAnalysisModelResponse, PhotoAnalysisResponse
 
 
 class FakeMessage:
@@ -40,13 +47,15 @@ def extractor(client):
     return FeatureExtractor("sk-test", "gpt-6-luna", client=client)
 
 
-def test_extract_filters_ungrounded_values():
-    client = FakeChatClient({"colors": ["갈색"], "breed": "시바견", "sex": "F", "marks": ["목줄"]})
-    out = asyncio.run(extractor(client).extract("갈색 푸들, 빨간 목줄"))
-    assert out.colors == ["갈색"]
+def test_extract_keeps_multiple_colors_and_filters_duplicates():
+    client = FakeChatClient({"colors": ["갈색", "흰색", "갈색"], "breed": "시바견", "sex": "F", "marks": ["목줄"]})
+    out = asyncio.run(extractor(client).extract("갈색과 흰색 푸들, 빨간 목줄"))
+    assert out.colors == ["갈색", "흰색"]
     assert out.breed == ""  # 설명에 없는 품종은 버린다
     assert out.sex == "F" and out.marks == ["목줄"]
-    assert client.messages[0][0] == "system" and client.messages[1][1] == "갈색 푸들, 빨간 목줄"
+    assert client.messages[0][0] == "system" and client.messages[1][1] == "갈색과 흰색 푸들, 빨간 목줄"
+    assert COLOR_VALUES_TEXT in client.messages[0][1]
+    assert "각 색상을 모두 한 번씩 반환한다" in client.messages[0][1]
     assert client.schema_options[1] == {"method": "json_schema", "strict": True, "include_raw": True}
 
 
@@ -60,15 +69,57 @@ def test_photo_analysis_uses_injected_langchain_client():
             for key in ("animal_present", "identifiable", "center_subject_clear", "species", "breed", "sex")
         },
         "species": "dog",
-        "colors": [],
+        "breed": "",
+        "sex": "",
+        "colors": [
+            {"value": "갈색", "confidence": 0.95},
+            {"value": "흰색", "confidence": 0.93},
+            {"value": "갈색", "confidence": 0.95},
+        ],
         "marks": [],
     }
     client = FakeChatClient(payload)
     result = asyncio.run(extractor(client).analyze_photo(b"image", "image/jpeg"))
     assert result.suitable and result.species == "dog"
+    assert result.colors == ["갈색", "흰색"]
+    assert COLOR_VALUES_TEXT in client.messages[0][1]
+    assert "각 색상을 모두 별도 항목으로 반환하고" in client.messages[0][1]
     image_part = client.messages[1][1][1]
     assert image_part["type"] == "image_url"
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
+
+
+def test_color_value_template_is_rendered_into_both_prompts():
+    assert COLOR_VALUES_TEXT in SYSTEM_PROMPT
+    assert COLOR_VALUES_TEXT in PHOTO_SYSTEM_PROMPT
+    assert "message" not in PHOTO_SYSTEM_PROMPT
+    assert "message" not in PhotoAnalysisModelResponse.model_fields
+    assert "message" in PhotoAnalysisResponse.model_fields
+
+
+def test_photo_message_is_derived_from_suitability_reason():
+    payload = {
+        "animal_present": True,
+        "identifiable": True,
+        "center_subject_clear": False,
+        "confidence": {
+            "animal_present": 0.95,
+            "identifiable": 0.95,
+            "center_subject_clear": 0.5,
+            "species": 0.95,
+            "breed": 0.95,
+            "sex": 0.95,
+        },
+        "species": "dog",
+        "breed": "",
+        "sex": "",
+        "colors": [],
+        "marks": [],
+    }
+    result = asyncio.run(extractor(FakeChatClient(payload)).analyze_photo(b"image", "image/jpeg"))
+
+    assert not result.suitable
+    assert result.message == "찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요."
 
 
 @pytest.mark.parametrize(
