@@ -1,7 +1,8 @@
 # AGENTS.md — AI 작업 지침 (aio-03-p2-team1)
 
 이 파일은 이 저장소에서 작업하는 모든 AI 코딩 도구(Claude Code, Codex, Copilot 등)와 팀원이 따르는 규칙이다.
-- 요구사항 원문: `prompt.md`
+- 기술 스택·환경변수·로컬 실행·배포: `docs/development.md`
+- 에이전트 구조·상태·API 계약: `docs/architecture.md`
 - 일정·평가·필수 산출물: `docs/project-context.md`
 - 둘이 충돌하면 사용자(팀원)에게 묻는다.
 
@@ -14,27 +15,17 @@
 ```text
 backend/          FastAPI 앱(`/api/v1`), LangGraph 그래프, 도구, 인증, 저장소 어댑터
 frontend/         React + Vite
-tests/            백엔드 pytest
+backend/tests/    백엔드 pytest
 frontend/tests/   프론트 node --test
 scripts/          Supabase 스키마 SQL, 평가 스크립트
 docs/             아키텍처 설계서, 시험 결과 보고서, 평가 데이터, 프로젝트 컨텍스트
 ```
 
-아직 생성되지 않은 디렉터리는 `prompt.md` 19장의 구현 순서대로 만든다.
+디렉터리와 기능 범위는 실제 요구와 팀 우선순위를 확인한 뒤 정한다.
 
-## 명령
+## 개발·검증 명령
 
-```bash
-uv sync                                                      # 백엔드 의존성
-uv run uvicorn backend.main:app --reload --port 8000         # 백엔드 실행
-uv run pytest                                                # 백엔드 테스트
-docker compose up -d redis                                   # 로컬 Redis (127.0.0.1:6380)
-cd frontend && npm ci && npm run dev                         # 프론트 (http://127.0.0.1:5173)
-cd frontend && npm test && npm run build                     # 프론트 테스트·빌드
-```
-
-PR을 올리기 전에 `uv run pytest`와 `npm test && npm run build`가 통과해야 한다.
-PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 검사를 실행한다. `backend`·`frontend` 검사가 실패하면 병합하지 않는다. 의존성을 바꾸면 `uv.lock`, `frontend/package-lock.json`을 함께 커밋한다.
+실행 환경과 로컬 명령은 [docs/development.md](docs/development.md)를 기준으로 한다. PR 전 검증·CI·의존성 잠금 파일 규칙도 해당 문서를 참고한다.
 
 ## Git 협업 규칙 (PR + 1인 승인)
 
@@ -49,6 +40,7 @@ PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 �
   - 승인 담당 1인이 리뷰·승인한 뒤 병합한다.
   - 리뷰어는 정상·오류 요청의 실제 결과를 확인한다.
 - 커밋 메시지: `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:` 접두어 + 한국어 설명. 예: `feat: 보호센터 좌표 조회 API 추가`
+- 사용자가 작업을 요청할 때마다 완료한 변경을 커밋한다. 요청 범위가 크면 먼저 작업을 여러 단계로 나눈 계획을 세우고, 각 단계를 완료할 때마다 관련 변경을 묶어 커밋한다.
 - 공유 영역:
   - **상태 객체, 도구 스키마, 그래프 노드·엣지, 환경변수 이름, API 계약**은 여러 사람이 함께 쓴다.
   - 수정 전에 관련 담당자와 조율한다.
@@ -59,7 +51,7 @@ PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 �
 ## AI가 지켜야 할 규칙
 
 1. **작업 전 확인**
-   - 관련 파일과 `prompt.md`의 해당 장을 먼저 읽는다.
+   - 관련 코드와 `docs/architecture.md`, `docs/development.md`의 해당 내용을 먼저 읽는다.
    - 수정 범위가 요청보다 커지면 먼저 묻는다.
 2. **추측 금지**
    - 배포 URL, 환경변수 값, 외부 API 필드, 존재하지 않는 엔드포인트를 지어내지 않는다.
@@ -90,11 +82,4 @@ PR과 `main` 푸시마다 GitHub Actions(`.github/workflows/ci.yml`)가 같은 �
 
 ## 배포
 
-| 대상 | 플랫폼 | 이름 |
-| --- | --- | --- |
-| 프론트엔드 | Vercel | 프로젝트 `aio-03-p2-team1` (Root `frontend`) |
-| 백엔드 | Render | 서비스 `aio-03-p2-team1` |
-
-- 배포 주소와 브랜치가 확정되기 전에는 `vercel.json`의 rewrite 대상, `CORS_ORIGINS`, 카카오 도메인에 임의 URL을 넣지 않는다.
-- 환경변수 변경은 저장만으로 반영되지 않는다. 재배포까지 해야 한다.
-- 자주 발생한 오류와 해결책은 `prompt.md` 17장을 본다.
+플랫폼·주소·설정과 배포 시 유의사항은 [docs/development.md](docs/development.md)를 기준으로 한다. Preview·커스텀 도메인과 원격 변경은 사용자 확인 없이 추가하지 않는다.

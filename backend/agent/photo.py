@@ -1,5 +1,3 @@
-"""업로드된 반려동물 사진의 크기·형식·무결성 검사."""
-
 from __future__ import annotations
 
 import base64
@@ -10,7 +8,8 @@ from io import BytesIO
 
 from PIL import Image, UnidentifiedImageError
 
-MAX_IMAGE_BYTES = 8 * 1024 * 1024
+from backend.schemas.common import MAX_IMAGE_BYTES
+
 MAX_IMAGE_PIXELS = 20_000_000
 SUPPORTED_FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
 
@@ -23,7 +22,7 @@ class InvalidPhoto(ValueError):
 
 
 def decode_and_validate(encoded: str) -> tuple[bytes, str]:
-    """base64를 엄격히 디코딩하고 Pillow로 실제 이미지인지 검사한다."""
+
     if len(encoded) > ((MAX_IMAGE_BYTES + 2) // 3) * 4:
         raise InvalidPhoto("photo_too_large", "사진은 8MB 이하로 선택해 주세요.")
     try:

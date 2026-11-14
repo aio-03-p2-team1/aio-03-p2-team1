@@ -8,7 +8,6 @@ import { useRegions } from './useRegions.js'
 
 const ROWS = 20
 
-// 메인(/) — 디자인: dasimanna-cards-board.html. 게시판 카드 레이아웃으로 실제 보호소 공고를 보여 준다.
 export default function BoardPage() {
   const [species, setSpecies] = useState('all')
   const [regionCode, setRegionCode] = useState('')

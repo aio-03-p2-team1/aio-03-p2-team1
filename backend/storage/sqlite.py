@@ -1,5 +1,3 @@
-"""로컬 개발용 SQLite 저장소. 운영(Render)에서는 임시 파일시스템이므로 쓰지 않는다."""
-
 from __future__ import annotations
 
 import asyncio
@@ -44,6 +42,12 @@ class SqliteStore:
                 return fn(*args)
 
         return await asyncio.to_thread(call)
+
+    async def aclose(self) -> None:
+        # Closing a SQLite connection in asyncio.to_thread can leave the worker
+        # waiting on SQLite's connection mutex; serialize and close inline.
+        with self._lock:
+            self._conn.close()
 
     async def get(self, owner, kind, doc_id):
         check_kind(kind)

@@ -13,7 +13,7 @@ dependencies = [
     "pwdlib[argon2]>=0.3",
     "email-validator>=2.3",
     "langgraph>=1.2",
-    "openai>=3.49",
+    "langchain-openai>=1.1",
     "pillow>=13.0.0",
 ]
 
@@ -22,12 +22,20 @@ dev = [
     "pytest>=9.2",
     "fakeredis>=2.40",
     "respx>=0.23",
+    "ruff>=0.11",
 ]
 
 [tool.uv]
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["backend/tests"]
 addopts = "-q"
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+src = ["backend"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

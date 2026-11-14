@@ -1,4 +1,3 @@
-/** 성공적으로 폼에 반영된 사진 분석 결과에 대한 간단한 피드백 팝업. */
 export default function PhotoFeedbackPopup({ feedback, onFeedback, onClose }) {
   return (
     <aside className="photo-feedback-popup" aria-label="사진 분석 결과 의견" aria-live="polite">

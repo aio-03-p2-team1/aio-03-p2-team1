@@ -18,9 +18,6 @@ import RescueLocation from '../components/RescueLocation.jsx'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 
-// 공고 상세 — 디자인: dasimanna-cards-detail.html
-// /notices/:id            메인 목록에서 선택(서버 캐시의 공고)
-// /notices/:id?run=:runId 검색 결과에서 선택(내 실행 기록의 후보 + 보호센터 위치 API)
 export default function DetailPage() {
   const { noticeId } = useParams()
   const [params] = useSearchParams()
@@ -175,7 +172,6 @@ function EvidenceList({ title, items, tone }) {
   )
 }
 
-/** 보호센터 위치. 검색 결과 후보면 서버 위치 API(좌표 캐시), 아니면 카카오맵 링크. */
 function CenterLocation({ item, runId }) {
   const [loc, setLoc] = useState(null)
   const [state, setState] = useState(runId ? 'loading' : 'link')

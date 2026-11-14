@@ -16,25 +16,24 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from pydantic import BaseModel, Field, field_validator
 
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
+from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody
 
 router = APIRouter(tags=["posts"])
 
 BOARD_OWNER = "board"  # 공용 게시판 소유자 키(사용자 owner 는 64자 SHA-256 이므로 겹치지 않는다)
 KIND = "post"
-LIST_SCAN = 200  # 필터 전에 읽는 최신 게시글 수
+LIST_SCAN = 200
 LIST_LIMIT = 60
 MAX_POSTS_PER_USER = 10
-MAX_PHOTO_BYTES = 400 * 1024
+MAX_PHOTO_BYTES = MAX_POST_PHOTO_BYTES
 MAX_LOST_DAYS = 365
 PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _DATA_URL = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$")
 _POST_ID = re.compile(r"^[0-9a-f]{32}$")
-
 
 KST = timezone(timedelta(hours=9))
 
@@ -46,22 +45,6 @@ def _now() -> str:
 def kst_today() -> date:
     """실종 날짜 검사 기준일. 서버(UTC)와 사용자(한국) 날짜가 다른 새벽 시간대에도 오늘을 허용한다."""
     return datetime.now(KST).date()
-
-
-class PostBody(BaseModel):
-    pet_name: str = Field(min_length=1, max_length=20)
-    species: Literal["dog", "cat", "etc"]
-    region: str = Field(min_length=1, max_length=20)
-    lost_place: str = Field(default="", max_length=100)  # 지도에서 고른 동 단위 주소(좌표는 받지 않음)
-    lost_date: date
-    breed: str = Field(default="", max_length=30)
-    description: str = Field(min_length=5, max_length=1000)
-    photo: str | None = Field(default=None, max_length=MAX_PHOTO_BYTES * 2)
-
-    @field_validator("pet_name", "region", "lost_place", "breed", "description")
-    @classmethod
-    def _strip(cls, value: str) -> str:
-        return value.strip()
 
 
 def _decode_photo(photo: str) -> tuple[str, bytes]:
@@ -99,7 +82,7 @@ def _public(post_id: str, data: dict, viewer: str | None, *, detail: bool) -> di
 
 
 async def _viewer(request: Request, ctx: AppContext) -> str | None:
-    """목록·상세는 비로그인도 읽는다. 로그인 상태면 내 글 표시에만 쓴다."""
+
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         return None
@@ -143,11 +126,7 @@ async def list_posts(
 
 @router.get("/posts/mine")
 async def list_my_posts(user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
-    """마이페이지: 로그인 사용자가 쓴 게시글(최신순). 작성자 키는 서버 세션에서만 읽는다.
 
-    /posts/{post_id} 보다 먼저 등록해야 'mine' 이 게시글 ID 로 해석되지 않는다.
-    한 사람당 MAX_POSTS_PER_USER 개까지라 최신 LIST_SCAN 개 안에서 찾는다(등록 한도 계산과 같은 범위).
-    """
     rows = await ctx.store.list(BOARD_OWNER, KIND, LIST_SCAN)
     items = [_public(r["id"], r["data"], user.owner, detail=False) for r in rows if r["data"].get("author") == user.owner]
     return {"items": items, "count": len(items), "limit": MAX_POSTS_PER_USER}

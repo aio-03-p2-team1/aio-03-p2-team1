@@ -1,4 +1,3 @@
-// 백엔드 호출. 쿠키 세션을 쓰므로 credentials: 'include'. 토큰을 저장하지 않는다.
 const BASE = (import.meta.env?.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 export const API_BASE = BASE
 
@@ -32,7 +31,6 @@ export async function api(path, { method = 'GET', body, auth = true, signal } = 
   }
   if (res.status === 204) return null
   const type = res.headers.get('content-type') || ''
-  // 프록시 미적용이면 HTML 이 돌아온다(17장): JSON 이 아니면 오류로 본다.
   const data = type.includes('application/json') ? await res.json() : null
   if (!res.ok || data === null) {
     const detail = data?.detail && typeof data.detail === 'object' ? data.detail : { code: res.ok ? 'bad_response' : `http_${res.status}` }

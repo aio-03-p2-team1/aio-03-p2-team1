@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from backend.agent.runner import run_search
 from backend.storage.sqlite import SqliteStore
-from backend.tools.animal_api import AnimalApiError, SampleAnimalApi
+from backend.tools.animal_api import SampleAnimalApi
 from backend.tools.kakao import KakaoGeocoder
 
 from .conftest import FakeAnimal, FakeEmbedder, api_item, make_settings

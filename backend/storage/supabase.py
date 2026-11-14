@@ -2,7 +2,7 @@
 
 - 지정 스키마 "aio-03-p2-team1-demo" 의 documents 테이블을 쓴다(public 금지).
 - 스키마는 Accept-Profile / Content-Profile 헤더로 지정한다.
-  Data API 의 Exposed schemas 에 없으면 406 / PGRST106 이 난다(17장).
+  Data API 의 Exposed schemas 에 없으면 406 / PGRST106 이 난다.
 - service_role 키를 apikey 와 Bearer 헤더에 함께 넣는다(11장).
 - 오류 메시지에 응답 본문·키를 넣지 않는다.
 """
@@ -31,6 +31,9 @@ class SupabaseStore:
                 "Content-Profile": schema,
             },
         )
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def _request(self, method: str, params: dict, json_body=None, prefer: str | None = None):
         headers = {"Prefer": prefer} if prefer else {}
@@ -74,7 +77,7 @@ class SupabaseStore:
             "kind": kind,
             "id": doc_id,
             "data": data,
-            # 업서트 시에도 정렬 기준이 갱신되도록 서버 시각을 명시한다.
+
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         await self._request(

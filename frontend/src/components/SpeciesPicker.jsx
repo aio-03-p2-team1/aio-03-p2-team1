@@ -16,7 +16,6 @@ function PawIcon() {
   )
 }
 
-/** 동물 종류 선택 버튼(라디오 그룹). */
 export default function SpeciesPicker({ value, onChange }) {
   return (
     <div className="species-picker" role="radiogroup" aria-label="동물 종류">

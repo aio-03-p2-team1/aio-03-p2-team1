@@ -10,7 +10,6 @@ import { useRegions } from './useRegions.js'
 
 const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed: '', description: '' }
 
-// 실종 정보 게시판 — 디자인: dasimanna-cards-board.html
 export default function PostBoardPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -165,7 +164,7 @@ export function PostPhoto({ post, main = false }) {
 function PostForm({ regions, onCancel, onCreated }) {
   const toast = useToast()
   const [form, setForm] = useState(EMPTY)
-  const [location, setLocation] = useState(null) // 지도에서 고른 위치 { region, address, lat, lng }
+  const [location, setLocation] = useState(null)
   const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useState(null)
   const [errors, setErrors] = useState({})
@@ -292,7 +291,7 @@ function PostForm({ regions, onCancel, onCreated }) {
         title="실종 위치 선택"
         onClose={() => setRegionOpen(false)}
         onSelect={(value) => {
-          // 동 단위 주소와 공식 시·도 이름만 저장한다(정확한 좌표는 저장하지 않음).
+          // 게시글에는 주소만 저장하고 선택한 정확한 좌표는 저장하지 않는다.
           setLocation(value)
           setForm((prev) => ({
             ...prev,
@@ -319,7 +318,6 @@ function FieldError({ text }) {
   return text ? <small className="field-error" role="alert">{text}</small> : null
 }
 
-/** 긴 변 1024px, JPEG 로 줄인다. 400KB 를 넘으면 품질을 낮춰 다시 시도한다. */
 async function shrinkImage(file) {
   const url = URL.createObjectURL(file)
   try {
