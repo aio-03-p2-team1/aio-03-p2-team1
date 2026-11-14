@@ -96,10 +96,16 @@ def test_color_value_template_is_rendered_into_both_prompts():
     assert "message" not in PHOTO_SYSTEM_PROMPT
     assert "message" not in PhotoAnalysisModelResponse.model_fields
     assert "message" not in PhotoAnalysisResult.model_fields
-    assert "message" in PhotoAnalysisResponse.model_fields
+    assert "reason_code" in PhotoAnalysisResult.model_fields
+    assert "reason_code" in PhotoAnalysisResponse.model_fields
+    assert "message" not in PhotoAnalysisResponse.model_fields
+    assert "model" not in PhotoAnalysisResult.model_fields
+    assert "prompt_version" not in PhotoAnalysisResult.model_fields
+    assert "model" not in PhotoAnalysisResponse.model_fields
+    assert "prompt_version" not in PhotoAnalysisResponse.model_fields
 
 
-def test_photo_message_is_derived_from_suitability_reason():
+def test_photo_reason_code_is_derived_from_suitability_reason():
     payload = {
         "animal_present": True,
         "identifiable": True,

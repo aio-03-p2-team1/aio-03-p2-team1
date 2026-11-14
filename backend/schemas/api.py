@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from backend.schemas.common import Color, MAX_IMAGE_BYTES, Sex, Species, StrictSchema
+from backend.schemas.common import Color, MAX_IMAGE_BYTES, PhotoAnalysisReason, Sex, Species, StrictSchema
 
 MAX_POST_PHOTO_BYTES = 400 * 1024
 
@@ -83,7 +83,7 @@ class PostBody(BaseModel):
 
 
 class PhotoAnalysisResponse(StrictSchema):
-    """Public photo analysis response; internal reason codes are localized by the API."""
+    """Public photo analysis response; the frontend maps reason codes to guidance."""
 
     animal_present: bool
     identifiable: bool
@@ -94,7 +94,5 @@ class PhotoAnalysisResponse(StrictSchema):
     breed: str
     sex: Sex
     marks: list[str]
-    message: str
-    model: str
-    prompt_version: str
-    analysis_ms: int
+    reason_code: PhotoAnalysisReason | None
+    analysis_ms: int = Field(ge=0)

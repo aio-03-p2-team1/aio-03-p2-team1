@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from backend.schemas.common import Color, MAX_IMAGE_BYTES, Sex, Species, StrictSchema
+from backend.schemas.common import Color, MAX_IMAGE_BYTES, PhotoAnalysisReason, Sex, Species, StrictSchema
 
 
 class FeatureExtractionRequest(StrictSchema):
@@ -88,11 +88,9 @@ class PhotoAnalysisResult(StrictSchema):
     identifiable: bool
     center_subject_clear: bool
     suitable: bool
-    reason_code: Literal["animal_not_detected", "appearance_unclear", "subject_not_distinct"] | None
+    reason_code: PhotoAnalysisReason | None
     species: Species
     colors: list[Color]
     breed: str
     sex: Sex
     marks: list[str]
-    model: str
-    prompt_version: str

@@ -21,7 +21,6 @@ from backend.schemas.llm import (
 log = logging.getLogger("dasimanna.llm")
 
 PROMPT_VERSION = "feature-extract-v3"
-PHOTO_PROMPT_VERSION = "photo-feature-v3"
 PHOTO_CONFIDENCE_THRESHOLD = 0.8
 COLOR_VALUES = get_args(Color)
 COLOR_VALUES_TEXT = ", ".join(COLOR_VALUES)
@@ -221,6 +220,4 @@ class FeatureExtractor:
             breed=breed if suitable else "",
             sex=sex if suitable else "",
             marks=marks if suitable else [],
-            model=self.model,
-            prompt_version=PHOTO_PROMPT_VERSION,
         )

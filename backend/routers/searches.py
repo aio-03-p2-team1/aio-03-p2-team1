@@ -17,12 +17,6 @@ from backend.tools.kakao import KakaoError
 
 router = APIRouter(tags=["searches"])
 
-PHOTO_ANALYSIS_MESSAGES = {
-    "animal_not_detected": "사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요.",
-    "appearance_unclear": "동물의 외형을 알아보기 어려워요. 더 선명한 사진을 올려 주세요.",
-    "subject_not_distinct": "찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요.",
-}
-
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
 
@@ -79,8 +73,7 @@ async def analyze_photo(
     except LlmError as exc:
         raise ApiError(502, exc.code, "사진을 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.")
     return PhotoAnalysisResponse(
-        **result.model_dump(exclude={"reason_code"}),
-        message=PHOTO_ANALYSIS_MESSAGES.get(result.reason_code, ""),
+        **result.model_dump(),
         analysis_ms=round((time.perf_counter() - started) * 1000),
     )
 

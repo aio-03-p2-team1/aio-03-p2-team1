@@ -22,8 +22,10 @@ test('photo analysis errors distinguish photo format from request failures', () 
   assert.equal(photoAnalysisError({ code: 'llm_unavailable' }), '오류가 발생했습니다.')
 })
 
-test('unsuitable photo shows the analysis message and falls back when it is empty', () => {
-  assert.equal(unsuitablePhotoMessage({ suitable: false, message: '더 선명한 사진을 올려 주세요.' }), '더 선명한 사진을 올려 주세요.')
-  assert.equal(unsuitablePhotoMessage({ suitable: false, message: '  ' }), '다른 사진을 사용해 주세요.')
-  assert.equal(unsuitablePhotoMessage({ suitable: true, message: '무시되는 문구' }), '')
+test('unsuitable photo maps its reason code to guidance', () => {
+  assert.equal(unsuitablePhotoMessage({ suitable: false, reason_code: 'animal_not_detected' }), '사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요.')
+  assert.equal(unsuitablePhotoMessage({ suitable: false, reason_code: 'appearance_unclear' }), '동물의 외형을 알아보기 어려워요. 더 선명한 사진을 올려 주세요.')
+  assert.equal(unsuitablePhotoMessage({ suitable: false, reason_code: 'subject_not_distinct' }), '찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요.')
+  assert.equal(unsuitablePhotoMessage({ suitable: false, reason_code: null }), '다른 사진을 사용해 주세요.')
+  assert.equal(unsuitablePhotoMessage({ suitable: true, reason_code: 'animal_not_detected' }), '')
 })
