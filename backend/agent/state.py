@@ -21,6 +21,7 @@ class Criteria(TypedDict, total=False):
     description: str
     lost_place: str
     lost_date: str
+    radius_step: int  # 사용자가 넓히기에 동의한 반경 단계(0~3). 없으면 실종 날짜로 추천 단계 계산
 
 
 class SearchState(TypedDict, total=False):
@@ -47,6 +48,8 @@ class SearchState(TypedDict, total=False):
     pages_fetched: int
     total_count: int
     raw_items: list[dict[str, Any]]
+    radius_items: list[dict[str, Any]] | None  # 반경 안 + 거리 미확인 공고(반경 밖 제외). 임베딩·정렬 대상
+    radius: dict[str, Any]  # 반경 단계·km·중심 좌표·포함/제외 건수·미적용 사유
     data_source: str
     fetched_at: str
     retry_count: int
