@@ -9,6 +9,11 @@
 
 필드 *값*은 출력하지 않는다. 신고자 이름·연락처 같은 개인정보가 들어 있을 수 있어서다.
 화면에 어떤 필드를 보여 주고 어떤 필드를 버릴지 정하는 데 쓴다.
+
+    uv run python scripts/inspect_lost_api.py --samples
+
+--samples 를 주면 개인정보가 아닌 필드(SAFE_FIELDS)만 예시 값 3개씩 더 출력한다.
+신고자 이름·연락처·마이크로칩 번호·상세 주소는 이 옵션에서도 출력하지 않는다.
 """
 
 from __future__ import annotations
@@ -25,8 +30,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.config import Settings  # noqa: E402
 from backend.tools.lost_animal_api import LostAnimalApi, LostAnimalApiError  # noqa: E402
 
+# 예시 값을 출력해도 되는 필드. callName·callTel(신고자), rfidCd(마이크로칩), happenAddrDtl(상세 주소)은 제외.
+SAFE_FIELDS = ("age", "colorCd", "happenAddr", "happenDt", "happenPlace", "kindCd", "orgNm", "popfile", "sexCd", "specialMark")
 
-async def main(days: int, rows: int) -> int:
+
+async def main(days: int, rows: int, samples: bool) -> int:
     settings = Settings()
     if settings.lost_animal_api_key is None:
         print("LOST_ANIMAL_API_KEY 가 .env 에 없습니다.")
@@ -50,6 +58,11 @@ async def main(days: int, rows: int) -> int:
     print("필드 (값이 채워진 항목 수):")
     for name in fields:
         print(f"  {name}: {filled.get(name, 0)}")
+    if samples:
+        print("예시 값 (개인정보가 아닌 필드만, 최대 3개):")
+        for name in SAFE_FIELDS:
+            values = [str(item[name])[:60] for item in page.items if item.get(name)][:3]
+            print(f"  {name}: {values}")
     return 0
 
 
@@ -57,5 +70,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="분실동물 조회 API 연결 확인(필드 이름만 출력)")
     parser.add_argument("--days", type=int, default=14, help="오늘부터 며칠 전까지 조회할지 (기본 14)")
     parser.add_argument("--rows", type=int, default=100, help="가져올 항목 수 (최대 1000)")
+    parser.add_argument("--samples", action="store_true", help="개인정보가 아닌 필드의 예시 값도 출력")
     args = parser.parse_args()
-    raise SystemExit(asyncio.run(main(args.days, args.rows)))
+    raise SystemExit(asyncio.run(main(args.days, args.rows, args.samples)))
