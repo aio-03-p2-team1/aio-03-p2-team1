@@ -218,7 +218,10 @@ def lost_id(raw: dict[str, Any], species: str) -> str | None:
     day = _iso_date(raw.get("happenDt"))
     if not day:
         return None
-    basis = "|".join(str(raw.get(k) or "") for k in ("happenDt", "popfile", "happenAddr", "kindCd", "specialMark", "orgNm"))
+    basis = "|".join(
+        mask_contacts(raw.get(k)) if k == "specialMark" else str(raw.get(k) or "")
+        for k in ("happenDt", "popfile", "happenAddr", "kindCd", "specialMark", "orgNm")
+    )
     digest = hashlib.sha256(f"{species}|{basis}".encode("utf-8")).hexdigest()[:12]
     return f"lost-{day.replace('-', '')}-{digest}"
 

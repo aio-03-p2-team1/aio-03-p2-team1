@@ -108,6 +108,12 @@ def test_id_is_stable_and_starts_with_date():
     assert normalize_lost(raw(1, happenDt="날짜 아님"), "dog") is None  # 날짜를 못 읽으면 만들지 않는다
 
 
+def test_id_hash_uses_redacted_special_mark():
+    with_phone = raw(1, specialMark="꼬리가 짧아요. 연락 010-1234-5678")
+    already_redacted = raw(1, specialMark="꼬리가 짧아요. 연락 (연락처 생략)")
+    assert lost_id(with_phone, "dog") == lost_id(already_redacted, "dog")
+
+
 # ── 목록 캐시 ──────────────────────────────────────────
 
 
