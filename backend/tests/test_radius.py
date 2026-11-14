@@ -147,7 +147,11 @@ def test_missing_lost_place_and_old_date_skip_radius():
     assert run["radius"]["reason"] == "lost_place_missing"
     old = search(deps(animal, kakao(calls)), base(days=30))
     assert old["radius"]["reason"] == "whole_region" and old["radius"]["radius_km"] is None
-    assert calls == []  # 반경을 쓰지 않으면 카카오를 부르지 않는다
+    # 반경을 쓰지 않으면 실종 위치·관할 좌표를 조회하지 않는다.
+    # (locate 노드가 상위 후보 보호센터 주소를 조회하는 호출은 반경과 무관하므로 허용)
+    assert not any(q == LOST_PLACE or q in COORDS for q in calls)
+    for r in (run, old):
+        assert not any(c["tool"] == "kakao_geocode_regions" for c in r["tool_calls"])
 
 
 def test_center_geocode_failure_is_not_cached_and_keeps_results():
