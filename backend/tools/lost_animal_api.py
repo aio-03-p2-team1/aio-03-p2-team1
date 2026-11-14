@@ -10,10 +10,15 @@
 | 시군구 조회   | lossInfoSigungu    | serviceKey, upr_cd                |
 | 품종 조회     | lossInfoKind       | serviceKey, up_kind_cd            |
 
+응답 항목 필드(2026-11-14 실제 응답으로 확인, scripts/inspect_lost_api.py)
+  happenDt 분실 일시("2026-11-11 10:00:00.0"), happenAddr 분실 주소, happenPlace 분실 장소 설명,
+  kindCd 품종 이름("믹스견"), colorCd 색, sexCd 성별(M/F), age 나이("6살"), specialMark 특징(자유 글),
+  popfile 사진 주소(http), orgNm 관할 지자체("서울특별시 강동구")
+  개인정보 → 사용하지 않음: callName·callTel(신고자), rfidCd(마이크로칩), happenAddrDtl(상세 주소)
+  ※ 축종(개·고양이) 필드와 고유 번호가 없다 → 축종은 요청 조건(upkind)으로 붙이고, ID 는 원본 값으로 계산한다.
+
 지켜야 할 것
-- 응답 항목(item)의 필드 이름은 공식 페이지에 없다. 실제 응답으로 확인하기 전까지는
-  필드를 해석하지 않고 원본 그대로 돌려준다. 화면용 변환(신고자 개인정보 제거 포함)은
-  필드를 확인한 뒤 따로 만든다. → 이 단계에서는 이 도구를 화면·API 응답에 연결하지 않는다.
+- 화면용 변환은 normalize_lost() 한 곳에서만 한다. 개인정보 필드는 여기서 버린다(응답·캐시에 남기지 않음).
 - 인증 오류·통신 실패를 빈 결과로 바꾸지 않는다(LostAnimalApiError). 빈 결과(0건)와 실패를 구분한다.
 - 키 값을 로그·예외 메시지에 넣지 않는다.
 """
@@ -24,6 +29,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 from urllib.parse import unquote
+
+import hashlib
+import re
 
 import httpx
 
@@ -162,3 +170,81 @@ class LostAnimalApi:
             page=_int(body.get("pageNo"), page),
             rows=_int(body.get("numOfRows"), rows),
         )
+
+
+# ── 화면용 변환 ─────────────────────────────────────────────────────────
+
+# 개인정보라 화면·캐시에 남기지 않는 원본 필드
+PRIVATE_FIELDS = ("callName", "callTel", "rfidCd", "happenAddrDtl")
+
+# 특징 글에 섞인 전화번호(010-1234-5678, 01012345678, 02)123-4567, +82 10 … 등)를 가린다.
+_PHONE = re.compile(r"(?:\+?82[\s.-]?\(?0?|\(?0)\d{1,2}\)?[\s.-]?\d{3,4}[\s.-]?\d{4}")
+CONTACT_MASK = "(연락처 생략)"
+
+
+def mask_contacts(text: str | None) -> str:
+    """자유 글에서 전화번호 형태를 '(연락처 생략)'으로 바꾼다."""
+    return _PHONE.sub(CONTACT_MASK, text or "").strip()
+
+
+def _https(url: str | None) -> str | None:
+    # 사진 주소가 http 로 온다. https 배포 화면에서 막히지 않도록 https 로 바꾼다(구조동물 사진과 같은 처리).
+    if not url or not str(url).strip():
+        return None
+    url = str(url).strip()
+    return "https://" + url[len("http://"):] if url.startswith("http://") else url
+
+
+def _iso_date(value: str | None) -> str | None:
+    """'2026-11-11 10:00:00.0' 또는 '20261111' → '2026-11-11'. 형식이 다르면 None(지어내지 않음)."""
+    text = str(value or "").strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}", text):
+        return text[:10]
+    if re.match(r"^\d{8}$", text):
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return None
+
+
+def lost_id(raw: dict[str, Any], species: str) -> str | None:
+    """원본에 고유 번호가 없어 ID 를 계산한다: 'lost-YYYYMMDD-해시12자리'.
+
+    같은 신고는 항상 같은 ID 가 나온다(분실 일시·사진·주소·품종·특징으로 계산).
+    앞부분 날짜는 캐시가 비었을 때 그 날짜만 다시 조회해 상세를 찾는 데 쓴다.
+    """
+    day = _iso_date(raw.get("happenDt"))
+    if not day:
+        return None
+    basis = "|".join(str(raw.get(k) or "") for k in ("happenDt", "popfile", "happenAddr", "kindCd", "specialMark", "orgNm"))
+    digest = hashlib.sha256(f"{species}|{basis}".encode("utf-8")).hexdigest()[:12]
+    return f"lost-{day.replace('-', '')}-{digest}"
+
+
+def normalize_lost(raw: dict[str, Any], species: str) -> dict[str, Any] | None:
+    """API 원본 항목 → 게시판 글 형태. 회원 글(_public)과 같은 키를 쓰고, 개인정보 필드는 넣지 않는다.
+
+    species 는 요청에 쓴 축종(dog/cat/etc)이다. 분실 날짜를 읽을 수 없는 항목은 None(목록에서 뺀다).
+    """
+    item_id = lost_id(raw, species)
+    if not item_id:
+        return None
+    photo = _https(raw.get("popfile"))
+    description = mask_contacts(raw.get("specialMark"))
+    return {
+        "id": item_id,
+        "source": "lost_api",  # 공공데이터 분실 신고(회원 글은 "member")
+        "pet_name": "",  # 분실 신고에는 이름이 없다
+        "species": species,
+        "region": str(raw.get("orgNm") or "").strip(),  # 관할 지자체(시도 시군구)
+        "lost_place": str(raw.get("happenAddr") or "").strip(),
+        "happen_place": str(raw.get("happenPlace") or "").strip(),
+        "lost_date": _iso_date(raw.get("happenDt")),
+        "breed": str(raw.get("kindCd") or "").strip(),
+        "color": str(raw.get("colorCd") or "").strip(),
+        "sex": raw.get("sexCd") if raw.get("sexCd") in ("M", "F") else None,
+        "age": str(raw.get("age") or "").strip(),
+        "photo_url": photo,
+        "has_photo": bool(photo),
+        "description": description,
+        "summary": description if len(description) <= 80 else description[:80] + "…",
+        "mine": False,
+    }

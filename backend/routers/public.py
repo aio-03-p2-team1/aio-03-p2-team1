@@ -46,6 +46,7 @@ async def health(ctx: AppContext = Depends(get_ctx)):
         "model": s.openai_model if s.app_mode == "live" else None,
         "animal_data_source": s.animal_data_source,
         "kakao_configured": ctx.kakao.configured,
+        "lost_data_source": "api" if ctx.lost is not None else "off",  # 게시판 분실 신고 연동 여부
         "notifications": "not_implemented",
     }
 

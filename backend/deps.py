@@ -26,10 +26,11 @@ class AppContext:
     photo_llm: Any = None
     embedder: Any = None
     search_cache: Any = None
+    lost: Any = None  # 분실 신고 목록 캐시(LostFeed). LOST_ANIMAL_API_KEY 가 없으면 None
 
     async def aclose(self) -> None:
         # SearchCache uses the Redis client owned by SessionStore; close it only once.
-        resources = (self.store, self.sessions, self.animal, self.kakao, self.llm, self.photo_llm, self.embedder)
+        resources = (self.store, self.sessions, self.animal, self.kakao, self.llm, self.photo_llm, self.embedder, self.lost)
         closed: set[int] = set()
         for resource in resources:
             if resource is None or id(resource) in closed:

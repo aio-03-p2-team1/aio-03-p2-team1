@@ -4,10 +4,14 @@
 - 게시글은 사용자별 문서가 아니라 공용 소유자 키(BOARD_OWNER) 아래 kind=post 로 저장한다.
   작성자 키(로그인 사용자 owner)는 data.author 에만 두고 응답에 내보내지 않는다(mine 여부만 알려 준다).
 - 연락처는 받지 않는다. 사진은 브라우저에서 줄인 JPEG/PNG/WebP 를 data URL 로 받아 크기·형식을 검사한다.
+- 목록에는 회원 글과 공공데이터 분실 신고(ctx.lost, backend/tools/lost_feed.py)를 분실 날짜순으로 합쳐 보여 준다.
+  분실 신고는 개인정보(신고자·연락처·칩 번호·상세 주소)를 뺀 형태로만 다룬다. 회원 글 작성·삭제 규칙은 그대로다.
+- 분실 신고 호출이 실패해도 회원 글은 보여 주고, 응답의 lost.status 로 실패를 알린다(빈 결과로 위장하지 않음).
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import re
@@ -21,6 +25,7 @@ from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
 from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody
+from backend.tools.lost_animal_api import LostAnimalApiError
 
 router = APIRouter(tags=["posts"])
 
@@ -34,6 +39,9 @@ MAX_LOST_DAYS = 365
 PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _DATA_URL = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$")
 _POST_ID = re.compile(r"^[0-9a-f]{32}$")
+_LOST_ID = re.compile(r"^lost-\d{8}-[0-9a-f]{12}$")  # lost_animal_api.lost_id() 형식
+PAGE_ROWS = 20  # 목록 한 페이지 글 수
+LOST_WAIT_SECONDS = 8  # 분실 신고 첫 조회를 기다리는 최대 시간. 넘으면 회원 글 먼저 보여 주고 조회는 계속한다
 
 KST = timezone(timedelta(hours=9))
 
@@ -63,6 +71,7 @@ def _decode_photo(photo: str) -> tuple[str, bytes]:
 def _public(post_id: str, data: dict, viewer: str | None, *, detail: bool) -> dict:
     out = {
         "id": post_id,
+        "source": "member",  # 회원이 직접 쓴 글(분실 신고는 "lost_api")
         "pet_name": data["pet_name"],
         "species": data["species"],
         "region": data["region"],
@@ -107,21 +116,96 @@ async def list_posts(
     request: Request,
     species: Literal["all", "dog", "cat", "etc"] = "all",
     region: str = Query(default="", max_length=20),
+    days: int = Query(default=30, ge=1, le=90),  # 분실 날짜 기준 최근 며칠
+    page: int = Query(default=1, ge=1, le=100),
     ctx: AppContext = Depends(get_ctx),
 ):
+    """회원 글 + 분실 신고를 분실 날짜 최신순으로 합쳐 PAGE_ROWS 개씩 돌려준다.
+
+    필터·정렬·페이지 나누기는 모두 서버 메모리에서 한다. 분실 신고는 기간별 캐시(LostFeed)에서 꺼내므로
+    필터를 바꾸거나 페이지를 넘겨도 외부 API 를 다시 부르지 않는다.
+    """
+    end = kst_today()
+    start = end - timedelta(days=days)
+
+    # 회원 글 조회(DB)와 분실 신고 조회(외부 API·캐시)를 동시에 시작한다.
+    member_task = asyncio.create_task(ctx.store.list(BOARD_OWNER, KIND, LIST_SCAN))
+    lost_items, lost_info = await _lost_items(ctx, start, end)
+    rows = await member_task
     viewer = await _viewer(request, ctx)
-    rows = await ctx.store.list(BOARD_OWNER, KIND, LIST_SCAN)
-    items = []
-    for row in rows:
-        data = row["data"]
-        if species != "all" and data["species"] != species:
-            continue
-        if region and data["region"] != region:
-            continue
-        items.append(_public(row["id"], data, viewer, detail=False))
-        if len(items) >= LIST_LIMIT:
-            break
-    return {"items": items, "count": len(items), "scanned": len(rows), "scan_limit": LIST_SCAN}
+
+    def keep(item: dict) -> bool:
+        if species != "all" and item["species"] != species:
+            return False
+        # 회원 글 region 은 시도 이름, 분실 신고 region 은 "시도 시군구" → 앞부분으로 비교한다.
+        if region and not str(item.get("region") or "").startswith(region):
+            return False
+        return bool(item.get("lost_date")) and item["lost_date"] >= start.isoformat()
+
+    members = [_public(r["id"], r["data"], viewer, detail=False) for r in rows]
+    merged = [i for i in members if keep(i)] + [i for i in lost_items if keep(i)]
+    # 분실 날짜 최신순. 같은 날이면 회원 글을 먼저 보여 준다.
+    merged.sort(key=lambda i: (i["lost_date"], i["source"] == "member"), reverse=True)
+
+    pages = max(1, -(-len(merged) // PAGE_ROWS))
+    page = min(page, pages)
+    chunk = merged[(page - 1) * PAGE_ROWS: page * PAGE_ROWS]
+    return {
+        "items": [_list_view(i) for i in chunk],
+        "count": len(merged),  # 조건에 맞는 전체 글 수
+        "member_count": sum(1 for i in merged if i["source"] == "member"),
+        "lost_count": sum(1 for i in merged if i["source"] == "lost_api"),
+        "page": page,
+        "pages": pages,
+        "rows": PAGE_ROWS,
+        "period": {"start": start.isoformat(), "end": end.isoformat(), "days": days},
+        "lost": lost_info,
+        "scanned": len(rows),
+        "scan_limit": LIST_SCAN,
+    }
+
+
+def _list_view(item: dict) -> dict:
+    """목록 카드에 필요 없는 긴 필드(상세 설명)는 빼고 보낸다(응답 크기 줄이기)."""
+    return {k: v for k, v in item.items() if k != "description"}
+
+
+async def _lost_items(ctx: AppContext, start: date, end: date) -> tuple[list[dict], dict]:
+    """분실 신고 목록과 상태. 키가 없거나 호출이 실패하면 빈 목록 + 상태(status)로 알린다."""
+    if ctx.lost is None:
+        return [], {"status": "not_configured"}
+    try:
+        # shield: 기다리기를 그만둬도 조회 자체는 계속 진행돼 캐시에 들어간다(다음 새로고침에서 바로 보임).
+        task = asyncio.ensure_future(ctx.lost.snapshot(start, end))
+        task.add_done_callback(_consume_error)
+        snap = await asyncio.wait_for(asyncio.shield(task), LOST_WAIT_SECONDS)
+    except asyncio.TimeoutError:
+        return [], {"status": "loading", "message": "공공데이터 분실 신고를 불러오는 중이에요. 잠시 후 새로고침해 주세요."}
+    except LostAnimalApiError as exc:
+        return [], {"status": "unavailable", "error_code": exc.code,
+                    "message": "공공데이터 분실 신고를 불러오지 못했어요. 회원 글만 보여 드려요."}
+    return snap.items, {"status": "ok", "total_count": snap.total_count, "received": len(snap.items),
+                        "truncated": snap.truncated}
+
+
+def _consume_error(task: asyncio.Task) -> None:
+    # 기다리기를 그만둔 뒤 조회가 실패해도 'exception was never retrieved' 경고가 남지 않게 한다.
+    if not task.cancelled():
+        task.exception()
+
+
+@router.get("/posts/lost/{lost_id}")
+async def get_lost_report(lost_id: str, ctx: AppContext = Depends(get_ctx)):
+    """공공데이터 분실 신고 상세. 개인정보가 빠진 형태만 돌려준다."""
+    if ctx.lost is None or not _LOST_ID.match(lost_id):
+        raise ApiError(404, "post_not_found", "게시글을 찾을 수 없습니다.")
+    try:
+        item = await ctx.lost.get(lost_id)
+    except LostAnimalApiError as exc:
+        raise ApiError(502, exc.code, "공공데이터 분실 신고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.")
+    if not item:
+        raise ApiError(404, "post_not_found", "게시글을 찾을 수 없습니다.")
+    return item
 
 
 @router.get("/posts/mine")
