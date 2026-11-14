@@ -23,6 +23,9 @@ class KakaoGeocoder:
         self._key = rest_key
         self._client = httpx.AsyncClient(timeout=timeout, transport=transport)
 
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
     @property
     def configured(self) -> bool:
         return bool(self._key)

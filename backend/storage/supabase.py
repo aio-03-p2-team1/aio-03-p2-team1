@@ -32,6 +32,9 @@ class SupabaseStore:
             },
         )
 
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
     async def _request(self, method: str, params: dict, json_body=None, prefer: str | None = None):
         headers = {"Prefer": prefer} if prefer else {}
         try:

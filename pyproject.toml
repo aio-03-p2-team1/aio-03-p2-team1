@@ -22,6 +22,7 @@ dev = [
     "pytest>=9.2",
     "fakeredis>=2.40",
     "respx>=0.23",
+    "ruff>=0.11",
 ]
 
 [tool.uv]
@@ -31,3 +32,10 @@ package = false
 testpaths = ["tests"]
 addopts = "-q"
 pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+src = ["backend", "tests"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

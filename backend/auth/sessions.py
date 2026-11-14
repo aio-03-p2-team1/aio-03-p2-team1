@@ -35,6 +35,9 @@ class SessionStore:
         self._redis = redis
         self._ttl = ttl_seconds
 
+    async def aclose(self) -> None:
+        await self._redis.aclose()
+
     async def create(self, user: SessionUser) -> str:
         token = secrets.token_urlsafe(32)
         payload = json.dumps({"owner": user.owner, "email": user.email, "name": user.name}, ensure_ascii=False)

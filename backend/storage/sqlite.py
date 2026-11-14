@@ -43,6 +43,12 @@ class SqliteStore:
 
         return await asyncio.to_thread(call)
 
+    async def aclose(self) -> None:
+        # Closing a SQLite connection in asyncio.to_thread can leave the worker
+        # waiting on SQLite's connection mutex; serialize and close inline.
+        with self._lock:
+            self._conn.close()
+
     async def get(self, owner, kind, doc_id):
         check_kind(kind)
 

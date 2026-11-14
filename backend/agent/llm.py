@@ -91,14 +91,14 @@ def classify(status: int, body: dict | None) -> str:
 class FeatureExtractor:
     def __init__(self, api_key: str, model: str, timeout: float = 30, transport=None, client=None):
         self.model = model
-        http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if transport is not None else None
-        self._client = client if client is not None else ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            timeout=timeout,
-            max_retries=0,
-            http_async_client=http_client,
+        self._http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if client is None else None
+        self._client = client or ChatOpenAI(
+            model=model, api_key=api_key, timeout=timeout, max_retries=0, http_async_client=self._http_client
         )
+
+    async def aclose(self) -> None:
+        if self._http_client is not None:
+            await self._http_client.aclose()
 
     async def _invoke_structured(self, messages: list, schema: type[BaseModel]) -> BaseModel:
         try:

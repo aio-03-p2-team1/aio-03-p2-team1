@@ -147,6 +147,9 @@ class AnimalApi:
         self._client = httpx.AsyncClient(base_url=base_url.rstrip("/"), timeout=timeout, transport=transport)
         self._regions: tuple[float, list[Region]] | None = None
 
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
     async def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         query = {"serviceKey": self._key, "_type": "json", **{k: v for k, v in params.items() if v is not None}}
         try:

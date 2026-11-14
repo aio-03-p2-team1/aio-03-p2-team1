@@ -12,15 +12,19 @@ class Embedder:
     model = MODEL
 
     def __init__(self, key, timeout=60, transport=None, client=None):
-        http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if transport is not None else None
+        self._http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if client is None else None
         self.client = client or OpenAIEmbeddings(
             model=MODEL,
             dimensions=DIMENSIONS,
             api_key=key,
             request_timeout=timeout,
             max_retries=0,
-            http_async_client=http_client,
+            http_async_client=self._http_client,
         )
+
+    async def aclose(self):
+        if self._http_client is not None:
+            await self._http_client.aclose()
 
     async def embed(self, texts):
         vectors = []

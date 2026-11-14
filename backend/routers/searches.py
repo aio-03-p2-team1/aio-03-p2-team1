@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from backend.agent.llm import LlmError
 from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
 from backend.agent.runner import run_search
+from backend.api_schemas import SearchCriteria
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
@@ -19,22 +20,6 @@ router = APIRouter(tags=["searches"])
 
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
-
-
-class SearchCriteria(BaseModel):
-    species: str | None = Field(default=None, max_length=10)
-    region: str | None = Field(default=None, max_length=30)
-    start_date: str | None = Field(default=None, max_length=10)
-    end_date: str | None = Field(default=None, max_length=10)
-    lost_date: str | None = Field(default=None, max_length=10)
-    pet_name: str | None = Field(default=None, max_length=30)
-    breed: str | None = Field(default=None, max_length=40)
-    color: str | None = Field(default=None, max_length=40)
-    sex: str | None = Field(default=None, max_length=4)
-    age: str | None = Field(default=None, max_length=20)
-    size: str | None = Field(default=None, max_length=20)
-    lost_place: str | None = Field(default=None, max_length=100)
-    description: str | None = Field(default=None, max_length=1000)
 
 
 class SearchBody(BaseModel):

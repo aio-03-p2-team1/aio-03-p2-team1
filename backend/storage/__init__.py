@@ -35,6 +35,8 @@ class Store(Protocol):
 
     async def delete(self, owner: str, kind: str, doc_id: str) -> bool: ...
 
+    async def aclose(self) -> None: ...
+
 
 def check_kind(kind: str) -> None:
     if kind not in KINDS:

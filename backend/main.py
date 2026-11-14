@@ -90,7 +90,12 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             settings.storage_backend,
             settings.animal_data_source,
         )
-        yield
+        try:
+            yield
+        finally:
+            ctx = getattr(app.state, "ctx", None)
+            if ctx is not None:
+                await ctx.aclose()
 
     app = FastAPI(title="다시 만나 API", version="0.1.0", lifespan=lifespan, docs_url=API_PREFIX + "/docs", openapi_url=API_PREFIX + "/openapi.json")
     app.state.ctx = ctx
