@@ -68,7 +68,7 @@ def test_empty_and_unclassified_values_have_no_tokens():
 
 
 def test_every_tsv_value_is_tokenized_or_explicitly_excluded():
-    path = Path(__file__).parents[1] / "docs" / "data" / "animal-color-combinations.tsv"
+    path = Path(__file__).parents[2] / "docs" / "data" / "animal-color-combinations.tsv"
     with path.open(encoding="utf-8", newline="") as source:
         rows = list(csv.DictReader(source, delimiter="\t"))
 
