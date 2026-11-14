@@ -133,7 +133,7 @@ sequenceDiagram
 - 체크포인트: 한 요청 안에서 그래프가 끝까지 실행되고, 추가 질문 상태는 `thread` 문서에 저장되므로 재시작 후 같은 `thread_id` 로 이어 간다.
 - 요약 전략(토큰 예산·요약 임계값)은 **미구현**. 현재 LLM 입력은 단일 서술이라 요약이 필요하지 않다. 대화형 입력을 늘리면 추가한다.
 - 특징·사진 분석은 `ChatOpenAI`, 임베딩은 `OpenAIEmbeddings`를 사용한다. 각 어댑터 생성자는 LangChain 호환 클라이언트를 선택적으로 받아 테스트에서 모의 클라이언트를 주입할 수 있다. 기본 런타임은 API 키와 timeout으로 실제 LangChain 클라이언트를 구성한다.
-- 모델 요청·출력 규격은 `backend/agent/schema.py`의 Pydantic 모델로 정의한다. 요청은 모델 호출 전 검증하고, 응답은 `with_structured_output(..., method="json_schema", strict=True)`로 생성한 뒤 Pydantic 모델로 다시 검증한다. 특징 추출기 메서드는 dict 대신 응답 모델을 반환하며, 그래프 상태·HTTP 응답 경계에서만 직렬화한다.
+- 모델 입출력 규격은 `backend/schemas/llm.py`, HTTP 요청·응답 규격은 `backend/schemas/api.py`의 Pydantic 모델로 정의한다. LLM 응답은 `with_structured_output(..., method="json_schema", strict=True)`로 생성한 뒤 검증하고, 사진 분석 결과는 HTTP 응답 모델로 변환할 때 사용자 안내 문구를 구성한다. 그래프 상태·HTTP 응답 경계에서만 dict로 직렬화한다.
 
 ## 5.1 LangSmith 추적
 
@@ -204,7 +204,7 @@ flowchart LR
 - 브라우저에서 JPG·PNG·WEBP, 8MB 이하 파일을 고르고 base64 JSON으로 `POST /photo-analysis`에 보낸다. 서버는 인증 사용자별 분당 5회로 제한한다.
 - `backend/agent/photo.py`가 Pillow로 실제 포맷·파일 무결성을 확인하고, 픽셀 수가 2,000만을 넘으면 거부한다. 파일은 처리 후 저장하지 않는다.
 - `backend/agent/llm.py`의 `PHOTO_SYSTEM_PROMPT`가 동물 존재, 외형 식별 가능 여부, 특정 동물의 중심·구분 가능 여부를 각각 판단한다. 색상 허용값은 `schema.py`의 `Color` 리터럴에서 템플릿으로 주입하며, 여러 색상과 각각의 confidence를 반환하도록 한다. 세 적합성 조건과 각 자동 입력 특징 신뢰도가 0.8 이상인 값만 반환한다.
-- 프롬프트 버전은 글 특징 추출 `feature-extract-v3`, 사진 분석 `photo-feature-v3`다. 사용자 서술·사진 속 문구를 명령으로 취급하지 않고, 불확실한 품종·성별·색상은 비우도록 안내한다. 사진 신뢰도는 근거 강도 기준을 제시하고 0.8 미만 값을 자동 입력에서 제외한다. 사진 분석 `message`는 모델 응답에서 받지 않고 서버가 판정 사유로 만들며, 검색 화면이 부적합한 사진의 안내로 표시한다.
+- 프롬프트 버전은 글 특징 추출 `feature-extract-v3`, 사진 분석 `photo-feature-v3`다. 사용자 서술·사진 속 문구를 명령으로 취급하지 않고, 불확실한 품종·성별·색상은 비우도록 안내한다. 사진 신뢰도는 근거 강도 기준을 제시하고 0.8 미만 값을 자동 입력에서 제외한다. 모델 경계는 구조화 응답과 정규화된 판정 사유 코드를 반환하고, HTTP 경계가 이를 API의 `message`로 변환해 검색 화면에 전달한다.
 - 분석 특징은 검색 폼에 입력되고 사용자가 수정할 수 있다. 낮은 신뢰도·분석 오류는 업로드 영역 아래에 표시한다. 폼 입력에 성공하면 `PhotoFeedbackPopup`이 하단 중앙에 나타난다(데스크톱 50vw, 모바일 80vw). 좋아요·싫어요 값은 현재 화면 상태에만 반영하고 서버에 저장하지 않는다.
 - 사진 분석에는 `OPENAI_API_KEY`가 필요하며, local 모드에서도 키가 설정된 경우 사용할 수 있다. 설정이 없으면 503 오류를 반환한다.
 

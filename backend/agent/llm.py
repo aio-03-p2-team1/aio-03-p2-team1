@@ -8,14 +8,14 @@ import httpx
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
 
-from backend.agent.schema import (
+from backend.schemas.common import Color
+from backend.schemas.llm import (
     FeatureExtractionRequest,
     FeatureExtractionModelResponse,
-    FeatureExtractionResponse,
+    FeatureExtractionResult,
     PhotoAnalysisRequest,
     PhotoAnalysisModelResponse,
-    PhotoAnalysisResponse,
-    Color,
+    PhotoAnalysisResult,
 )
 
 log = logging.getLogger("dasimanna.llm")
@@ -136,7 +136,7 @@ class FeatureExtractor:
             raise LlmError("llm_response") from exc
         return parsed
 
-    async def extract(self, description: str) -> FeatureExtractionResponse:
+    async def extract(self, description: str) -> FeatureExtractionResult:
         try:
             request = FeatureExtractionRequest(description=description)
         except ValidationError as exc:
@@ -152,7 +152,7 @@ class FeatureExtractor:
         # 설명에 실제로 등장하지 않는 품종은 버린다(근거 없는 특징 생성 방지).
         if breed and breed.replace(" ", "") not in description.replace(" ", ""):
             breed = ""
-        return FeatureExtractionResponse(
+        return FeatureExtractionResult(
             colors=colors,
             breed=breed,
             sex=sex,
@@ -161,7 +161,7 @@ class FeatureExtractor:
             prompt_version=PROMPT_VERSION,
         )
 
-    async def analyze_photo(self, image: bytes, mime_type: str) -> PhotoAnalysisResponse:
+    async def analyze_photo(self, image: bytes, mime_type: str) -> PhotoAnalysisResult:
         try:
             request = PhotoAnalysisRequest(image=image, mime_type=mime_type)
         except ValidationError as exc:
@@ -203,24 +203,24 @@ class FeatureExtractor:
         ][:6]
         breed = data.breed[:40] if suitable and confident("breed") else ""
         if not animal_present:
-            message = "사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요."
+            reason_code = "animal_not_detected"
         elif not identifiable:
-            message = "동물의 외형을 알아보기 어려워요. 더 선명한 사진을 올려 주세요."
+            reason_code = "appearance_unclear"
         elif not center_subject_clear:
-            message = "찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요."
+            reason_code = "subject_not_distinct"
         else:
-            message = ""
-        return PhotoAnalysisResponse(
+            reason_code = None
+        return PhotoAnalysisResult(
             animal_present=animal_present,
             identifiable=identifiable,
             center_subject_clear=center_subject_clear,
             suitable=suitable,
+            reason_code=reason_code,
             species=species if suitable else "",
             colors=colors if suitable else [],
             breed=breed if suitable else "",
             sex=sex if suitable else "",
             marks=marks if suitable else [],
-            message=message,
             model=self.model,
             prompt_version=PHOTO_PROMPT_VERSION,
         )

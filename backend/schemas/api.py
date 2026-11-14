@@ -1,8 +1,10 @@
-"""Pydantic schemas shared by the HTTP API routers."""
+"""Pydantic schemas for HTTP requests and responses."""
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
+
+from backend.schemas.common import Color, Sex, Species, StrictSchema
 
 
 class SearchCriteria(BaseModel):
@@ -19,3 +21,21 @@ class SearchCriteria(BaseModel):
     size: str | None = Field(default=None, max_length=20)
     lost_place: str | None = Field(default=None, max_length=100)
     description: str | None = Field(default=None, max_length=1000)
+
+
+class PhotoAnalysisResponse(StrictSchema):
+    """Public photo analysis response; internal reason codes are localized by the API."""
+
+    animal_present: bool
+    identifiable: bool
+    center_subject_clear: bool
+    suitable: bool
+    species: Species
+    colors: list[Color]
+    breed: str
+    sex: Sex
+    marks: list[str]
+    message: str
+    model: str
+    prompt_version: str
+    analysis_ms: int

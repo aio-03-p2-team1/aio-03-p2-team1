@@ -1,18 +1,12 @@
-"""Pydantic contracts for model inputs and structured model outputs."""
+"""Validated inputs and outputs at the language model boundary."""
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
-Color = Literal["갈색", "흰색", "검정", "회색", "크림", "노랑", "주황", "황갈색", "삼색", "고등어"]
-Sex = Literal["M", "F", ""]
-Species = Literal["dog", "cat", "etc", ""]
-
-
-class StrictSchema(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+from backend.schemas.common import Color, Sex, Species, StrictSchema
 
 
 class FeatureExtractionRequest(StrictSchema):
@@ -39,7 +33,7 @@ class FeatureExtractionModelResponse(StrictSchema):
     marks: list[str]
 
 
-class FeatureExtractionResponse(StrictSchema):
+class FeatureExtractionResult(StrictSchema):
     colors: list[Color]
     breed: str
     sex: Sex
@@ -87,18 +81,18 @@ class PhotoAnalysisModelResponse(StrictSchema):
     marks: list[PhotoFeature]
 
 
-class PhotoAnalysisResponse(StrictSchema):
-    """Validated API result; model confidence internals are intentionally omitted."""
+class PhotoAnalysisResult(StrictSchema):
+    """Normalized analysis result before it is shaped for the HTTP API."""
 
     animal_present: bool
     identifiable: bool
     center_subject_clear: bool
     suitable: bool
+    reason_code: Literal["animal_not_detected", "appearance_unclear", "subject_not_distinct"] | None
     species: Species
     colors: list[Color]
     breed: str
     sex: Sex
     marks: list[str]
-    message: str
     model: str
     prompt_version: str

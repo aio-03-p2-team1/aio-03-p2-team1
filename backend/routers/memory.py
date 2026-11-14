@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from backend.api_schemas import SearchCriteria
+from backend.schemas.api import SearchCriteria
 from backend.auth.sessions import SessionUser
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError

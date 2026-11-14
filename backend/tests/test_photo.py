@@ -9,7 +9,7 @@ from PIL import Image
 
 from backend.agent.llm import LlmError
 from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
-from backend.agent.schema import PhotoAnalysisResponse
+from backend.schemas.llm import PhotoAnalysisResult
 from backend.main import create_app
 
 from .conftest import ORIGIN, build_ctx, signup
@@ -71,17 +71,17 @@ class FakePhotoAnalyzer:
         self.calls.append((image_data, mime_type))
         if self.error:
             raise self.error
-        return PhotoAnalysisResponse(
+        return PhotoAnalysisResult(
             animal_present=False,
             identifiable=False,
             center_subject_clear=False,
             suitable=False,
+            reason_code="animal_not_detected",
             species="",
             colors=[],
             breed="",
             sex="",
             marks=[],
-            message="사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요.",
             model="test-model",
             prompt_version="photo-feature-v3",
         )

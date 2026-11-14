@@ -11,7 +11,8 @@ from backend.agent.llm import (
     FeatureExtractor,
     LlmError,
 )
-from backend.agent.schema import PhotoAnalysisModelResponse, PhotoAnalysisResponse
+from backend.schemas.api import PhotoAnalysisResponse
+from backend.schemas.llm import PhotoAnalysisModelResponse, PhotoAnalysisResult
 
 
 class FakeMessage:
@@ -94,6 +95,7 @@ def test_color_value_template_is_rendered_into_both_prompts():
     assert COLOR_VALUES_TEXT in PHOTO_SYSTEM_PROMPT
     assert "message" not in PHOTO_SYSTEM_PROMPT
     assert "message" not in PhotoAnalysisModelResponse.model_fields
+    assert "message" not in PhotoAnalysisResult.model_fields
     assert "message" in PhotoAnalysisResponse.model_fields
 
 
@@ -119,7 +121,7 @@ def test_photo_message_is_derived_from_suitability_reason():
     result = asyncio.run(extractor(FakeChatClient(payload)).analyze_photo(b"image", "image/jpeg"))
 
     assert not result.suitable
-    assert result.message == "찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요."
+    assert result.reason_code == "subject_not_distinct"
 
 
 @pytest.mark.parametrize(
