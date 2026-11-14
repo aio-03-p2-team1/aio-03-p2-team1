@@ -33,7 +33,7 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
     """
     merged: dict[str, Any] = {}
     origin: dict[str, str] = {}
-    keys = {"species", "region", "start_date", "end_date", *OPTIONAL_FIELDS}
+    keys = {"species", "region", "start_date", "end_date", "radius_step", *OPTIONAL_FIELDS}
     for key in keys:
         for source_name, source in (("request", current), ("session", session or {})):
             value = _clean(source.get(key))
@@ -92,6 +92,10 @@ def normalize(raw: dict[str, Any], today: date | None = None) -> tuple[dict[str,
         value = _clean(raw.get(key))
         if value:
             criteria[key] = value[:500]
+    # 반경 단계: 사용자가 넓히기에 동의했을 때만 들어온다(0~3). 장기 기억에서는 채우지 않는다.
+    step_raw = _clean(raw.get("radius_step"))
+    if step_raw.isdigit() and 0 <= int(step_raw) <= 3:
+        criteria["radius_step"] = int(step_raw)
     if criteria.get("sex") and criteria["sex"] not in ("M", "F"):
         criteria["sex"] = {"수컷": "M", "남아": "M", "암컷": "F", "여아": "F"}.get(criteria["sex"], "")
         if not criteria["sex"]:

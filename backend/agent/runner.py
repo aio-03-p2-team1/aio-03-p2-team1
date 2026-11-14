@@ -19,6 +19,7 @@ from backend.agent import criteria as crit
 from backend.agent.search_cache import condition_key
 from backend.agent.embeddings import DIMENSIONS
 from backend.agent.llm import PROMPT_VERSION
+from backend.agent.radius import RADIUS_VERSION
 from backend.errors import ApiError
 
 RUN_FIELDS = (
@@ -26,7 +27,7 @@ RUN_FIELDS = (
     "memory_used", "llm_features", "context_summary", "plan", "tool_calls", "candidates", "issues",
     "reflection_enabled", "reflection_count", "reflections", "retry_count", "scope", "error", "trace",
     "data_source",
-    "ranking_method", "cache_key", "cache_hit", "snapshot_id",
+    "ranking_method", "cache_key", "cache_hit", "snapshot_id", "radius",
 )
 
 
@@ -61,7 +62,9 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     cache = deps.get("search_cache")
     key = condition_key(owner, normalized, source=deps["animal"].source,
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
-                               "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION},
+                               "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION,
+                               # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
+                               "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off"},
                         reflection=request.get("reflection_enabled", True))
     cache_hit = False
 

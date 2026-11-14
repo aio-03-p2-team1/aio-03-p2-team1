@@ -36,6 +36,7 @@ class SearchCriteria(BaseModel):
     age: str | None = Field(default=None, max_length=20)
     size: str | None = Field(default=None, max_length=20)
     lost_place: str | None = Field(default=None, max_length=100)
+    radius_step: int | None = Field(default=None, ge=0, le=3)  # 반경 넓히기에 동의한 단계
     description: str | None = Field(default=None, max_length=1000)
 
 

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
+import { distanceLabel, radiusText, widenRadiusAction } from '../lib/radius.js'
+import RadiusMap from '../components/RadiusMap.jsx'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import Pagination from '../components/Pagination.jsx'
 import { useSearchScroll, useSearchViewState } from '../lib/searchView.jsx'
@@ -182,6 +184,11 @@ export default function SearchPage() {
     submit({ region: '전체' }, run.thread_id)
   }
 
+  // 반경 넓히기: 사용자가 버튼을 눌러 동의한 경우에만 다음 단계로 같은 세션에서 다시 찾는다.
+  function widenRadius(step) {
+    submit({ radius_step: step }, run.thread_id)
+  }
+
   function openHistory(runId) {
     setParams({ run: runId, page: '1' })
   }
@@ -270,7 +277,7 @@ export default function SearchPage() {
             <p>{run?.scope ? scopeText(run.scope) : '최대 1,000건을 비교해 상위 300건을 페이지로 보여 드려요.'}</p>
           </div>
         </div>
-        <Results run={run} busy={busy} error={error} onWiden={widenRegion} />
+        <Results run={run} busy={busy} error={error} onWiden={widenRegion} onWidenRadius={widenRadius} />
         {!error && run?.pagination && (
           <Pagination page={run.pagination.page} pages={run.pagination.pages} disabled={busy}
             onChange={(page) => setParams({ run: run.run_id, page: String(page) })} />
@@ -309,7 +316,7 @@ function readAsBase64(file) {
 }
 
 
-function Results({ run, busy, error, onWiden }) {
+function Results({ run, busy, error, onWiden, onWidenRadius }) {
   if (busy) return <p className="state-box">공고를 조회하고 후보를 비교하고 있어요…</p>
   if (error) {
     return (
@@ -328,16 +335,26 @@ function Results({ run, busy, error, onWiden }) {
     </p>
   )
 
+  const radius = run.radius || run.scope?.radius
   if (run.status === 'awaiting_input') {
     const widen = run.questions?.some((q) => q.field === 'region' && run.scope)
+    const widenRadiusStep = widenRadiusAction(run.questions, radius)
     return (
-      <div className="panel question-panel" role="status">
-        <strong>조금만 더 알려 주세요</strong>
-        <ul>{run.questions?.map((q) => <li key={q.field + q.message}>{q.message}</li>)}</ul>
-        <p className="fineprint">위 입력란을 채우고 다시 검색하면 앞서 입력한 조건과 합쳐서 이어서 찾아요.</p>
-        {widen && <button type="button" className="primary-button" onClick={onWiden}>전체 지역으로 넓혀 찾기</button>}
-        {meta}
-      </div>
+      <>
+        <RadiusMap radius={radius} />
+        <div className="panel question-panel" role="status">
+          <strong>조금만 더 알려 주세요</strong>
+          <ul>{run.questions?.map((q) => <li key={q.field + q.message}>{q.message}</li>)}</ul>
+          <p className="fineprint">위 입력란을 채우고 다시 검색하면 앞서 입력한 조건과 합쳐서 이어서 찾아요.</p>
+          {widenRadiusStep && (
+            <button type="button" className="primary-button" onClick={() => onWidenRadius(widenRadiusStep.step)}>
+              {widenRadiusStep.label}
+            </button>
+          )}
+          {widen && <button type="button" className="primary-button" onClick={onWiden}>전체 지역으로 넓혀 찾기</button>}
+          {meta}
+        </div>
+      </>
     )
   }
 
@@ -353,6 +370,8 @@ function Results({ run, busy, error, onWiden }) {
       {run.status === 'partial' && !run.error && (
         <p className="state-box">검증에서 해결하지 못한 문제가 있어 부분 결과로 표시해요.</p>
       )}
+      <RadiusMap radius={radius} />
+      {radius && <p className="radius-summary">{radiusText(radius)}</p>}
       {run.status !== 'failed' && candidates.length === 0 && (
         <p className="empty-results">
           이 조건에서는 닮은 후보를 찾지 못했어요. 보호 중인 동물이 없다는 뜻은 아니에요. 지역·기간을 바꿔 다시 찾아보세요.
@@ -366,7 +385,7 @@ function Results({ run, busy, error, onWiden }) {
               <span className="result-card-body">
                 <span className="sample-label">{c.rank}순위 · {run.ranking_method === 'rrf' ? `RRF ${c.score.toFixed(5)}` : `점수 ${c.score}`}</span>
                 <strong>{noticeTitle(c)}</strong>
-                <small>{c.happen_place || '발견 장소 미확인'} · {formatDate(c.happen_date)}</small>
+                <small>{c.happen_place || '발견 장소 미확인'} · {formatDate(c.happen_date)}{distanceLabel(c) && ` · ${distanceLabel(c)}`}</small>
                 <small>{c.evidence?.matched?.length ? c.evidence.matched.join(' · ') : '일치 근거 없음(조건 범위 안의 공고)'}</small>
               </span>
             </Link>
