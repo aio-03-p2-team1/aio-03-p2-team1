@@ -11,7 +11,7 @@ import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 import { useToast } from '../components/Toast.jsx'
-import { photoAnalysisError, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
+import { photoAnalysisError, photoErrorMessage, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
 import { useRegions } from './useRegions.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
@@ -85,7 +85,7 @@ export default function SearchPage() {
     if (selectionError) {
       setPhotoFeedbackOpen(false)
       setPhotoAnalyzing(false)
-      return setPhotoMessage(selectionError)
+      return setPhotoMessage(photoErrorMessage(selectionError))
     }
     const oldAuto = photoFeatureText
     const oldSpecies = photoSpecies
@@ -135,7 +135,7 @@ export default function SearchPage() {
       setPhotoSpecies(result.species || '')
       setPhotoFeedbackOpen(true)
     } catch (err) {
-      if (requestId === photoRequestId.current) setPhotoMessage(photoAnalysisError(err))
+      if (requestId === photoRequestId.current) setPhotoMessage(photoErrorMessage(photoAnalysisError(err)))
     } finally {
       if (requestId === photoRequestId.current) setPhotoAnalyzing(false)
     }
