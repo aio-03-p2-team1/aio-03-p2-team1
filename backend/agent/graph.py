@@ -9,6 +9,7 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
+from backend.agent.radius import apply_radius
 from backend.agent.ranking import TOP_K, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
 from backend.tools.animal_api import AnimalApiError, short_region_name
@@ -38,6 +39,14 @@ ERROR_MESSAGES = {
     "embedding_not_configured": "검색 임베딩 설정이 없습니다. OPENAI_API_KEY 설정이 필요합니다.",
     "unknown_region": "지원하지 않는 지역입니다.",
     "tool_budget": "도구 호출 한도에 도달해 검색을 멈췄습니다.",
+}
+
+RADIUS_REASON_TEXT = {
+    "whole_region": "반경 없이 조회 지역 전체",
+    "lost_place_missing": "실종 위치가 없어 반경을 적용하지 않음",
+    "not_configured": "지도 키가 없어 반경을 적용하지 않음",
+    "center_unavailable": "실종 위치 좌표를 찾지 못해 반경을 적용하지 않음",
+    "no_items": "조회된 공고가 없어 반경을 적용하지 않음",
 }
 
 
@@ -83,6 +92,7 @@ async def ask(state: SearchState, config) -> dict:
             "total_count": state.get("total_count", 0),
             "fetched_at": state.get("fetched_at"),
             "data_source": state.get("data_source"),
+            "radius": state.get("radius"),
         }
     return update
 
@@ -257,9 +267,33 @@ async def execute(state: SearchState, config) -> dict:
     }
 
 
+async def radius_node(state: SearchState, config) -> dict:
+    """실종 위치 기준 반경 안 공고만 남긴다(반경 밖은 임베딩하지 않음). 좌표 실패는 거리 미확인으로 남긴다."""
+    if state.get("error"):
+        return {"trace": ["radius"]}
+    deps = _deps(config)
+    result = await apply_radius(deps["kakao"], state["criteria"], state.get("raw_items") or [])
+    radius = result["radius"]
+    if not radius.get("applied"):
+        radius = {**radius, "reason_text": RADIUS_REASON_TEXT.get(radius.get("reason"), "")}
+    update: dict[str, Any] = {"radius": radius, "radius_items": result["items"], "trace": ["radius"]}
+    if result["call"]:
+        call = result["call"]
+        update["tool_calls"] = [
+            _call(
+                "kakao_geocode_regions",
+                {"lost_place": "set", "radius_km": radius.get("radius_km"), "requests": call.get("requests", 0)},
+                call.get("outcome", "ok"),
+                "실종 위치와 공고 관할 시군구를 좌표로 바꿔 반경 안 공고만 남김",
+                cached=call.get("cached", 0),
+            )
+        ]
+    return update
+
+
 async def rank_node(state: SearchState, config) -> dict:
     fix = state.get("pending_fix") or {}
-    items = state.get("raw_items") or []
+    items = state.get("radius_items") if state.get("radius_items") is not None else (state.get("raw_items") or [])
     if fix.get("dedupe"):
         seen: set[str] = set()
         unique = []
@@ -279,12 +313,14 @@ async def rank_node(state: SearchState, config) -> dict:
             if not embedder and deps["animal"].source != "sample":
                 raise LlmError("embedding_not_configured")
             if embedder:
-                if scores is None:
-                    vectors = await embedder.embed([feature_text(state["criteria"])] + [feature_text(item) for item in items])
-                    if len(vectors) != len(items) + 1:
+                # 아직 점수가 없는 공고만 임베딩한다(반경 안 공고만 대상).
+                pending = [item for item in items if item["id"] not in (scores or {})]
+                if pending:
+                    vectors = await embedder.embed([feature_text(state["criteria"])] + [feature_text(item) for item in pending])
+                    if len(vectors) != len(pending) + 1:
                         raise LlmError("llm_response")
-                    scores = {item["id"]: cosine(vectors[0], vector) for item, vector in zip(items, vectors[1:])}
-                    calls = [_call("embedding_search", {"model": embedder.model, "documents": len(items)}, "ok", "전체 공고와 검색 조건 임베딩")]
+                    scores = {**(scores or {}), **{item["id"]: cosine(vectors[0], vector) for item, vector in zip(pending, vectors[1:])}}
+                    calls = [_call("embedding_search", {"model": embedder.model, "documents": len(pending)}, "ok", "반경 안 공고와 검색 조건 임베딩")]
                 candidates = fuse_rrf(candidates, scores)
         except (LlmError, ValueError) as exc:
             code = exc.code if isinstance(exc, LlmError) else "llm_response"
@@ -315,7 +351,12 @@ async def validate(state: SearchState, config) -> dict:
     missing_id = [c for c in candidates if not c.get("id")]
     if missing_id:
         issues.append({"type": "field_missing", "field": "desertionNo", "count": len(missing_id)})
-    if not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
+    radius = state.get("radius") or {}
+    # 반경 안에는 없지만 반경 밖에 조회된 공고가 있으면, 반경을 넓힐지 사용자에게 묻는다.
+    if not candidates and radius.get("applied") and radius.get("excluded", 0) > 0:
+        issues.append({"type": "empty_radius", "field": "radius", "radius_km": radius.get("radius_km"),
+                       "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
+    elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
     return {"issues": issues, "trace": ["validate"]}
 
@@ -324,6 +365,7 @@ FIXES = {
     "condition_violation": {"strategy": "refilter_and_rerank", "next": "rank", "fix": {}},
     "arg_mapping": {"strategy": "remap_official_code", "next": "plan", "fix": {"lenient_region": True}},
     "empty_narrow": {"strategy": "ask_user_to_widen", "next": "ask", "fix": {}},
+    "empty_radius": {"strategy": "ask_user_to_widen_radius", "next": "ask", "fix": {}},
 }
 
 
@@ -362,6 +404,18 @@ async def reflect(state: SearchState, config) -> dict:
                 "field": "region",
                 "message": f"{state['criteria'].get('region_name') or state['criteria']['region']} 지역에서는 조건에 맞는 공고가 없었습니다. "
                 "구조 지역은 실종 지역과 다를 수 있어요. 지역을 넓혀 '전체'로 다시 찾아볼까요?",
+            }
+        ]
+    if issue["type"] == "empty_radius":
+        radius = state.get("radius") or {}
+        nxt = radius.get("next_radius_km")
+        wider = f"반경 {nxt:g}km" if nxt else "조회 지역 전체"
+        update["questions"] = [
+            {
+                "field": "radius",
+                "next_step": issue["next_step"],
+                "message": f"실종 위치에서 직선거리 {issue['radius_km']:g}km 안에서는 조건에 맞는 공고가 없었습니다. "
+                f"동물이 더 멀리 이동했을 수 있어요. {wider}로 넓혀 다시 찾아볼까요?",
             }
         ]
     if issue["type"] == "arg_mapping" and issue.get("lenient"):
@@ -425,6 +479,7 @@ async def finalize(state: SearchState, config) -> dict:
         "complete": complete_scope,
         "fetched_at": state.get("fetched_at"),
         "data_source": state.get("data_source"),
+        "radius": state.get("radius"),
     }
     unresolved = [i for i in issues if i["type"] in FIXES or i["type"] == "tool_error"]
     if any(i["type"] == "arg_mapping" for i in unresolved):
@@ -456,6 +511,7 @@ def build_graph():
     g.add_node("context", context)
     g.add_node("plan", plan)
     g.add_node("execute", execute)
+    g.add_node("radius", radius_node)
     g.add_node("rank", rank_node)
     g.add_node("validate", validate)
     g.add_node("reflect", reflect)
@@ -467,7 +523,8 @@ def build_graph():
     g.add_edge("ask", END)
     g.add_conditional_edges("context", route_after_context, {"plan": "plan", "finalize": "finalize"})
     g.add_conditional_edges("plan", route_after_plan, {"validate": "validate", "execute": "execute"})
-    g.add_edge("execute", "rank")
+    g.add_edge("execute", "radius")
+    g.add_edge("radius", "rank")
     g.add_edge("rank", "validate")
     g.add_conditional_edges(
         "validate",

@@ -30,7 +30,12 @@ class KakaoGeocoder:
     def configured(self) -> bool:
         return bool(self._key)
 
-    async def geocode(self, address: str | None) -> dict:
+    async def geocode(self, address: str | None, allow_ambiguous: bool = False) -> dict:
+        """allow_ambiguous=True 이면 결과가 여러 건일 때 카카오가 가장 먼저 준 문서를 쓴다.
+
+        동 이름(예: 망원동)은 법정동·행정동(망원1동, 망원2동)이 함께 나온다. 반경 중심처럼
+        직선거리 근사에만 쓰는 경우에 사용한다. 보호센터 마커는 기본값(False)을 유지한다.
+        """
         if not address or not address.strip():
             return {"status": "unavailable", "reason": "address_missing"}
         if not self._key:
@@ -59,7 +64,7 @@ class KakaoGeocoder:
             raise KakaoError("location_response", res.status_code)
         if not documents:
             return {"status": "unavailable", "reason": "address_not_found"}
-        if len(documents) > 1:
+        if len(documents) > 1 and not allow_ambiguous:
             return {"status": "unavailable", "reason": "address_ambiguous"}
         try:
             lng = float(documents[0]["x"])
@@ -68,4 +73,7 @@ class KakaoGeocoder:
             return {"status": "unavailable", "reason": "invalid_coordinates"}
         if not _valid_coord(lat, lng):
             return {"status": "unavailable", "reason": "invalid_coordinates"}
-        return {"status": "ok", "lat": lat, "lng": lng, "source": "kakao_local_address", "address": address.strip()}
+        result = {"status": "ok", "lat": lat, "lng": lng, "source": "kakao_local_address", "address": address.strip()}
+        if len(documents) > 1:
+            result["ambiguous"] = len(documents)  # 첫 문서를 썼음을 남긴다
+        return result

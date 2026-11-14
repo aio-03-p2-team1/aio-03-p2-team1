@@ -34,7 +34,8 @@ flowchart TD
   C --> P[plan<br/>지역 코드 매핑·조회 계획]
   P -- 인자 매핑 실패 --> V
   P --> E[execute<br/>공고 조회·통신 재시도]
-  E --> R[rank<br/>필터·점수·정렬]
+  E --> RD[radius<br/>실종 위치 기준 반경 필터]
+  RD --> R[rank<br/>필터·점수·정렬]
   R --> V[validate<br/>규칙 기반 검증]
   V -- 문제 있음·성찰 활성·한도 이내 --> X[reflect<br/>원인 분류·수정 전략]
   X -- 재매핑 --> P
@@ -55,8 +56,9 @@ flowchart TD
 | `ask` | `criteria`, `raw_items` | `status=awaiting_input`, `scope` | END |
 | `context` | `criteria`, `profile_id` | 기억으로 선택 항목 보완, `memory_used`, `llm_features`, `error`(LLM) | 오류 → `finalize`, 아니면 `plan` |
 | `plan` | `criteria`, `pending_fix` | `criteria.region_code`, `plan`, `issues(arg_mapping)` | 매핑 실패 → `validate`, 아니면 `execute` |
-| `execute` | `criteria`, 한도 설정 | `raw_items`, `total_count`, `pages_fetched`, `retry_count`, `error` | `rank` |
-| `rank` | `raw_items`, `criteria`, `llm_features`, `pending_fix.dedupe`, `semantic_scores` | `candidates`, `semantic_scores`, `ranking_method`, `error` | `validate` |
+| `execute` | `criteria`, 한도 설정 | `raw_items`, `total_count`, `pages_fetched`, `retry_count`, `error` | `radius` |
+| `radius` | `criteria.lost_place`·`lost_date`·`radius_step`, `raw_items` | `radius`, `radius_items`, `tool_calls(kakao_geocode_regions)` | `rank` |
+| `rank` | `radius_items`(없으면 `raw_items`), `criteria`, `llm_features`, `pending_fix.dedupe`, `semantic_scores` | `candidates`, `semantic_scores`, `ranking_method`, `error` | `validate` |
 | `validate` | `candidates`, `issues`, `error` | `issues` | 아래 표 |
 | `reflect` | `issues`, `reflection_count` | `reflections`, `reflection_count`, `pending_fix`, `questions` | `pending_fix.next` |
 | `locate` | `candidates[:3]` | `candidates[].location` | `finalize` |
@@ -72,6 +74,7 @@ flowchart TD
 | 지역이 '전체'가 아님 | `animal_regions` → 공식 시도 코드 매핑 | `tool_calls[].reason` |
 | 조건 충분 | `animal_search(page=1, rows=1000)` 1회(통신 재시도 별도) | 페이지·건수 |
 | live 모드 + 자유 서술 있음 | LangChain `ChatOpenAI` 기반 `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
+| 실종 위치(`lost_place`) + 카카오 키 + 실종 14일 이내 | `kakao_geocode_regions`: 실종 위치·공고 관할 시군구 좌표(성공만 캐시, 검색당 신규 40건 상한) | 반경 km·요청·캐시 수 |
 | 검증 통과 + 카카오 키 + 주소 | 상위 3개만 `kakao_geocode` | 후보 ID |
 | 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 LangChain `ChatOpenAI` 비전) | 적합성 판정·특징 JSON |
 
@@ -118,6 +121,8 @@ sequenceDiagram
 | `tool_calls` | 도구 호출 기록(누적) | list | [] | plan, execute, context, locate | run |
 | `raw_items` / `total_count` / `pages_fetched` / `fetched_at` / `data_source` | 조회 결과·범위 | | — | execute | run(scope) |
 | `retry_count` | 통신 실패 재시도 수 | int | 0 | execute | run |
+| `radius` | 반경 단계·km·중심 좌표·포함/미확인/제외 건수·미적용 사유 | dict | — | radius | run, scope |
+| `radius_items` | 반경 안 + 거리 미확인 공고(반경 밖 제외, 임베딩 대상) | list \| None | None | radius | — |
 | `candidates` | 후보(점수·근거·위치) | list | — | rank, locate, finalize | run |
 | `issues` | 검증 문제 | list | — | plan, validate, reflect, finalize | run |
 | `reflection_enabled` | 성찰 사용 여부(평가 변수) | bool | True | — | run |
@@ -153,6 +158,7 @@ flowchart LR
   C -- duplicates --> DD[중복 공고 제거] --> RR[rank 재실행]
   C -- condition_violation --> RF[필터 재적용] --> RR
   C -- empty_narrow --> W[범위 확대 동의 질문]
+  C -- empty_radius --> WR[반경 확대 동의 질문<br/>동의 시 radius_step+1 로 재검색]
   C -- tool_error --> STOP[재시도 중단·원인 안내]
   P --> V[같은 검증 반복]
   RR --> V
@@ -231,3 +237,21 @@ flowchart LR
 - `POST /searches`와 `GET /runs/{id}`의 후보는 기본 20건만 반환한다. `pagination={page,page_size,total,pages}`, 페이지 크기 최대 40, `cache_hit`, `ranking_method`를 포함한다. 후보 상세/좌표는 전체 저장 이력에서 소유자와 후보를 확인한다.
 - `SearchViewProvider`를 Routes 위에 두어 검색 폼·지역·결과 페이지를 유지한다. `react-router-dom`의 `/search?run=<id>&page=<n>`과 메모리 캐시(최대 45페이지, 10분)를 함께 사용한다. 상세 화면 뒤로가기 시 페이지와 스크롤을 복원한다. 계정이 바뀌면 Provider를 초기화한다. 새로고침은 URL의 실행 ID/페이지로 이력을 다시 읽는다.
 - 전체 공고(`/`)는 특징 쿼리가 없는 별도 목록이므로 기존 조회 경로를 유지한다. 위 RRF·300건·페이지네이션 계약은 맞춤 검색(`/search`)에 적용된다.
+
+## 11. 검색 반경 (radius-v1)
+
+실종 후 지난 날짜로 반경을 정해, 이미 조회한 공고(최대 1,000건) 안에서 실종 위치와 가까운 공고만 남긴다. 공고 API 를 반경 때문에 다시 부르지 않는다.
+
+| 실종 후 | 0~3일 | 4~7일 | 8~14일 | 15일~ |
+| --- | --- | --- | --- | --- |
+| 단계(`radius_step`) | 0 | 1 | 2 | 3 |
+| 반경 | 3km | 10km | 20km | 조회 지역 전체(반경 없음) |
+
+- **실종 위치:** 지도에서 고른 동 단위 주소(`criteria.lost_place`)를 서버가 카카오 주소 검색으로 좌표화한다. 클라이언트 좌표는 쓰지 않는다. 동 이름은 법정동·행정동(예: 망원동·망원1동·망원2동)이 함께 나오므로 `geocode(..., allow_ambiguous=True)` 로 카카오의 첫 문서를 쓴다. 보호센터 마커 조회는 기존처럼 여러 건이면 좌표를 쓰지 않는다.
+- **공고 위치:** 관할 시군구(`care.org`) 중심 좌표로 근사한다. 좌표를 못 구한 공고는 `distance_basis=unknown` 으로 **남긴다**(누락 ≠ 불일치). 반경 밖으로 확인된 공고만 제외하고, 제외된 공고는 임베딩하지 않는다.
+- **거리:** 하버사인 직선거리(km). 도로 거리·이동 시간이 아니다. 화면에 "관할 구청 기준 직선거리"로 표시한다.
+- **넓히기:** 반경 안 0건이고 반경 밖 공고가 있으면 `validate` 가 `empty_radius` 를 감지하고 `reflect` 가 다음 반경을 묻는다(`questions[].field=radius`, `next_step`). 사용자가 버튼으로 동의하면 같은 `thread_id` 로 `criteria.radius_step` 을 보내 다시 검색한다. 조용히 넓히지 않는다.
+- **적용하지 않는 경우(`radius.applied=false`, `reason`):** `whole_region`(15일 이상·실종 날짜 없음), `lost_place_missing`, `not_configured`(카카오 REST 키 없음), `center_unavailable`(실종 위치 좌표 실패), `no_items`. 이때는 기존처럼 시·도 단위로 찾는다.
+- **캐시:** 정규화 조건(반경 단계 포함)과 `radius-v1`/카카오 키 유무를 조건 캐시 키에 넣는다. 좌표는 성공한 것만 프로세스 메모리에 캐시한다.
+- **지도:** 결과 위 `RadiusMap` 이 서버가 준 중심 좌표와 반경으로 카카오 `Circle` 을 그린다. 넓힌 뒤에는 이전 반경을 점선으로 함께 보여 준다. 공고 마커는 찍지 않는다. 지도를 못 불러오면 글로 범위를 안내한다.
+- **한계:** 조회 지역이 시·도라 반경이 시·도 경계를 넘어도 인접 시·도 공고는 가져오지 않는다. 관할 중심 근사라 실제 발견 위치와 다를 수 있다. 정렬(RRF)은 바꾸지 않았고 거리는 필터·표시에만 쓴다.
