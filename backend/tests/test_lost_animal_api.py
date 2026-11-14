@@ -6,7 +6,8 @@ from datetime import date
 import httpx
 import pytest
 
-from backend.tools.lost_animal_api import LostAnimalApi, LostAnimalApiError
+from backend.tools.lost_animal_api import LostAnimalApi, LostAnimalApiError, LostPage
+from scripts.inspect_lost_api import fetch_all
 
 from .conftest import make_settings
 
@@ -57,6 +58,51 @@ def test_single_item_and_empty_result_are_lists():
     empty = run(client(lambda r: httpx.Response(200, json=ok_body([]))).search(
         start=date(2026, 11, 1), end=date(2026, 11, 2)))
     assert empty.items == [] and empty.total_count == 0  # 0건은 오류가 아니다
+
+    # 일부 공공데이터 응답은 body.items.item 에 빈 문자열을 넣는다.
+    nested_empty = run(client(lambda r: httpx.Response(200, json={
+        "response": {
+            "header": {"resultCode": "00"},
+            "body": {"items": {"item": ""}, "totalCount": 0},
+        }
+    })).search(start=date(2026, 11, 1), end=date(2026, 11, 2)))
+    assert nested_empty.items == [] and nested_empty.total_count == 0
+
+
+def test_nonempty_nonobject_item_is_a_response_error():
+    body = {
+        "response": {
+            "header": {"resultCode": "00"},
+            "body": {"items": {"item": "unexpected"}, "totalCount": 1},
+        }
+    }
+    with pytest.raises(LostAnimalApiError) as exc:
+        run(client(lambda r: httpx.Response(200, json=body)).search(
+            start=date(2026, 11, 1), end=date(2026, 11, 2)))
+    assert exc.value.code == "lost_response"
+
+
+def test_inspection_fetches_all_pages_from_total_count():
+    class PagedApi:
+        def __init__(self):
+            self.calls = []
+            self.items = [{"id": str(n)} for n in range(5)]
+
+        async def search(self, *, start, end, page, rows):
+            self.calls.append((page, rows))
+            offset = (page - 1) * rows
+            return LostPage(
+                items=self.items[offset:offset + rows],
+                total_count=len(self.items),
+                page=page,
+                rows=rows,
+            )
+
+    api = PagedApi()
+    total, items, pages = run(fetch_all(api, date(2026, 11, 1), date(2026, 11, 14), rows=2))
+    assert total == len(items) == 5
+    assert pages == 3
+    assert api.calls == [(1, 2), (2, 2), (3, 2)]
 
 
 def test_encoded_key_is_decoded_once():

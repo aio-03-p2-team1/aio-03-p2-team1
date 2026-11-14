@@ -71,9 +71,13 @@ def _items_of(body: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(items, dict):
         return []
     item = items.get("item")
-    if item is None:
+    if item is None or item == "":
         return []
-    return item if isinstance(item, list) else [item]
+    if isinstance(item, dict):
+        return [item]
+    if isinstance(item, list) and all(isinstance(row, dict) for row in item):
+        return item
+    raise LostAnimalApiError("lost_response")
 
 
 def _int(value: Any, default: int = 0) -> int:
