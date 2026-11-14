@@ -99,6 +99,12 @@ cd frontend && npm test && npm run build
 - LangSmith 추적은 기본 꺼져 있다. 켜려면 `LANGSMITH_TRACING=true`와 `LANGSMITH_API_KEY`를 설정하고, 필요하면 프로젝트 이름을 `LANGSMITH_PROJECT`로 지정한다. 그래프 입력·출력과 모델 입출력에 검색 서술·공고 데이터가 기록될 수 있으므로 실제 키는 로컬 `.env` 또는 배포 환경변수에만 보관하고 추적 프로젝트 접근 권한을 제한한다. 상세 동작과 데이터 범위는 [architecture.md](architecture.md#51-langsmith-추적)를 참고한다.
 - 비밀 값은 팀 채팅이나 저장소에 공유하지 않는다. 운영 비밀 값은 배포 서비스의 환경변수 설정에만 둔다.
 
+### 구조동물 털색 원자료 수집
+
+`uv run python scripts/fetch_animal_color_groups.py`는 설정된 `ANIMAL_API_KEY`로 `abandonmentPublic_v2`를 비동기 조회해 구조일자 월별로 과거 공고를 포함한 고유 동물 최대 50,000건을 임시 SQLite(`/tmp/dasimanna-animal-colors.sqlite3`)에 저장한다. API 문서상 `numOfRows`는 최대 1,000이므로 페이지 요청은 동시 5개로 제한한다. `desertionNo`를 동물 식별자로 사용하며 이미 DB에 있는 ID는 삽입하지 않는다. 경로·수집 상한·시작 연도는 `--db`, `--limit`, `--first-year`로 바꿀 수 있다. CSV는 만들지 않는다.
+
+공식 API 문서는 [공공데이터포털 구조동물 조회 서비스](https://www.data.go.kr/data/15098931/openapi.do)다. 응답 필드 `desertionNo`(유기번호), `colorCd`(털색)는 프로젝트의 실제 API 검증 기록 및 `backend/tools/animal_api.py` 정규화 매핑과 일치한다.
+
 ## 배포 설정
 
 | 대상 | 플랫폼 설정 |
