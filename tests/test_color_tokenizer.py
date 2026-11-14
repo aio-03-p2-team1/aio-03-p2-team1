@@ -27,6 +27,14 @@ def test_recognizes_separator_delimited_abbreviation_without_substring_false_pos
     assert tokenize_color_words("검색") == {"colors": set(), "patterns": set()}
 
 
+def test_strips_other_wrapper_with_slicing_even_inside_a_sentence():
+    expected = {"colors": {"BLACK", "WHITE"}, "patterns": set()}
+
+    assert tokenize_color_words("기타(검/흰)") == expected
+    assert tokenize_color_words("털색 표기: 기타(검/흰)") == expected
+    assert tokenize_color_words("기타()") == {"colors": set(), "patterns": set()}
+
+
 def test_aliases_map_to_the_same_english_token():
     user = tokenize_color_words("브라운")
     notice = tokenize_color_words("갈색")

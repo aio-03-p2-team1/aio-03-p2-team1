@@ -126,7 +126,7 @@ EXCLUDED_COLOR_VALUES: dict[str, str] = {
     "기타(백,검색)": "색상 표현인지 불명확한 오기",
 }
 
-_SEPARATORS = re.compile(r"[\s&＋+/／,，·ㆍ|*()（）\[\]{}:：;；.。]+")
+_SEPARATORS = re.compile(r"[\s&＋+/／,，·ㆍ|*\[\]{}:：;；.。]+")
 _SORTED_LEXEMES = tuple(sorted(_LEXEMES, key=lambda word: (-len(word), word)))
 
 
@@ -145,6 +145,19 @@ def _complete_segmentation(chunk: str) -> list[str] | None:
     return best[0]
 
 
+def _strip_other_wrappers(text: str) -> str:
+    """Remove ``기타(...)`` labels with slicing, keeping their inner text."""
+    prefix = "기타("
+    while True:
+        start = text.find(prefix)
+        if start < 0:
+            return text
+        close = text.find(")", start + len(prefix))
+        if close < 0:
+            return text
+        text = text[:start] + text[start + len(prefix):close] + text[close + 1:]
+
+
 def tokenize_color_words(text: str | None) -> dict[str, set[str]]:
     """Return standard English color and pattern tokens found in text."""
     result = {"colors": set(), "patterns": set()}
@@ -154,7 +167,7 @@ def tokenize_color_words(text: str | None) -> dict[str, set[str]]:
     original = unicodedata.normalize("NFKC", text).strip()
     if original in EXCLUDED_COLOR_VALUES:
         return result
-    normalized = original.lower()
+    normalized = _strip_other_wrappers(original.lower())
     chunks = _SEPARATORS.sub(" ", normalized).split()
 
     for chunk in chunks:
