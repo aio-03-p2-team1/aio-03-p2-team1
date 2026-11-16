@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { loadKakaoSdk } from '../lib/kakao.js'
-import { kmLabel, previousRadiusKm } from '../lib/radius.js'
+import { kmLabel, previousRadiusKm, radiusGuide } from '../lib/radius.js'
 
-// 검색 반경 지도: 실종 위치(서버가 좌표로 바꾼 동 단위 주소)와 반경 원을 그린다.
+// 검색 반경 지도: 실종 위치(사용자가 찍은 좌표, 없으면 서버가 주소로 구한 좌표)와 반경 원을 그린다.
 // 공고 마커는 찍지 않는다(관할 구청 중심 좌표라 실제 발견 위치처럼 보일 수 있음).
-export default function RadiusMap({ radius }) {
+// preview: 검색 전 미리 보기(입력 폼 아래). 결과 위 지도와 같은 모양으로 그리고 제목·안내만 다르다.
+export default function RadiusMap({ radius, preview = false }) {
   const boxRef = useRef(null)
   const [state, setState] = useState('loading')
   const [attempt, setAttempt] = useState(0)
@@ -47,13 +48,28 @@ export default function RadiusMap({ radius }) {
     }
   }, [center?.lat, center?.lng, km, prevKm, attempt])
 
+  const [guide, nextGuide] = radiusGuide(radius)
+  // 실종 후 2주가 지나 반경 없이 찾는 경우: 지도 없이 안내만 보여 준다.
+  if (radius && km == null && radius.days_since_lost != null && (preview || radius.reason === 'whole_region')) {
+    return (
+      <div className={`radius-map panel${preview ? ' radius-preview' : ''}`} role="status">
+        <div className="radius-map-head"><strong>{preview ? '검색 범위 미리 보기' : '검색 범위'} · 조회 지역 전체</strong></div>
+        <p className="radius-guide">{guide}</p>
+      </div>
+    )
+  }
   if (!radius?.applied || !center || km == null) return null
   return (
-    <div className="radius-map panel">
+    <div className={`radius-map panel${preview ? ' radius-preview' : ''}`}>
       <div className="radius-map-head">
-        <strong>검색 범위 · {kmLabel(km)}</strong>
+        <strong>{preview ? '검색 범위 미리 보기' : '검색 범위'} · {kmLabel(km)}</strong>
         <span>{radius.lost_place} 기준 · 직선거리</span>
       </div>
+      {/* 실종 후 경과일과 반경 안내. 결과 화면은 서버 값(days_since_lost 등)을 그대로 쓴다. */}
+      <p className="radius-guide" role="status">
+        {guide}
+        {nextGuide && <span className="radius-guide-next"> {nextGuide}</span>}
+      </p>
       {/* 지도 SDK 가 이 div 안을 직접 그리므로 React 자식을 두지 않는다. */}
       <div ref={boxRef} className="radius-map-box" role="img" aria-label={`${radius.lost_place} 중심 ${kmLabel(km)} 검색 범위 지도`} />
       {state === 'loading' && <p className="radius-map-note">지도를 불러오고 있어요…</p>}
@@ -64,6 +80,11 @@ export default function RadiusMap({ radius }) {
         </p>
       )}
       {prevKm && <p className="radius-map-note">점선은 넓히기 전 범위({kmLabel(prevKm)})예요.</p>}
+      {preview && (
+        <p className="radius-map-note">
+          지도에서 고른 위치 기준의 대략적인 범위예요. 실제 검색은 공고를 맡은 시·군·구 중심까지의 거리로 판단해요.
+        </p>
+      )}
     </div>
   )
 }
