@@ -275,3 +275,7 @@ async def delete_post(post_id: str, user: SessionUser = Depends(current_user), c
         # 남의 글은 존재 여부와 관계없이 지울 수 없다.
         raise ApiError(403, "post_forbidden", "내가 쓴 글만 지울 수 있어요.")
     await ctx.store.delete(BOARD_OWNER, KIND, post_id)
+    # 글을 지우면 그 글의 댓글도 지운다(순환 import 를 피하려고 함수 안에서 불러온다).
+    from backend.routers.comments import delete_all_comments
+
+    await delete_all_comments(ctx, post_id)
