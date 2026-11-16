@@ -8,6 +8,11 @@ export const RADIUS_STEPS_KM = [3, 10, 20, null]
 export const STEP_BY_DAYS = [[3, 0], [7, 1], [14, 2]]
 const DAY_MS = 24 * 60 * 60 * 1000
 
+/** 브라우저 기준 오늘 'YYYY-MM-DD'(사용자가 한국에 있으면 한국 날짜). */
+export function todayLocal() {
+  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
 /** 실종 후 지난 날. 날짜는 'YYYY-MM-DD'(한국 날짜). 읽을 수 없으면 null. */
 export function daysSince(lostDate, today) {
   const a = Date.parse(`${lostDate}T00:00:00Z`)

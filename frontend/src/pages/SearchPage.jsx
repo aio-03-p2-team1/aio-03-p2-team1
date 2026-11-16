@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
-import { distanceLabel, radiusText, widenRadiusAction, previewRadius } from '../lib/radius.js'
+import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
 import RadiusMap from '../components/RadiusMap.jsx'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import Pagination from '../components/Pagination.jsx'
@@ -143,8 +143,15 @@ export default function SearchPage() {
     }
   }
 
-  // 검색 전 반경 미리 보기: 지도에서 고른 위치 + 실종 날짜로 브라우저에서 계산(한국 날짜 기준)
+  // 실종 지역 버튼에 보여 줄 요약(위치 · 실종 날짜 · 반경). 반경은 검색과 같은 기준표로 계산한다.
   const preview = previewRadius(location, form.lost_date, today())
+  const locationSummary = !location
+    ? '실종 지역과 날짜 선택'
+    : [
+        location.region === '전체' ? '전체 지역' : location.address || location.region,
+        form.lost_date && `${form.lost_date.slice(5).replace('-', '.')} 실종`,
+        preview && (preview.radius_km != null ? kmLabel(preview.radius_km) : '조회 지역 전체'),
+      ].filter(Boolean).join(' · ')
 
   async function submit(criteria, threadId) {
     setBusy(true)
@@ -227,25 +234,16 @@ export default function SearchPage() {
               특징과 상황
               <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
             </label>
-            <div className="form-pair">
-              <div className="field-block">
-                <span className="field-label">실종 지역 <em className="req">필수</em></span>
-                <button type="button" className={`region-trigger${location ? ' filled' : ''}`} onClick={() => setRegionOpen(true)} aria-haspopup="dialog">
-                  <span aria-hidden="true">⌖</span>
-                  {location
-                    ? location.region === '전체' ? '전체 지역' : location.address || location.region
-                    : '실종 지역 선택'}
-                </button>
-              </div>
-              <label>
-                <span>실종 날짜 <em className="req">필수</em></span>
-                <input type="date" value={form.lost_date} max={today()} onChange={set('lost_date')} />
-              </label>
+            {/* 실종 날짜는 실종 지역 선택 창 안에서 함께 고른다(위치·날짜·검색 범위를 한 화면에서). */}
+            <div className="field-block">
+              <span className="field-label">실종 지역 · 날짜 <em className="req">필수</em></span>
+              <button type="button" className={`region-trigger${location ? ' filled' : ''}`} onClick={() => setRegionOpen(true)} aria-haspopup="dialog">
+                <span aria-hidden="true">⌖</span>
+                {locationSummary}
+              </button>
             </div>
           </div>
         </div>
-        {/* 실종 위치와 날짜를 고르면 검색 전에 반경을 바로 보여 준다(서버 호출 없음). */}
-        <RadiusMap radius={preview} preview />
         <div className="search-form-bottom">
           <p className="fineprint">
             사진을 살펴보고 확인된 특징을 입력란에 적어드려요. 사진은 저장하지 않으며, 입력된 특징은 직접 고칠 수 있어요.
@@ -259,8 +257,11 @@ export default function SearchPage() {
         regions={regions.list}
         initial={location}
         onClose={() => setRegionOpen(false)}
-        onSelect={(value) => {
+        withRadius
+        lostDate={form.lost_date}
+        onSelect={({ lost_date: lostDate, ...value }) => {
           setLocation(value)
+          if (lostDate) setForm((f) => ({ ...f, lost_date: lostDate }))
           setRegionOpen(false)
         }}
       />

@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { KAKAO_JS_KEY, loadKakaoSdk } from '../lib/kakao.js'
 import { matchRegion } from '../lib/region.js'
+import { kmLabel, previewRadius, radiusGuide, todayLocal } from '../lib/radius.js'
 
 const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 } // 지도 첫 화면의 중심일 뿐, 선택 위치로 저장하지 않는다.
 
-export default function RegionPicker({ open, regions, initial, onClose, onSelect, allowAll = true, title = '실종 지역 선택' }) {
+// withRadius: 우리 아이 찾기용. 창 안에서 실종 날짜를 받고, 위치를 고르는 즉시 검색 반경 원과 안내를 보여 준다.
+//   선택 결과(onSelect)에 lost_date 를 함께 넘긴다. 게시판 글쓰기는 withRadius 없이 위치만 고른다.
+export default function RegionPicker({
+  open, regions, initial, onClose, onSelect, allowAll = true, title = '실종 지역 선택', withRadius = false, lostDate = '',
+}) {
   const mapBox = useRef(null)
   const kakaoRef = useRef(null)
   const mapRef = useRef(null)
   const markerRef = useRef(null)
+  const circleRef = useRef(null)
+  const [date, setDate] = useState(lostDate)
   const [state, setState] = useState(KAKAO_JS_KEY ? 'loading' : 'no_key')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -66,6 +73,7 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
         map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT)
         mapRef.current = map
         markerRef.current = null
+        circleRef.current = null // 새 지도이므로 이전 지도의 원은 버린다
         if (initial?.lat) placeMarker(initial.lat, initial.lng)
         kakao.maps.event.addListener(map, 'click', (e) => pickCoord(e.latLng.getLat(), e.latLng.getLng()))
         setState('ready')
@@ -75,12 +83,34 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
 
   useEffect(() => {
     if (!open) return
+    setDate(lostDate)
     initMap()
     const onKey = (e) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
+
+  // 고른 위치 + 실종 날짜 → 반경(검색과 같은 기준표). 위치나 날짜가 바뀌면 원을 바로 다시 그린다.
+  const radius = withRadius ? previewRadius(picked, date, todayLocal()) : null
+  const radiusKm = radius?.radius_km ?? null
+  useEffect(() => {
+    const kakao = kakaoRef.current
+    const map = mapRef.current
+    if (!withRadius || !kakao || !map || state !== 'ready') return
+    if (circleRef.current) {
+      circleRef.current.setMap(null)
+      circleRef.current = null
+    }
+    if (!picked?.lat || radiusKm == null) return
+    const center = new kakao.maps.LatLng(picked.lat, picked.lng)
+    circleRef.current = new kakao.maps.Circle({
+      map, center, radius: radiusKm * 1000,
+      strokeWeight: 3, strokeColor: '#c98f12', strokeOpacity: 0.95,
+      fillColor: '#f5d76e', fillOpacity: 0.28,
+    })
+    map.setBounds(circleRef.current.getBounds(), 8, 8, 8, 8)
+  }, [withRadius, state, picked?.lat, picked?.lng, radiusKm])
 
   function search(event) {
     event.preventDefault()
@@ -113,16 +143,22 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
     pickCoord(item.lat, item.lng)
   }
 
+  // withRadius 일 때는 실종 날짜도 같이 넘긴다(폼의 실종 날짜와 같은 값).
+  const withDate = (value) => (withRadius ? { ...value, lost_date: date } : value)
+
   function confirm() {
     if (state === 'ready' || state === 'loading') {
-      if (picked) onSelect(picked)
+      if (picked) onSelect(withDate(picked))
     } else if (fallback) {
-      onSelect({ region: fallback, address: fallback === '전체' ? '' : fallback })
+      onSelect(withDate({ region: fallback, address: fallback === '전체' ? '' : fallback }))
     }
   }
 
   if (!open) return null
-  const canConfirm = state === 'ready' ? Boolean(picked) : state === 'no_key' || state === 'error' ? Boolean(fallback) : false
+  const today = todayLocal()
+  const dateOk = !withRadius || (Boolean(date) && date <= today)
+  const canConfirm = dateOk && (state === 'ready' ? Boolean(picked) : state === 'no_key' || state === 'error' ? Boolean(fallback) : false)
+  const [guide, nextGuide] = radius ? radiusGuide(radius) : ['', '']
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
@@ -131,6 +167,13 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
           <h2 id="region-modal-title">{title}</h2>
           <button type="button" className="modal-close" onClick={onClose} aria-label="닫기">×</button>
         </div>
+
+        {withRadius && (
+          <label className="region-date">
+            <span>실종 날짜 <em className="req">필수</em></span>
+            <input type="date" value={date} max={today} onChange={(e) => setDate(e.target.value)} />
+          </label>
+        )}
 
         {(state === 'loading' || state === 'ready') && (
           <>
@@ -157,7 +200,16 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
             )}
             <div ref={mapBox} className="region-map" aria-label="실종 지역 지도. 지도를 눌러 위치를 고르세요." />
             {state === 'loading' && <p className="map-note">지도를 불러오는 중…</p>}
-            <p className="map-note">지도를 누르면 그 위치로 실종 지역이 바뀌어요. 공고는 해당 시·도 기준으로 찾아요.</p>
+            {withRadius ? (
+              // 위치를 고르면 반경 안내, 고르기 전에는 사용법 안내
+              <p className="map-note region-guide" role="status">
+                {guide
+                  ? <><strong>{guide}</strong>{nextGuide && <> {nextGuide}</>}{radiusKm != null && ' 거리는 공고를 맡은 시·군·구 중심까지로 재요.'}</>
+                  : '지도를 누르거나 주소를 검색해 실종 위치를 고르면 찾을 범위가 지도에 표시돼요.'}
+              </p>
+            ) : (
+              <p className="map-note">지도를 누르면 그 위치로 실종 지역이 바뀌어요. 공고는 해당 시·도 기준으로 찾아요.</p>
+            )}
           </>
         )}
 
@@ -179,10 +231,11 @@ export default function RegionPicker({ open, regions, initial, onClose, onSelect
 
         <div className="modal-foot">
           <div className="region-picked" aria-live="polite">
-            {state === 'ready' ? (picked ? <>선택한 위치 <strong>{picked.address || picked.region}</strong></> : '아직 선택한 위치가 없어요.') : null}
+            {state === 'ready' ? (picked ? <>선택한 위치 <strong>{picked.address || picked.region}</strong>{radiusKm != null && <> · {kmLabel(radiusKm)}</>}</> : '아직 선택한 위치가 없어요.') : null}
+            {!dateOk && <span className="region-date-error"> 실종 날짜를 확인해 주세요.</span>}
           </div>
           {allowAll && (
-            <button type="button" className="text-action" onClick={() => onSelect({ region: '전체', address: '' })}>
+            <button type="button" className="text-action" disabled={!dateOk} onClick={() => onSelect(withDate({ region: '전체', address: '' }))}>
               지역 상관없이 전체에서 찾기
             </button>
           )}
