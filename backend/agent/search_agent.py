@@ -12,7 +12,7 @@
 
 도구
 | 구분 | 도구 | 하는 일 |
-| 수정 | update_features | 원문 설명을 다시 해석해 털색·품종·성별·특징 조건을 고침 → 다시 정렬 |
+| 수정 | update_features | 원문 설명을 다시 해석해 털색·성별·특징 조건을 고침 → 다시 정렬 |
 | 수정 | relax_condition | 품종·성별 조건을 풀어 줌(설명과 맞지 않거나 너무 좁을 때) → 다시 정렬 |
 | 수정 | widen_radius    | 반경 한 단계 넓힘 → 반경부터 다시 |
 | 종료 | request_photo / request_info | 사용자에게 사진·정보 요청(assess.py 규칙으로 검증) |
@@ -20,7 +20,7 @@
 
 사실을 지어내지 않도록:
 - LLM 출력은 도구 인자뿐이고, 서버가 모두 검증한다. update_features 값은 사용자 원문에 근거가 있어야 받는다
-  (털색: 원문 색 단어와 같은 색, 품종·특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 근거가 없으면 거부하고 이유를 돌려준다.
+  (털색: 원문 색 단어와 같은 색, 특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 근거가 없으면 거부하고 이유를 돌려준다.
 - 공고 번호·날짜·좌표·연락처는 고칠 수 있는 값이 아니다. 반경은 정해진 단계로만 움직인다.
 - 단계마다 무엇을 읽고 무엇을 고쳤는지, 결과가 어떻게 바뀌었는지 agent_log 에 남긴다.
 한도: LLM 걸음 최대 MAX_STEPS, 다시 찾기 최대 MAX_RERUNS. LLM 없음·실패·한도 초과면 지금 결과를 그대로 보여 준다.
@@ -41,7 +41,7 @@ from backend.schemas.common import Color
 
 log = logging.getLogger("dasimanna.agent")
 
-AGENT_PROMPT_VERSION = "search-agent-v1"
+AGENT_PROMPT_VERSION = "search-agent-v2"
 MAX_STEPS = 4  # LLM 걸음(도구 선택) 최대 횟수. 흔한 흐름은 수정 1번 + 종료 1번 = 2걸음
 MAX_RERUNS = 2  # 조건을 고쳐 다시 찾는 최대 횟수
 TOP_READ = 5  # LLM에 보여 줄 상위 후보 수
@@ -53,7 +53,7 @@ SYSTEM_PROMPT = f"""너는 잃어버린 반려동물 검색 결과를 점검하�
 
 진행 방법:
 1. 메시지의 사용자 원문과 상위 후보를 읽는다.
-2. 판단한다: 사용자 설명의 털색·품종·성별·특징이 검색 조건에 제대로 들어갔는가? 상위 후보가 설명과 맞는가?
+2. 판단한다: 사용자 설명의 털색·성별·특징이 검색 조건에 제대로 들어갔는가? 상위 후보가 설명과 맞는가?
    - 설명에는 있는데 조건에 빠진 특징이 있으면 update_features 로 넣는다.
    - 품종·성별 조건 때문에 맞을 법한 후보가 밀려나면 relax_condition 으로 푼다.
    - 후보가 너무 적거나 다 맞지 않으면 widen_radius 로 반경을 넓힌다.
@@ -72,7 +72,6 @@ class UpdateFeatures(BaseModel):
     """사용자 원문 설명을 다시 해석해 검색 조건을 고친다. 원문에 근거가 있는 값만 받는다. 고치면 다시 정렬한다."""
 
     colors: list[Color] | None = Field(None, description="원문에 나온 털색(표준 색 이름)")
-    breed: str | None = Field(None, description="원문에 나온 품종 표현 그대로")
     sex: Literal["M", "F"] | None = Field(None, description="원문에 수컷/암컷 표현이 있을 때만")
     marks: list[str] | None = Field(None, description="원문에 나온 눈에 띄는 특징 낱말(예: 얼룩, 꼬리 짧음)")
     reason: str = Field(description="고치는 이유 한 문장")
@@ -201,12 +200,6 @@ def validate_features(args: dict[str, Any], source: str) -> tuple[dict[str, Any]
             rejected.append(f"털색 '{color}': 원문에 같은 색 표현이 없음")
     if colors:
         accepted["colors"] = list(dict.fromkeys(colors))
-    breed = str(args.get("breed") or "").strip()
-    if breed:
-        if len(breed) >= 2 and breed.replace(" ", "") in source.replace(" ", ""):
-            accepted["breed"] = breed
-        else:
-            rejected.append(f"품종 '{breed}': 원문에 없는 말")
     sex = args.get("sex")
     if sex in SEX_WORDS:
         if any(w in source for w in SEX_WORDS[sex]):
@@ -278,8 +271,6 @@ def execute_tool(name: str, args: dict[str, Any], state: dict[str, Any], allowed
             new_criteria, features = dict(criteria), dict(state.get("llm_features") or {})
             if "colors" in accepted:
                 new_criteria["color"] = " ".join(accepted["colors"])
-            if "breed" in accepted:
-                new_criteria["breed"] = accepted["breed"]
             if "sex" in accepted:
                 new_criteria["sex"] = accepted["sex"]
             if "marks" in accepted:
@@ -295,6 +286,8 @@ def execute_tool(name: str, args: dict[str, Any], state: dict[str, Any], allowed
             out["content"] = {"ok": False, "error": f"풀 조건이 없음: {field}"}
         else:
             new_criteria = {k: v for k, v in criteria.items() if k != field}
+            if field == "breed":
+                new_criteria.pop("breed_code", None)
             features.pop(field, None)
             out.update(update={"criteria": new_criteria, "llm_features": features, "semantic_scores": None,
                                "agent_reruns": reruns + 1}, next="rank")
@@ -324,7 +317,7 @@ def execute_tool(name: str, args: dict[str, Any], state: dict[str, Any], allowed
 
 def safe_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """기록용 인자. 사용자에게 보일 수 있는 문장은 길이만 제한해 남긴다."""
-    keep = {k: v for k, v in args.items() if k in ("colors", "breed", "sex", "marks", "field")}
+    keep = {k: v for k, v in args.items() if k in ("colors", "sex", "marks", "field")}
     for k in ("reason", "note"):
         if args.get(k):
             keep[k] = str(args[k])[:80]

@@ -108,6 +108,12 @@ cd frontend && npm test && npm run build
 
 공식 API 문서는 [공공데이터포털 구조동물 조회 서비스](https://www.data.go.kr/data/15098931/openapi.do)다. 응답 필드 `desertionNo`(유기번호), `colorCd`(털색)는 프로젝트의 실제 API 검증 기록 및 `backend/tools/animal_api.py` 정규화 매핑과 일치한다.
 
+### 품종 기준정보 초기화
+
+`.env`에 `ANIMAL_API_KEY`와 대상 `STORAGE_BACKEND`를 설정한다. SQLite는 `uv run python scripts/init_kinds_sqlite.py`를 실행하며, `SQLITE_PATH` DB에 `scripts/bootstrap_sqlite.sql` 전체를 실행한 뒤 데이터를 동기화한다. Supabase는 `scripts/bootstrap_schema.sql` 전체를 SQL Editor에서 먼저 실행하고 해당 스키마를 Data API의 Exposed schemas에 추가한 뒤 `uv run python scripts/init_kinds_supabase.py`를 실행한다. 백엔드별 테이블 DDL은 각 bootstrap SQL에만 둔다. 두 초기화 스크립트는 공통 `scripts/kind_sync.py`를 사용해 `kind_v2`의 전체 페이지를 읽는다. totalCount보다 적은 응답과 호출 오류는 최대 3회 재시도한다(0.5초, 1초, 2초 대기). 반복 실행 시 코드 기준으로 갱신하며 API에서 사라진 코드는 비활성으로 보존한다. API 키가 없거나 재시도 후에도 실패하면 오류로 종료한다.
+
+이름은 저장할 때 공백을 제거해 `search_name`에 보관한다. 검색 입력도 같은 규칙으로 정규화하고 `(species, search_name)` 동등 조건으로 조회하면 `kinds_search_name_idx` B-tree 인덱스를 사용한다. SQLite의 `EXPLAIN QUERY PLAN`으로 인덱스 사용을 검증한다. 이름 컬럼에 매번 공백 제거 함수를 씌우는 함수 인덱스는 SQLite·PostgreSQL 간 함수 호환 차이가 있어 사용하지 않는다. 표기만 공백이 다른 이름은 alias로 중복 저장하지 않고, 의미가 다른 별칭은 `kind_aliases`에 큐레이션한다.
+
 ## 배포 설정
 
 | 대상 | 플랫폼 설정 |
@@ -135,3 +141,13 @@ cd frontend && npm test && npm run build
 | 카카오 지도 미표시 | `VITE_KAKAO_JS_KEY`, SDK 도메인 등록, 카카오맵 사용 설정을 확인한다. |
 | Supabase `PGRST106` | Data API의 Exposed schemas에 지정 스키마가 포함되어 있는지 확인한다. |
 
+
+### 품종 주기 갱신 cron
+
+DB 초기화 후 프로젝트 루트에서 `uv run python -m scripts.refresh_kinds`를 실행한다. 매일 실행하되 Redis에 기록된 마지막 성공 이후 7일이 지났을 때만 동기화하며 성공 시 축종별 캐시를 무효화한다. API 조회와 DB 쓰기는 최대 3회 재시도한다. 중복 작업은 Redis 잠금으로 막는다. Redis 마지막 성공 키가 없으면 즉시 갱신한다. 운영 cron 작업의 명령은 위 명령, 스케줄은 `0 18 * * *`(UTC, 한국 오전 3시)로 설정한다. 원격 작업 등록은 별도 운영 작업이며 이 코드 변경에서는 실행하지 않았다. cron은 백엔드와 같은 DB·Redis·공공 API 설정을 사용해야 한다.
+
+`.github/workflows/refresh-kinds.yml`에 매일 실행하는 cron을 정의했다. 내부 7일 게이트를 거쳐 갱신한다. GitHub에서 실행하려면 워크플로의 동명 Secrets(위 DB·Redis·공공 API 변수)가 필요하고 Redis가 실행 환경에서 접근 가능해야 한다. 워크플로 실행·원격 Secrets 등록은 수행하지 않았다.
+
+### 사진용 품종 LRU 스냅샷
+
+서버 시작 시 DB 품종 초기화가 선행되어야 한다. lifespan에서 모든 활성 품종의 코드·이름만 읽어 프로세스별 LRU 캐시를 예열한다. 사진 분석마다 DB나 Redis를 조회하지 않으며, 초기 DB 조회 실패 시 서버 시작이 실패한다. cron이 변경한 DB 내용은 공개 목록의 Redis 무효화로 반영되고, 사진용 시작 시점 스냅샷에는 백엔드를 재시작한 뒤 반영된다.

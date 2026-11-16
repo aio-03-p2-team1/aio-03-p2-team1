@@ -13,6 +13,7 @@ class Criteria(TypedDict, total=False):
     start_date: str
     end_date: str
     pet_name: str
+    breed_code: str | None
     breed: str
     color: str
     sex: str

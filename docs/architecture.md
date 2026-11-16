@@ -31,7 +31,8 @@ flowchart TD
   A -- 필수 누락·입력 오류 --> Q[ask<br/>추가 질문]
   A -- 충분 --> C[context<br/>장기 기억·LLM 특징 추출]
   C -- LLM 오류 --> F
-  C --> P[plan<br/>지역 코드 매핑·조회 계획]
+  C --> B[breed<br/>규칙 우선·DB 도구 AI 품종 정규화]
+  B --> P[plan<br/>지역 코드 매핑·조회 계획]
   P -- 인자 매핑 실패 --> V
   P --> E[execute<br/>공고 조회·통신 재시도]
   E --> RD[radius<br/>실종 위치 기준 반경 필터]
@@ -100,8 +101,8 @@ sequenceDiagram
   U->>API: 조건 입력
   API->>G: run_search(owner, criteria, thread_id)
   G->>G: analyze (누락이면 질문 후 종료)
-  G->>LLM: ChatOpenAI 서술 → {colors, breed, sex, marks} (JSON)
-  LLM-->>G: 특징(설명에 없는 품종은 폐기)
+  G->>LLM: ChatOpenAI 서술 → {colors, sex, marks} (JSON)
+  LLM-->>G: 특징(품종은 별도 breed 노드에서 정규화)
   G->>AN: sido_v2 (지역 코드)
   G->>AN: abandonmentPublic_v2 page 1..N
   AN-->>G: 공고 목록
@@ -119,7 +120,7 @@ sequenceDiagram
 | `run_id` / `thread_id` / `owner` | 실행·세션·소유자 키 | str | runner | runner | run, thread |
 | `profile_id` | 장기 기억 동물 프로필 | str \| None | 요청 | — | — |
 | `request` | 원 입력 + 세션 조건 | dict | runner | — | — |
-| `criteria` | 정규화 조건 | `Criteria` | — | analyze, context, plan | run, thread(기억 출처 제외) |
+| `criteria` | 정규화 조건 | `Criteria` | — | analyze, context, breed, plan | run, thread(기억 출처 제외) |
 | `missing` / `input_errors` / `questions` | 누락·오류·질문 | list | [] | analyze, reflect | run, thread |
 | `memory_used` | 장기 기억에서 채운 값 | dict | {} | context | run |
 | `llm_features` | LLM 추출 특징 | dict | — | context | run |
@@ -188,6 +189,14 @@ flowchart LR
 `backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
 털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다.
+
+## 7.1 공공 품종 기준정보
+
+`scripts/init_kinds_sqlite.py`와 `scripts/init_kinds_supabase.py`는 저장소별로 분리한 실행 스크립트이며 공통 API 조회·정규화는 `scripts/kind_sync.py`를 사용한다. 축종 코드(개 `417000`, 고양이 `422400`, 기타 `429900`)별 전체 페이지를 조회한다. SQLite는 `scripts/bootstrap_sqlite.sql` 전체를 실행하고 `SQLITE_PATH`를 갱신한다. Supabase는 `scripts/bootstrap_schema.sql`을 SQL Editor에서 적용한 뒤 `SUPABASE_SCHEMA`의 Data API 테이블을 갱신한다. 모든 테이블·인덱스 DDL은 각 backend bootstrap SQL 파일에만 둔다.
+
+`kinds.kind_code`는 공공 API 코드이며, `species`, 표시 이름, 공백을 제거한 `search_name`, `active`, 출처와 갱신 시각을 함께 둔다. 품종이 API에서 사라져도 행을 삭제하지 않고 비활성화해 과거 코드 참조를 유지한다. 이름 검색은 `(species, search_name)` 인덱스를 이용하며, 요청 문자열도 공백 제거 후 비교한다. 이름 자체가 대표 이름의 공백 유무를 흡수하므로 별칭으로 중복 등록하지 않는다.
+
+`kind_aliases`는 별도 사용 별칭만 저장하고, 품종 코드 FK와 `(kind_code, search_alias)` 유일 제약 및 alias 검색 인덱스를 둔다. 현재 `scripts/kind_sync.py`의 ALIASES는 관리 가능한 초기 큐레이션 목록이며, 동기화는 API 원본 행을 갱신하고 별칭 행은 큐레이션 원본만 교체한다. 테이블에 출처와 타임스탬프를 두어 이후 API 변경과 alias 출처를 추적할 수 있다.
 
 ## 8. 백엔드 API 계약 (요약)
 
@@ -288,7 +297,7 @@ flowchart LR
 
 | 구분 | 도구 | 인자 | 서버 처리 |
 | --- | --- | --- | --- |
-| 수정 | `update_features` | `colors`, `breed`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 품종·특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값만 반영 → 유사도 다시 계산(rank) |
+| 수정 | `update_features` | `colors`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값만 반영 → 유사도 다시 계산(rank) |
 | 수정 | `relax_condition` | `field ∈ breed·sex`, `reason` | 그 조건 제거 → rank |
 | 수정 | `widen_radius` | `reason` | 반경 적용 중이고 최대 단계가 아니면 `radius_step+1` → radius(공고 API 재호출 없음) |
 | 종료 | `request_photo` | `reason` | 대화당 1회, 사진을 이미 줬거나 '모르겠어요'면 거부 |
@@ -302,3 +311,21 @@ flowchart LR
 - **API 계약:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5). 응답 run 에 `confidence`, `agent_request`, `agent_decision`. 에이전트가 조건을 고치면 run 의 `criteria` 에 고친 값이 보인다(대화 thread 의 확인 조건에는 사용자 입력만 저장). 의존성 `AppContext.search_agent`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델).
 - **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색), 아래에 답한 값 칩(`털색: 흰색 ✕`). 칩 값은 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
 - **검증:** 가짜 도구 client 로 루프·검증·한도·거부를 시험(`backend/tests/test_search_agent.py`). 실제 LLM 판단 품질은 미측정.
+
+## 13. 품종 검색 (breed-v3)
+
+공개 `GET /kinds?species=dog|cat|etc&name=선택`은 활성 품종 목록을 Redis에 1일 캐시한다. AI 조회 도구는 SQLite/Supabase에서 축종과 LIKE 부분 이름 조건으로 조회한다. 7일 주기 upsert 작업은 성공 후 Redis 목록 캐시를 무효화한다.
+
+`POST /searches` 요청의 `criteria.breed_code`는 품종 코드 문자열이다. 프론트는 `/kinds`의 코드·이름을 함께 받고 option의 value에는 코드, 표시에는 이름을 쓴다. 사진 자동 검색도 코드만 전송한다.
+
+`context → breed → plan`에서 breed 노드는 **criteria.breed_code를 먼저 축종별 활성 품종과 대조**하고 표시·정렬용 criteria.breed를 서버의 공식 이름으로 채운다. 잘못된 코드·축종 불일치는 invalid_breed_code로 종료하며 AI에 보정시키지 않는다. 기존 이름 기반 클라이언트는 코드가 없을 때만 명시적 criteria.breed를 정규화한다. 공식명·별칭 우선, 필요 시 DB 조회 도구 AI 보완 순서다. 설명은 인자로 받지도, 모델에 전달하지도 않는다. 글 특징 추출 모델 및 결과 스키마는 colors/sex/marks만 포함한다(결과에는 모델·버전 메타데이터 포함). 기존 후보 순위의 품종 근거도 criteria.breed만 읽는다.
+
+FastAPI lifespan에서 `KindRepository.load_catalog()`를 실행해 모든 축종의 활성 DB 품종을 읽고 `(kind_code, name)` 쌍만 정렬된 불변 tuple로 보관한다. `functools.lru_cache(maxsize=1)`를 적용한 `catalog()`를 시작 시 예열한다. 사진마다 DB·Redis를 읽지 않는다. 초기 적재 실패 시 서버 시작이 실패하며 리소스는 닫힌다. 이 프로세스 스냅샷의 갱신은 서버 재시작 시 반영한다. Redis 공개 목록 캐시와는 별개다.
+
+사진 프롬프트에는 이 코드·이름 목록만 전달한다. 모델 스키마는 `breed` 대신 `breed_code`, confidence는 `breed_code`를 사용한다. 적합성·확신 기준을 통과한 코드라도 LRU 목록에 없으면 빈 코드로 버린다. API `/photo-analysis`는 `breed_code`와 서버가 해당 코드에서 조회한 표시용 `breed`를 반환한다. 품종명은 모델이 생성하지 않는다. 목록이 비어 있으면 모든 품종 코드를 버린다.
+
+프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
+
+프롬프트/조건 캐시 버전은 feature-extract-v5 / rrf-breed-v3다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+
+검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.

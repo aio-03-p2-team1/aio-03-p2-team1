@@ -50,9 +50,9 @@ def test_feature_updates_need_evidence_in_user_text():
     accepted, rejected = SA.validate_features(
         {"colors": ["흰색", "검정"], "breed": "말티즈", "sex": "F", "marks": ["얼룩", "꼬리 짧음"]}, source)
     assert accepted == {"colors": ["흰색"], "marks": ["얼룩"]}
-    assert len(rejected) == 4  # 검정·말티즈·암컷·꼬리 짧음은 원문에 없음
+    assert len(rejected) == 3  # 품종은 처리하지 않고 검정·암컷·꼬리 짧음은 거부
     accepted, _ = SA.validate_features({"breed": "믹스견", "sex": "M"}, source)
-    assert accepted == {"breed": "믹스견", "sex": "M"}
+    assert accepted == {"sex": "M"}
 
 
 def test_read_results_hides_contacts_ids_and_dates():
@@ -89,7 +89,7 @@ def test_agent_reads_updates_reruns_and_finishes():
 
 
 def test_fabricated_feature_rejected_without_rerun():
-    d, _ = agent_deps([("UpdateFeatures", {"breed": "말티즈", "reason": "말티즈로 바꿔요."})])
+    d, _ = agent_deps([("UpdateFeatures", {"marks": ["꼬리 짧음"], "reason": "특징을 바꿔요."})])
     run = search(d, MIXED)
     log = run["agent_decision"]["log"]
     update = next(e for e in log if e.get("tool") == "update_features")
@@ -136,3 +136,21 @@ def test_no_llm_or_llm_error_keeps_results():
     assert run["agent_decision"]["source"] == "no_llm" and run["candidates"]
     run = search(agent_deps(error=TimeoutError())[0], MIXED)
     assert run["agent_decision"]["source"] == "llm_error" and run["candidates"]
+
+
+def test_update_features_schema_and_runtime_exclude_breed():
+    assert 'breed' not in SA.UpdateFeatures.model_fields
+    assert '품종·성별·특징' not in SA.SYSTEM_PROMPT
+    accepted, _ = SA.validate_features({'breed': '믹스견'}, '믹스견 흰색')
+    assert accepted == {}
+    d, _ = agent_deps([('UpdateFeatures', {'breed': '믹스견', 'reason': '품종 변경'})])
+    run = search(d, MIXED)
+    assert not run['criteria'].get('breed')
+    assert run['agent_decision']['reruns'] == 0
+
+
+def test_relaxing_breed_clears_code_together():
+    state = {'criteria': {'species': 'dog', 'breed': '푸들', 'breed_code': '1'}}
+    result = SA.execute_tool('relax_condition', {'field': 'breed'}, state, {})
+    assert 'breed' not in result['update']['criteria']
+    assert 'breed_code' not in result['update']['criteria']

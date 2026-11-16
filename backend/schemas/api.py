@@ -20,6 +20,7 @@ class SearchCriteria(BaseModel):
     lost_date: str | None = Field(default=None, max_length=10)
     pet_name: str | None = Field(default=None, max_length=30)
     breed: str | None = Field(default=None, max_length=40)
+    breed_code: str | None = Field(default=None, max_length=20)
     color: str | None = Field(default=None, max_length=40)
     sex: str | None = Field(default=None, max_length=4)
     age: str | None = Field(default=None, max_length=20)
@@ -97,6 +98,7 @@ class PhotoAnalysisResponse(StrictSchema):
     suitable: bool
     species: Species
     colors: list[Color]
+    breed_code: str
     breed: str
     sex: Sex
     marks: list[str]

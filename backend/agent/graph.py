@@ -114,6 +114,8 @@ async def context(state: SearchState, config) -> dict:
             memory = await deps["store"].get(state["owner"], "memory", profile_id)
         confirmed = (memory or {}).get("confirmed") or {}
         for key in crit.OPTIONAL_FIELDS:
+            if key in ("breed", "breed_code") and origin.get(key) == "request":
+                continue
             if not criteria.get(key) and confirmed.get(key):
                 criteria[key] = str(confirmed[key])[:500]
                 origin[key] = "memory"
@@ -151,7 +153,28 @@ async def context(state: SearchState, config) -> dict:
 
 
 def route_after_context(state: SearchState) -> str:
-    return "finalize" if state.get("error") else "plan"
+    return "finalize" if state.get("error") else "breed"
+
+
+async def normalize_breed(state: SearchState, config) -> dict:
+    normalizer = _deps(config).get("breed_normalizer")
+    criteria = dict(state["criteria"])
+    code = criteria.get("breed_code")
+    criteria["breed_code"] = None
+    if code:
+        criteria.pop("breed", None)
+    if normalizer and criteria.get("species") in {"dog", "cat", "etc"}:
+        try:
+            row = (await normalizer.resolve_code(criteria["species"], code) if code
+                   else await normalizer.resolve(criteria["species"], criteria.get("breed", "")))
+        except Exception:
+            return {"criteria": criteria, "trace": ["breed"], "error": {"code": "breed_normalization_failed", "message": "품종을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."}}
+        if row:
+            criteria.update(breed=row["name"], breed_code=row["kind_code"])
+    if code and not criteria.get("breed_code"):
+        return {"criteria": criteria, "trace": ["breed"], "error": {
+            "code": "invalid_breed_code", "message": "선택한 축종의 품종 코드를 확인해 주세요."}}
+    return {"criteria": criteria, "trace": ["breed"]}
 
 
 def _match_region(name: str, regions, *, lenient: bool) -> Any:
@@ -618,6 +641,7 @@ def build_graph():
     g.add_node("analyze", analyze)
     g.add_node("ask", ask)
     g.add_node("context", context)
+    g.add_node("breed", normalize_breed)
     g.add_node("plan", plan)
     g.add_node("execute", execute)
     g.add_node("radius", radius_node)
@@ -632,7 +656,8 @@ def build_graph():
     g.add_edge(START, "analyze")
     g.add_conditional_edges("analyze", route_after_analyze, {"ask": "ask", "context": "context"})
     g.add_edge("ask", END)
-    g.add_conditional_edges("context", route_after_context, {"plan": "plan", "finalize": "finalize"})
+    g.add_conditional_edges("context", route_after_context, {"breed": "breed", "finalize": "finalize"})
+    g.add_conditional_edges("breed", lambda s: "finalize" if s.get("error") else "plan", {"plan": "plan", "finalize": "finalize"})
     g.add_conditional_edges("plan", route_after_plan, {"validate": "validate", "execute": "execute"})
     g.add_edge("execute", "radius")
     g.add_edge("radius", "rank")

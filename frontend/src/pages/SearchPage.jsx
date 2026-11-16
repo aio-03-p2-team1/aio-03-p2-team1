@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
+import { loadKinds, withSpecies, withPhotoBreed, breedRequest } from '../lib/kinds.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
@@ -17,11 +18,28 @@ import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-const initialForm = () => ({ species: '', lost_date: today(), description: '' })
+const initialForm = () => ({ breed_code: '', species: '', lost_date: today(), description: '' })
 export default function SearchPage() {
+  const [kinds, setKinds] = useState([])
+  const [kindsError, setKindsError] = useState('')
+  const [kindsLoading, setKindsLoading] = useState(false)
   const regions = useRegions()
   const toast = useToast()
   const [form, setForm] = useSearchViewState('form', initialForm)
+  useEffect(() => {
+    let active = true
+    setKinds([])
+    setKindsError('')
+    if (!form.species || form.species === 'all') {
+      setKindsLoading(false)
+      return
+    }
+    setKindsLoading(true)
+    loadKinds(form.species).then((rows) => { if (active) setKinds(rows) })
+      .catch(() => { if (active) setKindsError('품종 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.') })
+      .finally(() => { if (active) setKindsLoading(false) })
+    return () => { active = false }
+  }, [form.species])
   const [location, setLocation] = useSearchViewState('location', null)
   const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useSearchViewState('photo', '')
@@ -100,7 +118,7 @@ export default function SearchPage() {
     if (oldAuto || oldSpecies) {
       setForm((current) => ({
         ...current,
-        ...(oldSpecies && current.species === oldSpecies ? { species: '' } : {}),
+        ...(oldSpecies && current.species === oldSpecies ? { species: '', breed_code: '' } : {}),
         ...(oldAuto && current.description.startsWith(oldAuto)
           ? { description: current.description.slice(oldAuto.length).trimStart() }
           : {}),
@@ -123,7 +141,6 @@ export default function SearchPage() {
         return
       }
       const traits = [
-        result.breed,
         ...result.colors,
         result.sex === 'M' ? '수컷' : result.sex === 'F' ? '암컷' : '',
         ...result.marks,
@@ -136,7 +153,7 @@ export default function SearchPage() {
       }
       setForm((current) => ({
         ...current,
-        ...(result.species ? { species: result.species } : {}),
+        ...withPhotoBreed(current, result),
         ...(extracted ? { description: [extracted, current.description].filter(Boolean).join('\n') } : {}),
       }))
       setPhotoFeatureText(extracted)
@@ -147,7 +164,7 @@ export default function SearchPage() {
         const base = oldAuto && form.description.startsWith(oldAuto) ? form.description.slice(oldAuto.length).trimStart() : form.description
         const nextForm = {
           ...form,
-          ...(result.species ? { species: result.species } : {}),
+          ...withPhotoBreed(form, result),
           description: [extracted, base].filter(Boolean).join('\n'),
         }
         submit(buildCriteria(nextForm, answers), run.thread_id)
@@ -214,8 +231,8 @@ export default function SearchPage() {
   }
 
   function buildCriteria(values, answerValues) {
-    const criteria = {}
-    for (const [k, v] of Object.entries(values)) if (v.trim()) criteria[k] = v.trim()
+    const criteria = breedRequest(values)
+    for (const [k, v] of Object.entries(values)) if (k !== 'breed' && v.trim()) criteria[k] = v.trim()
     if (location?.region) criteria.region = location.region
     if (location?.address) criteria.lost_place = location.address
     // 지도에서 찍은 점을 반경 중심으로 보낸다(서버가 한국 범위 검사). 미리 보기와 실제 검색 범위가 같아진다.
@@ -285,7 +302,15 @@ export default function SearchPage() {
           <div className="search-fields-v2">
             <div className="field-block">
               <span className="field-label">종류 <em className="req">필수</em></span>
-              <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => ({ ...f, species }))} />
+              <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => withSpecies(f, species))} />
+              <label>품종 (선택)
+                <select aria-label="품종" value={form.breed_code || ''} onChange={set('breed_code')}
+                  disabled={!form.species || form.species === 'all' || kindsLoading || !kinds.length}>
+                  <option value="">{kindsLoading ? '품종 불러오는 중…' : '품종을 선택해 주세요'}</option>
+                  {kinds.map((kind) => <option key={kind.kind_code} value={kind.kind_code}>{kind.name}</option>)}
+                </select>
+              </label>
+              {kindsError && <p role="alert">{kindsError}</p>}
             </div>
             {/* 추가 질문을 입력 카드 안에도 보여 준다. 답해야 하는 질문(빈 칸·입력 오류)은 빨간색,
                 범위를 넓힐지 묻는 질문은 금색으로 구분하고, 넓히기 버튼을 바로 옆에 둔다. */}
@@ -327,7 +352,7 @@ export default function SearchPage() {
             )}
             <label className="search-description">
               특징과 상황
-              <textarea ref={descriptionRef} rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
+              <textarea ref={descriptionRef} rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털, 빨간 목줄. 품종은 위 목록에서 선택해 주세요." />
             </label>
             {chips.length > 0 && (
               <div className="answer-chips" aria-label="요청에 답한 값">

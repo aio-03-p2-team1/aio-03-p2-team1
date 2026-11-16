@@ -80,5 +80,3 @@ def build_request(name: str, args: dict[str, Any], allowed: dict[str, Any]) -> d
             return {"type": "info", "field": field, "label": FIELD_LABELS[field],
                     "options": list(FIELD_OPTIONS[field]), "reason": _clean_reason(args.get("reason"), field)}
     return None
-
-

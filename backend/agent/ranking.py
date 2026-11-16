@@ -111,7 +111,7 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
     matched, mismatched, unknown = [], [], []
     points = 0
 
-    breed = criteria.get("breed") or features.get("breed")
+    breed = criteria.get("breed")
     if breed:
         if not item.get("breed"):
             unknown.append("품종")
@@ -204,7 +204,7 @@ def input_signals(criteria: dict[str, Any], features: dict[str, Any] | None = No
     colors = tokenize_color_words(f"{criteria.get('color') or ''} {criteria.get('description') or ''}")
     marks = [k for k in keywords(criteria.get("description")) if k not in MIXED_WORDS]
     return {
-        "breed_given": bool(criteria.get("breed") or features.get("breed")),
+        "breed_given": bool(criteria.get("breed")),
         "breed_mixed": any(w in text.lower() for w in MIXED_WORDS),
         "color_given": bool(colors["colors"] or colors["patterns"] or features.get("colors")),
         "sex_given": bool(criteria.get("sex") or features.get("sex")),

@@ -65,11 +65,18 @@ def build_context(settings: Settings) -> AppContext:
         if settings.openai_api_key
         else None
     )
+    from backend.tools.kinds import KindRepository
+    from backend.agent.breed import BreedNormalizer
+    kinds = KindRepository(settings, redis)
+    if photo_llm:
+        photo_llm.kinds = kinds
     # 검색 에이전트의 도구 호출은 사진 분석과 같은 채팅 모델·연결을 쓴다(키 없으면 에이전트 생략, 결과는 그대로).
     from backend.agent.search_agent import SearchAgent
 
     search_agent = SearchAgent(photo_llm._client, settings.openai_model) if photo_llm else None
     return AppContext(
+        kinds=kinds,
+        breed_normalizer=BreedNormalizer(kinds, photo_llm._client if photo_llm else None),
         settings=settings,
         store=build_store(settings),
         sessions=SessionStore(redis, settings.auth_session_ttl_seconds),
@@ -103,6 +110,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             settings.animal_data_source,
         )
         try:
+            if app.state.ctx.kinds is not None:
+                await app.state.ctx.kinds.load_catalog()
             yield
         finally:
             ctx = getattr(app.state, "ctx", None)

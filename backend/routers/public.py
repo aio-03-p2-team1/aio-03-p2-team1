@@ -110,3 +110,11 @@ async def notice_detail(notice_id: str):
     if not item:
         raise ApiError(404, "notice_not_cached", "공고 정보를 다시 불러와야 합니다. 목록에서 공고를 다시 선택해 주세요.")
     return item
+
+
+@router.get("/kinds")
+async def kinds(species: Literal["dog", "cat", "etc"], name: str = Query(default="", max_length=100),
+                ctx: AppContext = Depends(get_ctx)):
+    if ctx.kinds is None:
+        raise ApiError(503, "kinds_unavailable", "품종 목록을 불러오지 못했습니다.")
+    return {"kinds": await ctx.kinds.lookup(species, name)}

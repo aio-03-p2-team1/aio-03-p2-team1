@@ -80,6 +80,7 @@ class FakePhotoAnalyzer:
             species="",
             colors=[],
             breed="",
+            breed_code="",
             sex="",
             marks=[],
         )
