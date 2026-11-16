@@ -161,7 +161,7 @@ class FeatureExtractor:
             request = PhotoAnalysisRequest(image=image, mime_type=mime_type)
         except ValidationError as exc:
             raise LlmError("llm_request") from exc
-        catalog = self.kinds.catalog() if getattr(self, "kinds", None) is not None else ()
+        catalog = await self.kinds.catalog() if getattr(self, "kinds", None) is not None else ()
         prefix = PHOTO_SYSTEM_PROMPT + "\n공식 품종 목록 [코드, 이름]:" + json.dumps(catalog, ensure_ascii=False)
         encoded = base64.b64encode(request.image).decode("ascii")
         response = await self._invoke_structured([
@@ -199,7 +199,7 @@ class FeatureExtractor:
             if item.value.strip() and item.confidence >= PHOTO_CONFIDENCE_THRESHOLD
         ][:6]
         breed_code = data.breed_code if suitable and confident("breed_code") else ""
-        # Only codes loaded from the database at startup are trusted.
+        # Only codes in the shared Redis-backed catalog are trusted.
         breed = dict(catalog).get(breed_code, "")
         if not breed:
             breed_code = ""

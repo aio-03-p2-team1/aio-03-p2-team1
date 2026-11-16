@@ -2,7 +2,6 @@
 import asyncio
 import json
 import sqlite3
-from functools import lru_cache
 
 import httpx
 from redis.exceptions import RedisError
@@ -19,19 +18,11 @@ class KindRepository:
         self.settings = settings
         self.redis = redis
         self.transport = transport
-        self._catalog_data = ()
-        self.catalog = lru_cache(maxsize=1)(lambda: self._catalog_data)
 
-    async def load_catalog(self):
-        """Warm the process-local code/name-only snapshot at server startup."""
-        pairs = {}
-        for species in ('dog', 'cat', 'etc'):
-            for row in await self._rows(species):
-                pairs[row['kind_code']] = row['name']
-        self._catalog_data = tuple(sorted(pairs.items()))
-        self.catalog.cache_clear()
-        self.catalog()
-
+    async def catalog(self):
+        """Photo prompt and validation use the public list's Redis caches."""
+        lists = await asyncio.gather(*(self.lookup(species) for species in ('dog', 'cat', 'etc')))
+        return tuple(sorted({row['kind_code']: row['name'] for rows in lists for row in rows}.items()))
 
     async def _rows(self, species, name=""):
         query = normalize(name)

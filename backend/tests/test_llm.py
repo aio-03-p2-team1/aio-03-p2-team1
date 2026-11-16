@@ -185,6 +185,7 @@ def test_timeout_classified():
 @pytest.mark.parametrize("code,expected", [("1", "푸들"), ("unknown", ""), ("", "")])
 def test_photo_uses_cached_codes_and_rejects_unknown_code(code, expected):
     from types import SimpleNamespace
+    from unittest.mock import AsyncMock
     payload = {
         'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
         'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed_code', 'sex')},
@@ -192,7 +193,7 @@ def test_photo_uses_cached_codes_and_rejects_unknown_code(code, expected):
     }
     client = FakeChatClient(payload)
     model = extractor(client)
-    model.kinds = SimpleNamespace(catalog=lambda: (("1", "푸들"), ("2", "코리안 숏헤어")))
+    model.kinds = SimpleNamespace(catalog=AsyncMock(return_value=(("1", "푸들"), ("2", "코리안 숏헤어"))))
     result = asyncio.run(model.analyze_photo(b'image', 'image/jpeg'))
     assert result.breed == expected
     assert result.breed_code == (code if expected else '')
@@ -202,13 +203,14 @@ def test_photo_uses_cached_codes_and_rejects_unknown_code(code, expected):
 
 def test_photo_empty_catalog_does_not_accept_generated_code():
     from types import SimpleNamespace
+    from unittest.mock import AsyncMock
     payload = {
         'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
         'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed_code', 'sex')},
         'species': 'dog', 'breed_code': '1', 'sex': '', 'colors': [], 'marks': [],
     }
     model = extractor(FakeChatClient(payload))
-    model.kinds = SimpleNamespace(catalog=lambda: ())
+    model.kinds = SimpleNamespace(catalog=AsyncMock(return_value=()))
     result = asyncio.run(model.analyze_photo(b'image', 'image/jpeg'))
     assert result.breed_code == result.breed == ''
 
