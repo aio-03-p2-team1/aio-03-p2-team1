@@ -1,4 +1,4 @@
-"""검색 반경: 실종 후 날짜별 반경, 반경 밖 제외·임베딩 제외, 0건이면 넓히기 질문, 대체 경로.
+"""검색 반경: 실종 후 날짜별 반경, 반경 밖 제외·임베딩 제외, 0건이면 20km 까지 자동 확대 후 넓히기 질문, 대체 경로.
 
 카카오는 모의 transport 로 대체한다(실제 호출 없음). 좌표는 시험용 고정값이다.
 """
@@ -122,19 +122,47 @@ def test_outside_radius_is_excluded_and_not_embedded():
     assert run["scope"]["radius"]["radius_km"] == 3.0
 
 
-def test_empty_radius_asks_then_widens_in_same_thread():
+def test_empty_radius_widens_automatically_3_to_10km():
     animal = FakeAnimal(pages=[items("서울특별시 양천구", "서울특별시 노원구")])
+    calls = []
+    d = deps(animal, kakao(calls))
+    run = search(d, base(days=2))
+    # 3km 안에는 없어서 묻지 않고 10km 로 넓혀 찾는다(양천 약 3.5km 포함, 노원 약 23km 제외).
+    assert run["status"] == "completed"
+    r = run["radius"]
+    assert r["requested_km"] == 3.0 and r["radius_km"] == 10.0 and r["step"] == 1
+    assert r["auto_widened"] is True and r["widen_trail"] == [3.0, 10.0]
+    assert (r["inside"], r["unknown"], r["excluded"]) == (1, 0, 1)
+    assert r["next_widen_day"] is None and r["next_radius_km"] == 20.0
+    assert [c["id"] for c in run["candidates"]] == ["448000000001"]
+    assert run["reflections"] == []  # 판단 수정(질문) 없이 자동 확대
+    # 넓힐 때 좌표를 다시 묻지 않는다: 실종 위치 + 관할 2곳 = 3번(그 뒤 보호센터 위치 조회는 별도)
+    radius_call = next(c for c in run["tool_calls"] if c["tool"] == "kakao_geocode_regions")
+    assert radius_call["args"]["requests"] == 3
+    assert calls[:3].count(LOST_PLACE) == 1 and len(set(calls[:3])) == 3
+
+
+def test_auto_widen_stops_at_20km_then_asks_for_whole_region():
+    animal = FakeAnimal(pages=[items("서울특별시 노원구")])
     d = deps(animal)
     first = search(d, base(days=2))
+    r = first["radius"]
+    assert r["widen_trail"] == [3.0, 10.0, 20.0] and r["radius_km"] == 20.0 and r["step"] == 2
+    # 20km 에서도 없으면 조회 지역 전체로는 자동으로 넓히지 않고 묻는다.
     assert first["status"] == "awaiting_input"
     question = next(q for q in first["questions"] if q["field"] == "radius")
-    assert question["next_step"] == 1 and "10km" in question["message"]
+    assert question["next_step"] == 3 and "20km" in question["message"] and "조회 지역 전체" in question["message"]
     assert first["reflections"][0]["strategy"] == "ask_user_to_widen_radius"
-    # 사용자가 넓히기에 동의하면 같은 세션에서 다음 단계로 다시 찾는다(조용히 넓히지 않는다).
-    second = search(d, {"radius_step": 1}, thread_id=first["thread_id"])
+    second = search(d, {"radius_step": 3}, thread_id=first["thread_id"])
     assert second["status"] == "completed"
-    assert second["radius"]["radius_km"] == 10.0
-    assert [c["id"] for c in second["candidates"]] == ["448000000001"]  # 양천 포함, 노원 제외
+    assert second["radius"]["applied"] is False and second["radius"]["reason"] == "whole_region"
+    assert [c["id"] for c in second["candidates"]] == ["448000000001"]
+
+
+def test_no_widening_when_results_exist():
+    animal = FakeAnimal(pages=[items("서울특별시 강서구", "서울특별시 양천구")])
+    r = search(deps(animal), base(days=2))["radius"]
+    assert r["radius_km"] == 3.0 and r["auto_widened"] is False and r["widen_trail"] == [3.0]
 
 
 def test_empty_radius_without_reflection_does_not_ask():
