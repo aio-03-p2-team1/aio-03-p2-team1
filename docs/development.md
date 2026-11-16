@@ -110,6 +110,8 @@ cd frontend && npm test && npm run build
 
 ### 품종 기준정보 초기화
 
+관리자의 최초 운영 설정·Secrets 등록·수동 실행·오류 대응은 [관리자용 품종 설정 안내](admin-kind-setup.md)를 따른다.
+
 `.env`에 `ANIMAL_API_KEY`와 대상 `STORAGE_BACKEND`를 설정한다. SQLite는 `uv run python scripts/init_kinds_sqlite.py`를 실행하며, `SQLITE_PATH` DB에 `scripts/bootstrap_sqlite.sql` 전체를 실행한 뒤 데이터를 동기화한다. Supabase는 `scripts/bootstrap_schema.sql` 전체를 SQL Editor에서 먼저 실행하고 해당 스키마를 Data API의 Exposed schemas에 추가한 뒤 `uv run python scripts/init_kinds_supabase.py`를 실행한다. 백엔드별 테이블 DDL은 각 bootstrap SQL에만 둔다. 두 초기화 스크립트는 공통 `scripts/kind_sync.py`를 사용해 `kind_v2`의 전체 페이지를 읽는다. totalCount보다 적은 응답과 호출 오류는 최대 3회 재시도한다(0.5초, 1초, 2초 대기). 반복 실행 시 코드 기준으로 갱신하며 API에서 사라진 코드는 비활성으로 보존한다. API 키가 없거나 재시도 후에도 실패하면 오류로 종료한다.
 
 이름은 저장할 때 공백을 제거해 `search_name`에 보관한다. 검색 입력도 같은 규칙으로 정규화하고 `(species, search_name)` 동등 조건으로 조회하면 `kinds_search_name_idx` B-tree 인덱스를 사용한다. SQLite의 `EXPLAIN QUERY PLAN`으로 인덱스 사용을 검증한다. 이름 컬럼에 매번 공백 제거 함수를 씌우는 함수 인덱스는 SQLite·PostgreSQL 간 함수 호환 차이가 있어 사용하지 않는다. 표기만 공백이 다른 이름은 alias로 중복 저장하지 않고, 의미가 다른 별칭은 `kind_aliases`에 큐레이션한다.
@@ -148,6 +150,6 @@ DB 초기화 후 프로젝트 루트에서 `uv run python -m scripts.refresh_kin
 
 `.github/workflows/refresh-kinds.yml`에 매일 실행하는 cron을 정의했다. 내부 7일 게이트를 거쳐 갱신한다. GitHub에서 실행하려면 워크플로의 동명 Secrets(위 DB·Redis·공공 API 변수)가 필요하고 Redis가 실행 환경에서 접근 가능해야 한다. 워크플로 실행·원격 Secrets 등록은 수행하지 않았다.
 
-### 사진용 품종 LRU 스냅샷
+### 사진 분석·셀렉트 공통 품종 캐시
 
-서버 시작 시 DB 품종 초기화가 선행되어야 한다. lifespan에서 모든 활성 품종의 코드·이름만 읽어 프로세스별 LRU 캐시를 예열한다. 사진 분석마다 DB나 Redis를 조회하지 않으며, 초기 DB 조회 실패 시 서버 시작이 실패한다. cron이 변경한 DB 내용은 공개 목록의 Redis 무효화로 반영되고, 사진용 시작 시점 스냅샷에는 백엔드를 재시작한 뒤 반영된다.
+사진 분석과 `/kinds`는 동일한 축종별 Redis 캐시(TTL 1일)를 사용한다. 시작 시 LRU 적재는 없으며 첫 요청 시 DB에서 읽는다. DB 초기화는 여전히 필요하지만, 동기화 성공 후 Redis 목록 키가 무효화되면 서버 재시작 없이 양쪽에 갱신된 데이터가 반영된다. 브라우저의 목록 메모리 캐시는 새로고침해야 한다. Redis 장애 시 DB를 직접 조회하며 DB 실패는 오류로 응답한다.

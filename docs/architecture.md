@@ -312,7 +312,7 @@ flowchart LR
 - **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색), 아래에 답한 값 칩(`털색: 흰색 ✕`). 칩 값은 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
 - **검증:** 가짜 도구 client 로 루프·검증·한도·거부를 시험(`backend/tests/test_search_agent.py`). 실제 LLM 판단 품질은 미측정.
 
-## 13. 품종 검색 (breed-v3)
+## 13. 품종 검색 (breed-v4)
 
 공개 `GET /kinds?species=dog|cat|etc&name=선택`은 활성 품종 목록을 Redis에 1일 캐시한다. AI 조회 도구는 SQLite/Supabase에서 축종과 LIKE 부분 이름 조건으로 조회한다. 7일 주기 upsert 작업은 성공 후 Redis 목록 캐시를 무효화한다.
 
@@ -320,9 +320,9 @@ flowchart LR
 
 `context → breed → plan`에서 breed 노드는 **criteria.breed_code를 먼저 축종별 활성 품종과 대조**하고 표시·정렬용 criteria.breed를 서버의 공식 이름으로 채운다. 잘못된 코드·축종 불일치는 invalid_breed_code로 종료하며 AI에 보정시키지 않는다. 기존 이름 기반 클라이언트는 코드가 없을 때만 명시적 criteria.breed를 정규화한다. 공식명·별칭 우선, 필요 시 DB 조회 도구 AI 보완 순서다. 설명은 인자로 받지도, 모델에 전달하지도 않는다. 글 특징 추출 모델 및 결과 스키마는 colors/sex/marks만 포함한다(결과에는 모델·버전 메타데이터 포함). 기존 후보 순위의 품종 근거도 criteria.breed만 읽는다.
 
-FastAPI lifespan에서 `KindRepository.load_catalog()`를 실행해 모든 축종의 활성 DB 품종을 읽고 `(kind_code, name)` 쌍만 정렬된 불변 tuple로 보관한다. `functools.lru_cache(maxsize=1)`를 적용한 `catalog()`를 시작 시 예열한다. 사진마다 DB·Redis를 읽지 않는다. 초기 적재 실패 시 서버 시작이 실패하며 리소스는 닫힌다. 이 프로세스 스냅샷의 갱신은 서버 재시작 시 반영한다. Redis 공개 목록 캐시와는 별개다.
+사진 분석과 셀렉트 API는 `KindRepository.lookup()`의 동일한 축종별 Redis 키(`meet-again:kinds:dog|cat|etc`, TTL 86400초)를 사용한다. 사진용 `catalog()`는 요청마다 이 세 목록을 합쳐 코드·이름만 정렬해 전달한다. 별도 LRU·시작 시 DB 적재는 없다. Redis miss/장애 시 DB를 조회하며, DB 실패를 빈 목록으로 대체하지 않는다. 동기화 후 세 키를 무효화하면 다음 사진 분석과 목록 API가 갱신된 DB를 읽는다. 데이터 반영을 위한 서버 재시작은 필요하지 않다.
 
-사진 프롬프트에는 이 코드·이름 목록만 전달한다. 모델 스키마는 `breed` 대신 `breed_code`, confidence는 `breed_code`를 사용한다. 적합성·확신 기준을 통과한 코드라도 LRU 목록에 없으면 빈 코드로 버린다. API `/photo-analysis`는 `breed_code`와 서버가 해당 코드에서 조회한 표시용 `breed`를 반환한다. 품종명은 모델이 생성하지 않는다. 목록이 비어 있으면 모든 품종 코드를 버린다.
+사진 프롬프트에는 이 코드·이름 목록만 전달한다. 모델 스키마는 `breed` 대신 `breed_code`, confidence는 `breed_code`를 사용한다. 적합성·확신 기준을 통과한 코드라도 해당 요청에서 조회한 공통 목록에 없으면 빈 코드로 버린다. API `/photo-analysis`는 `breed_code`와 서버가 해당 코드에서 조회한 표시용 `breed`를 반환한다. 품종명은 모델이 생성하지 않는다. 목록이 비어 있으면 모든 품종 코드를 버린다.
 
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 

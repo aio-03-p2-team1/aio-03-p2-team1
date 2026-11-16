@@ -178,14 +178,12 @@ def test_graph_finishes_with_error_when_breed_database_fails(repository):
 
 
 @run_async
-async def test_startup_catalog_contains_only_codes_and_names_and_is_lru_cached(repository):
-    await repository.load_catalog()
-    assert repository.catalog() == (('1', '푸들'), ('2', '코리안 숏헤어'))
-    assert repository.catalog.cache_info().maxsize == 1
-    repository._rows = AsyncMock(side_effect=AssertionError('runtime DB read'))
-    first = repository.catalog()
-    assert repository.catalog() is first
-    assert repository.catalog.cache_info().hits >= 2
+async def test_photo_catalog_reuses_public_list_redis_cache(repository):
+    for species in ('dog', 'cat', 'etc'):
+        await repository.lookup(species)
+    repository._rows = AsyncMock(side_effect=AssertionError('cache should be shared'))
+    assert await repository.catalog() == (('1', '푸들'), ('2', '코리안 숏헤어'))
+    repository._rows.assert_not_awaited()
 
 
 def test_description_no_longer_extracts_breed(repository):
@@ -200,15 +198,15 @@ def test_description_no_longer_extracts_breed(repository):
     repository.rows.assert_not_awaited()
 
 
-def test_lifespan_warms_catalog_before_requests(repository):
+def test_lifespan_does_not_read_breeds_before_requests(repository):
     from fastapi.testclient import TestClient
     from backend.main import create_app
     from backend.tests.conftest import build_ctx
     ctx = build_ctx()
     ctx.kinds = repository
-    assert repository.catalog() == ()
+    repository._rows = AsyncMock(side_effect=AssertionError('startup must not query breeds'))
     with TestClient(create_app(ctx)):
-        assert repository.catalog() == (('1', '푸들'), ('2', '코리안 숏헤어'))
+        repository._rows.assert_not_awaited()
 
 
 def test_search_accepts_code_and_uses_server_name_without_ai(repository):
@@ -242,3 +240,32 @@ def test_clearing_or_changing_species_clears_session_code_and_name():
     for current in ({'species': 'dog', 'breed_code': ''}, {'species': 'cat'}):
         merged, _ = merge_conditions(current, prior, prior)
         assert merged['breed_code'] == merged['breed'] == ''
+
+
+@pytest.mark.parametrize("start_empty", [False, True])
+@run_async
+async def test_shared_catalog_reflects_sync_invalidation_without_restart(repository, start_empty):
+    from backend.agent.llm import FeatureExtractor
+    from backend.tests.test_llm import FakeChatClient
+    if start_empty:
+        initial = SqliteSink(repository.settings.sqlite_path)
+        initial.sync([])
+        initial.close()
+    assert await repository.catalog() == (() if start_empty else (('1', '푸들'), ('2', '코리안 숏헤어')))
+    sink = SqliteSink(repository.settings.sqlite_path)
+    sink.sync([normalize_record('dog', {'kind_cd': '3', 'KNm': '말티즈'}, 'now')])
+    sink.close()
+    # Same invalidation keys used by scripts.refresh_kinds after successful sync.
+    await repository.redis.delete(*(f'meet-again:kinds:{s}' for s in ('dog', 'cat', 'etc')))
+    public = await repository.lookup('dog')
+    assert public == [{'kind_code': '3', 'name': '말티즈', 'species': 'dog'}]
+    payload = {
+        'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
+        'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed_code', 'sex')},
+        'species': 'dog', 'breed_code': '3', 'sex': '', 'colors': [], 'marks': [],
+    }
+    model = FeatureExtractor('test-only', 'fake', client=FakeChatClient(payload))
+    model.kinds = repository
+    result = await model.analyze_photo(b'image', 'image/jpeg')
+    assert result.breed_code == '3' and result.breed == '말티즈'
+    assert await repository.catalog() == (('3', '말티즈'),)
