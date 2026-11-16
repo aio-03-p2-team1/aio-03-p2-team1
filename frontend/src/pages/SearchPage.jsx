@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
-import { loadKinds } from '../lib/kinds.js'
+import { loadKinds, withSpecies } from '../lib/kinds.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
@@ -30,7 +30,10 @@ export default function SearchPage() {
     let active = true
     setKinds([])
     setKindsError('')
-    if (!form.species || form.species === 'all') return
+    if (!form.species || form.species === 'all') {
+      setKindsLoading(false)
+      return
+    }
     setKindsLoading(true)
     loadKinds(form.species).then((rows) => { if (active) setKinds(rows) })
       .catch(() => { if (active) setKindsError('품종 목록을 불러오지 못했어요. 설명에 품종을 적어 주세요.') })
@@ -122,7 +125,7 @@ export default function SearchPage() {
     if (oldAuto || oldSpecies) {
       setForm((current) => ({
         ...current,
-        ...(oldSpecies && current.species === oldSpecies ? { species: '' } : {}),
+        ...(oldSpecies && current.species === oldSpecies ? { species: '', breed: '' } : {}),
         ...(oldAuto && current.description.startsWith(oldAuto)
           ? { description: current.description.slice(oldAuto.length).trimStart() }
           : {}),
@@ -158,7 +161,7 @@ export default function SearchPage() {
       }
       setForm((current) => ({
         ...current,
-        ...(result.species ? { species: result.species } : {}),
+        ...(result.species ? withSpecies(current, result.species) : {}),
         ...(extracted ? { description: [extracted, current.description].filter(Boolean).join('\n') } : {}),
       }))
       setPhotoFeatureText(extracted)
@@ -169,7 +172,7 @@ export default function SearchPage() {
         const base = oldAuto && form.description.startsWith(oldAuto) ? form.description.slice(oldAuto.length).trimStart() : form.description
         const nextForm = {
           ...form,
-          ...(result.species ? { species: result.species } : {}),
+          ...(result.species ? withSpecies(form, result.species) : {}),
           description: [extracted, base].filter(Boolean).join('\n'),
         }
         submit(buildCriteria(nextForm, answers), run.thread_id)
@@ -307,7 +310,7 @@ export default function SearchPage() {
           <div className="search-fields-v2">
             <div className="field-block">
               <span className="field-label">종류 <em className="req">필수</em></span>
-              <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => ({ ...f, species, breed: '' }))} />
+              <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => withSpecies(f, species))} />
               <label>품종 (선택)
                 <select aria-label="품종" value={form.breed || ''} onChange={set('breed')}
                   disabled={!form.species || form.species === 'all' || kindsLoading || !kinds.length}>

@@ -10,3 +10,7 @@ export function loadKinds(species, fetcher = api) {
   cache.set(species, { promise, expires: Date.now() + 86400000 })
   return promise
 }
+
+export function withSpecies(form, species) {
+  return { ...form, species, breed: form.species === species ? (form.breed || '') : '' }
+}

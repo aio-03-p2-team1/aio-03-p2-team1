@@ -180,3 +180,65 @@ def test_timeout_classified():
     with pytest.raises(LlmError) as info:
         asyncio.run(extractor(FakeChatClient(error=APITimeoutError())).extract("갈색"))
     assert info.value.code == "llm_timeout"
+
+
+def test_photo_receives_stable_catalog_and_rejects_out_of_species_breed():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    payload = {
+        'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
+        'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed', 'sex')},
+        'species': 'cat', 'breed': '푸들', 'sex': '', 'colors': [], 'marks': [],
+    }
+    client = FakeChatClient(payload)
+    model = extractor(client)
+    model.kinds = SimpleNamespace(lookup=AsyncMock(side_effect=[
+        [{'species': 'dog', 'kind_code': '2', 'name': '푸들'}],
+        [{'species': 'cat', 'kind_code': '1', 'name': '코리안 숏헤어'}], []]))
+    result = asyncio.run(model.analyze_photo(b'image', 'image/jpeg'))
+    assert result.breed == ''
+    prefix = client.messages[0][1]
+    assert '푸들' in prefix and '코리안 숏헤어' in prefix
+    assert prefix.index('코리안 숏헤어') < prefix.index('푸들')
+    assert model.kinds.lookup.await_count == 3
+
+
+def test_photo_empty_official_catalog_does_not_accept_generated_breed():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    payload = {
+        'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
+        'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed', 'sex')},
+        'species': 'dog', 'breed': '푸들', 'sex': '', 'colors': [], 'marks': [],
+    }
+    model = extractor(FakeChatClient(payload))
+    model.kinds = SimpleNamespace(lookup=AsyncMock(return_value=[]))
+    assert asyncio.run(model.analyze_photo(b'image', 'image/jpeg')).breed == ''
+
+
+def test_prompt_cache_key_reaches_openai_request_transport():
+    import json
+    import httpx
+    requests = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        return httpx.Response(200, json={
+            'id': 'mock-completion', 'object': 'chat.completion', 'created': 0, 'model': 'gpt-6-luna',
+            'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+                'role': 'assistant', 'content': json.dumps({'colors': [], 'sex': '', 'marks': []})}}],
+            'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0},
+        })
+
+    async def invoke():
+        model = FeatureExtractor('test-only', 'gpt-6-luna', transport=httpx.MockTransport(handler))
+        try:
+            await model.extract('목줄')
+        finally:
+            await model.aclose()
+
+    asyncio.run(invoke())
+    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v4'
+    properties = requests[0]['response_format']['json_schema']['schema']['properties']
+    assert 'breed' not in properties

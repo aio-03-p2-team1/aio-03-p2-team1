@@ -115,7 +115,7 @@ sequenceDiagram
 | `run_id` / `thread_id` / `owner` | 실행·세션·소유자 키 | str | runner | runner | run, thread |
 | `profile_id` | 장기 기억 동물 프로필 | str \| None | 요청 | — | — |
 | `request` | 원 입력 + 세션 조건 | dict | runner | — | — |
-| `criteria` | 정규화 조건 | `Criteria` | — | analyze, context, plan | run, thread(기억 출처 제외) |
+| `criteria` | 정규화 조건 | `Criteria` | — | analyze, context, breed, plan | run, thread(기억 출처 제외) |
 | `missing` / `input_errors` / `questions` | 누락·오류·질문 | list | [] | analyze, reflect | run, thread |
 | `memory_used` | 장기 기억에서 채운 값 | dict | {} | context | run |
 | `llm_features` | LLM 추출 특징 | dict | — | context | run |
@@ -309,3 +309,5 @@ flowchart LR
 특징 추출 모델 스키마에서 breed를 제거했다(호환 결과 필드는 빈 문자열). 사진 모델에는 축종별 전체 공식 목록을 고정 system 접두부로 전달한다. ChatOpenAI `prompt_cache_key`를 지정하며 실제 접두부 재사용은 제공자 자동 캐시 정책에 따른다. 캐시 적중률·실제 품질은 미측정이다. [OpenAI 공식 문서](https://developers.openai.com/api/docs/guides/prompt-caching).
 
 품종 DB 도구는 `KindRepository.lookup_db`에서 SQLite의 매개변수 LIKE 쿼리 또는 Supabase의 `search_name=like.%이름%` 필터를 실행한다. 공개 API의 목록 캐시와 도구의 DB 조회를 구분한다. Supabase는 1,000행 단위로 마지막 페이지까지 읽는다.
+
+사진 목록은 `(species, kind_code)` 순으로 정렬해 동일한 데이터의 프롬프트 접두부를 유지하고, 빈 공식 목록에서도 목록 밖 품종은 반환하지 않는다. 프론트는 수동 선택뿐 아니라 사진 분석 후 즉시 재검색하는 경로에서도 축종 변경과 품종 초기화를 함께 적용한다.

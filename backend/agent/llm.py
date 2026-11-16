@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import base64
+import json
 from typing import get_args
 
 import httpx
@@ -166,7 +167,7 @@ class FeatureExtractor:
         if getattr(self, "kinds", None) is not None:
             for species in ("dog", "cat", "etc"):
                 catalog.extend(await self.kinds.lookup(species))
-        import json
+        catalog.sort(key=lambda row: (row["species"], row["kind_code"]))
         prefix = PHOTO_SYSTEM_PROMPT + "\n공식 품종 목록(목록에 있는 이름만 반환):" + json.dumps(catalog, ensure_ascii=False, sort_keys=True)
         encoded = base64.b64encode(request.image).decode("ascii")
         response = await self._invoke_structured([
@@ -204,7 +205,7 @@ class FeatureExtractor:
             if item.value.strip() and item.confidence >= PHOTO_CONFIDENCE_THRESHOLD
         ][:6]
         breed = data.breed[:40] if suitable and confident("breed") else ""
-        if catalog and not any(r["name"] == breed and r["species"] == species for r in catalog):
+        if getattr(self, "kinds", None) is not None and not any(r["name"] == breed and r["species"] == species for r in catalog):
             breed = ""
         if not animal_present:
             reason_code = "animal_not_detected"

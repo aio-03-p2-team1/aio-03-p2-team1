@@ -152,3 +152,26 @@ async def test_refresh_retries_database_write(repository, monkeypatch):
     assert await refresh_kinds.refresh(repository.settings, repository.redis)
     assert sink.sync.call_count == 2
     sleep.assert_awaited_once_with(0.5)
+
+
+def test_graph_normalizes_breed_between_context_and_plan(repository):
+    from backend.tests.test_graph import deps, search, START
+    d = deps()
+    d['breed_normalizer'] = BreedNormalizer(repository)
+    result = search(d, {'species': 'cat', 'region': '전체', 'lost_date': START, 'breed': '코숏'})
+    assert result['status'] == 'completed'
+    assert result['criteria']['breed'] == '코리안 숏헤어'
+    assert result['criteria']['breed_code'] == '2'
+    assert result['trace'].index('context') < result['trace'].index('breed') < result['trace'].index('plan')
+
+
+def test_graph_finishes_with_error_when_breed_database_fails(repository):
+    from backend.tests.test_graph import deps, search, START
+    from backend.storage import StorageError
+    d = deps()
+    repository.rows = AsyncMock(side_effect=StorageError('kinds_unavailable'))
+    d['breed_normalizer'] = BreedNormalizer(repository)
+    result = search(d, {'species': 'dog', 'region': '전체', 'lost_date': START, 'breed': '푸들'})
+    assert result['status'] == 'failed'
+    assert result['error']['code'] == 'breed_normalization_failed'
+    assert 'execute' not in result['trace']
