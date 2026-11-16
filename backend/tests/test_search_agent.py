@@ -60,20 +60,21 @@ def test_read_results_hides_contacts_ids_and_dates():
                              "happen_date": "2026-11-10", "care": {"tel": "010-0000-0000"}, "semantic_score": 0.71234,
                              "evidence": {"matched": ["털색: 흰색"]}}]}
     row = SA.read_results(state, 5)[0]
+    assert len(SA.TOOLS) == 6  # 읽기는 메시지로 주고 도구로 부르지 않음
     assert set(row) == {"순위", "품종", "털색", "성별", "나이", "특징", "유사도", "일치", "불일치", "미확인"}
     assert row["유사도"] == 0.712
 
 
 def test_agent_reads_updates_reruns_and_finishes():
     d, client = agent_deps([
-        ("ReadCriteria", {}),
-        ("ReadResults", {"top": 3}),
         ("UpdateFeatures", {"colors": ["흰색"], "marks": ["얼룩"], "reason": "설명의 털색과 특징을 조건에 넣어요."}),
         ("Finish", {"note": "다시 정렬한 결과가 설명과 맞음"}),
     ])
     run = search(d, MIXED)
     assert run["status"] == "completed" and run["candidates"]
-    assert tools_used(run) == ["read_criteria", "read_results", "update_features", "finish"]
+    assert tools_used(run) == ["update_features", "finish"]
+    first = client.calls[0][1].content
+    assert "사용자 원문" in first and "상위 후보" in first  # 읽을거리는 처음 메시지에 미리 들어 있음
     decision = run["agent_decision"]
     assert decision["source"] == "llm" and decision["final_tool"] == "finish" and decision["reruns"] == 1
     assert run["criteria"]["color"] == "흰색"
@@ -102,7 +103,7 @@ def test_rerun_limit_and_step_limit():
     run = search(agent_deps([upd, upd, upd])[0], MIXED)
     assert run["agent_decision"]["reruns"] == SA.MAX_RERUNS
     assert run["agent_decision"]["log"][-2]["ok"] is False  # 세 번째 수정은 한도로 거부
-    run = search(agent_deps([("ReadResults", {})] * 10)[0], MIXED)
+    run = search(agent_deps([("RelaxCondition", {"field": "breed", "reason": "풀어요."})] * 10)[0], MIXED)
     assert run["agent_decision"]["source"] == "step_limit" and run["agent_request"] is None
     assert run["candidates"]  # 한도에 걸려도 결과는 보여 준다
 

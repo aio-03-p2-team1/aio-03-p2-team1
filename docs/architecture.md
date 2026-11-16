@@ -283,12 +283,10 @@ flowchart LR
   - 믹스견(믹스·잡종·혼종)이고 사진 특징이 없음 → `mixed_breed`
   - 1등 벡터 유사도 < 0.45 → `weak_similarity`, 상위 3건 이상에서 1·2등 차이 < 0.01 → `flat_top`
   - 특징을 줬는데 1등 후보 일치 근거가 0개 → `no_feature_match`
-- **루프(`graph.agent_node` ⇄ `graph.agent_tools_node`, 도구 정의 `backend/agent/search_agent.py`):** agent 가 `bind_tools(tool_choice="required", parallel_tool_calls=False)` 로 도구 하나를 고르고, agent_tools 가 서버 규칙으로 검증·실행해 결과(ToolMessage)를 대화에 붙인다. 조건을 고치면 rank(또는 radius)부터 다시 돌고, validate 뒤 agent 가 새 신호와 이전 대비 변화를 받아 다시 판단한다.
+- **루프(`graph.agent_node` ⇄ `graph.agent_tools_node`, 도구 정의 `backend/agent/search_agent.py`):** 서버가 처음 메시지에 결과 신호·사용자 원문·현재 조건·상위 후보 5개 요약(품종·털색·성별·나이·특징 80자·유사도·일치/불일치/미확인, 공고 번호·날짜·연락처·주소 제외)을 미리 넣는다(읽기 도구 호출을 없애 LLM 호출 수를 줄임). agent 가 `bind_tools(tool_choice="required", parallel_tool_calls=False)` 로 도구 하나를 고르고, agent_tools 가 서버 규칙으로 검증·실행해 결과(ToolMessage)를 대화에 붙인다. 조건을 고치면 rank(또는 radius)부터 다시 돌고, validate 뒤 agent 가 새 신호와 이전 대비 변화를 받아 다시 판단한다.
 
 | 구분 | 도구 | 인자 | 서버 처리 |
 | --- | --- | --- | --- |
-| 읽기 | `read_criteria` | — | 사용자 원문, 현재 조건(종·품종·털색·성별·크기), 추가 특징, 반경 |
-| 읽기 | `read_results` | `top`(1~10) | 상위 후보 요약(품종·털색·성별·나이·특징 80자·유사도·일치/불일치/미확인). 공고 번호·날짜·연락처·주소는 넘기지 않음 |
 | 수정 | `update_features` | `colors`, `breed`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 품종·특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값만 반영 → 유사도 다시 계산(rank) |
 | 수정 | `relax_condition` | `field ∈ breed·sex`, `reason` | 그 조건 제거 → rank |
 | 수정 | `widen_radius` | `reason` | 반경 적용 중이고 최대 단계가 아니면 `radius_step+1` → radius(공고 API 재호출 없음) |
@@ -297,7 +295,7 @@ flowchart LR
 | 종료 | `finish` | `note` | 지금 결과로 확정 |
 
 - **지어내기 방지:** LLM 출력은 도구 인자뿐이고 모두 서버가 검증한다. 근거 없는 값·허용되지 않은 요청은 거부 이유를 도구 결과로 돌려줘 LLM이 다른 선택을 하게 한다. 원문은 첫 걸음에 `agent_source` 로 고정해, 에이전트가 고친 값이 다음 수정의 근거가 되지 않게 한다. 이유 문장에 숫자·링크가 있거나 60자를 넘으면 서버 고정 문구로 바꾼다(`assess.py`).
-- **한도:** LLM 걸음 최대 6, 다시 찾기 최대 2. 한도를 넘거나 LLM 없음·실패·도구 미선택이면 지금 결과를 그대로 보여 준다(`agent_decision.source`). 그래프 recursion_limit 80.
+- **한도:** LLM 걸음 최대 4(흔한 흐름은 수정 1 + 종료 1 = 2걸음), 다시 찾기 최대 2. 다시 찾은 뒤 메시지에도 새 상위 후보 요약을 넣는다. 한도를 넘거나 LLM 없음·실패·도구 미선택이면 지금 결과를 그대로 보여 준다(`agent_decision.source`). 그래프 recursion_limit 80.
 - **기록:** `agent_decision.log` 에 시작 신호, 도구별 인자·성공/거부, 다시 찾은 결과(후보 수·1등 유사도·1등 후보)가 순서대로 남고, `tool_calls` 에 `agent_<도구>` 로 남는다.
 - **캐시:** 에이전트가 조건을 고쳐 다시 찾은 결과(reruns>0)는 캐시에 넣지 않는다. 애매한 결과의 캐시 적중은 에이전트가 있으면 쓰지 않고 다시 돌린다. `agent_request`/`agent_decision` 은 캐시에 넣지 않는다.
 - **API 계약:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5). 응답 run 에 `confidence`, `agent_request`, `agent_decision`. 에이전트가 조건을 고치면 run 의 `criteria` 에 고친 값이 보인다(대화 thread 의 확인 조건에는 사용자 입력만 저장). 의존성 `AppContext.search_agent`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델).

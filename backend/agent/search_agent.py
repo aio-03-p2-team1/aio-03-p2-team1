@@ -3,13 +3,15 @@
 그래프 안의 루프 (LangGraph 노드 2개):
     validate ─(확신 낮음)→ agent ⇄ agent_tools ─(조건 수정)→ rank 또는 radius → validate → agent …
                                      └─(요청·확정)→ locate → finalize
-- agent       : LLM 한 걸음. 지금까지의 대화(도구 결과 포함)를 보고 도구 하나를 고른다(bind_tools, tool_choice=required).
-- agent_tools : 고른 도구를 서버가 검증·실행한다. 읽기 도구는 결과를 돌려주고, 수정 도구는 조건을 고친 뒤 다시 검색한다.
+- agent       : LLM 한 걸음. 지금까지의 대화(결과·도구 결과 포함)를 보고 도구 하나를 고른다(bind_tools, tool_choice=required).
+- agent_tools : 고른 도구를 서버가 검증·실행한다. 수정 도구는 조건을 고친 뒤 다시 검색한다.
+
+읽기: 별도 읽기 도구를 부르면 LLM 호출이 늘어나므로, 처음 메시지와 다시 찾은 뒤 메시지에
+      사용자 원문·현재 조건·상위 후보 요약(품종·색·성별·특징·유사도·일치 근거)을 서버가 미리 넣어 준다.
+      공고 번호·날짜·연락처·주소는 넣지 않는다.
 
 도구
 | 구분 | 도구 | 하는 일 |
-| 읽기 | read_criteria   | 사용자가 쓴 원문 설명과 지금 검색 조건 |
-| 읽기 | read_results    | 상위 후보 요약(품종·색·성별·특징·유사도·일치 근거). 연락처·주소 등 개인정보는 넘기지 않음 |
 | 수정 | update_features | 원문 설명을 다시 해석해 털색·품종·성별·특징 조건을 고침 → 다시 정렬 |
 | 수정 | relax_condition | 품종·성별 조건을 풀어 줌(설명과 맞지 않거나 너무 좁을 때) → 다시 정렬 |
 | 수정 | widen_radius    | 반경 한 단계 넓힘 → 반경부터 다시 |
@@ -40,21 +42,22 @@ from backend.schemas.common import Color
 log = logging.getLogger("dasimanna.agent")
 
 AGENT_PROMPT_VERSION = "search-agent-v1"
-MAX_STEPS = 6  # LLM 걸음(도구 선택) 최대 횟수
+MAX_STEPS = 4  # LLM 걸음(도구 선택) 최대 횟수. 흔한 흐름은 수정 1번 + 종료 1번 = 2걸음
 MAX_RERUNS = 2  # 조건을 고쳐 다시 찾는 최대 횟수
-TOP_READ = 10
+TOP_READ = 5  # LLM에 보여 줄 상위 후보 수
 SEX_WORDS = {"M": ("수컷", "숫컷", "수놈", "남아", "남자아이"), "F": ("암컷", "암놈", "여아", "여자아이")}
 
 SYSTEM_PROMPT = f"""너는 잃어버린 반려동물 검색 결과를 점검하는 에이전트다.
-검색은 이미 한 번 끝났고 결과가 애매하다는 신호가 있다. 도구로 결과를 읽고, 판단하고, 필요하면 조건을 고쳐 다시 찾는다.
+검색은 이미 한 번 끝났고 결과가 애매하다는 신호가 있다. 메시지에 사용자 원문, 현재 조건, 상위 후보 요약이 들어 있다.
+그것을 읽고 판단하고, 필요하면 도구로 조건을 고쳐 다시 찾는다.
 
 진행 방법:
-1. read_criteria 와 read_results 로 사용자 설명과 상위 후보를 읽는다.
+1. 메시지의 사용자 원문과 상위 후보를 읽는다.
 2. 판단한다: 사용자 설명의 털색·품종·성별·특징이 검색 조건에 제대로 들어갔는가? 상위 후보가 설명과 맞는가?
    - 설명에는 있는데 조건에 빠진 특징이 있으면 update_features 로 넣는다.
    - 품종·성별 조건 때문에 맞을 법한 후보가 밀려나면 relax_condition 으로 푼다.
    - 후보가 너무 적거나 다 맞지 않으면 widen_radius 로 반경을 넓힌다.
-3. 고친 뒤에는 새 결과를 다시 읽고 이전과 비교한다. 다시 찾기는 최대 {MAX_RERUNS}번이다.
+3. 고친 뒤에는 새 결과 메시지를 읽고 이전과 비교한다. 다시 찾기는 최대 {MAX_RERUNS}번이다.
 4. 더 고칠 것이 없으면 끝낸다: 결과가 그럴듯하면 finish, 글만으로 구분이 어려우면(믹스견 등) request_photo,
    받지 못한 정보가 구분에 도움이 되면 request_info.
 
@@ -63,16 +66,6 @@ SYSTEM_PROMPT = f"""너는 잃어버린 반려동물 검색 결과를 점검하�
 - 사용자 설명에 없는 특징을 만들어 넣지 않는다. 서버가 원문 근거가 없는 값은 거부한다.
 - 공고 번호, 날짜, 숫자, 연락처, 보호소 이름을 지어내지 않는다.
 - reason 은 사용자에게 보일 수 있는 한국어 한 문장(60자 이내), 존댓말, 숫자 없이 쓴다."""
-
-
-class ReadCriteria(BaseModel):
-    """사용자가 쓴 원문 설명과 지금 검색 조건(털색·품종·성별·특징·반경)을 읽는다."""
-
-
-class ReadResults(BaseModel):
-    """상위 후보 요약을 읽는다: 품종, 털색, 성별, 나이, 특징 글, 벡터 유사도, 일치·불일치 근거."""
-
-    top: int = Field(5, ge=1, le=TOP_READ, description="읽을 후보 수")
 
 
 class UpdateFeatures(BaseModel):
@@ -117,7 +110,7 @@ class Finish(BaseModel):
     note: str = Field(description="판단 이유 한 문장(기록용)")
 
 
-TOOLS = [ReadCriteria, ReadResults, UpdateFeatures, RelaxCondition, WidenRadius, RequestPhoto, RequestInfo, Finish]
+TOOLS = [UpdateFeatures, RelaxCondition, WidenRadius, RequestPhoto, RequestInfo, Finish]
 TOOL_NAMES = {cls.__name__: re.sub(r"(?<!^)([A-Z])", r"_\1", cls.__name__).lower() for cls in TOOLS}
 TOOL_NAMES.update({v: v for v in list(TOOL_NAMES.values())})
 END_TOOLS = {"request_photo", "request_info", "finish"}
@@ -245,10 +238,17 @@ def _summary(state: dict[str, Any]) -> dict[str, Any]:
             "top_matched": len((top.get("evidence") or {}).get("matched") or [])}
 
 
+def context_text(state: dict[str, Any]) -> str:
+    """LLM에 미리 넣어 주는 읽을거리: 사용자 원문·현재 조건·상위 후보 요약(읽기 도구 호출을 줄이려고)."""
+    return ("\n사용자 원문과 현재 조건:\n" + _json(read_criteria(state))
+            + f"\n상위 후보 {TOP_READ}개:\n" + _json(read_results(state, TOP_READ)))
+
+
 def start_messages(state: dict[str, Any], allowed: dict[str, Any]) -> list[Any]:
     Human, System, _ = _messages()
     return [System(content=SYSTEM_PROMPT),
-            Human(content="검색 결과 신호:\n" + signals_text(state.get("confidence"), state.get("radius"), 0, allowed))]
+            Human(content="검색 결과 신호:\n" + signals_text(state.get("confidence"), state.get("radius"), 0, allowed)
+                  + context_text(state))]
 
 
 def rerun_message(state: dict[str, Any], allowed: dict[str, Any], before: dict[str, Any]) -> Any:
@@ -259,6 +259,7 @@ def rerun_message(state: dict[str, Any], allowed: dict[str, Any], before: dict[s
         "다시 찾은 결과 신호:\n"
         + signals_text(state.get("confidence"), state.get("radius"), state.get("agent_reruns", 0), allowed)
         + f"\n이전 1등 유사도 {before.get('top_similarity')} → 지금 {after.get('top_similarity')}, 1등 후보 {changed}"
+        + context_text(state)
     ))
 
 
@@ -267,12 +268,7 @@ def execute_tool(name: str, args: dict[str, Any], state: dict[str, Any], allowed
     criteria = state["criteria"]
     reruns = state.get("agent_reruns", 0)
     out: dict[str, Any] = {"update": {}, "next": None, "done": False, "request": None}
-    if name == "read_criteria":
-        out["content"] = read_criteria(state)
-    elif name == "read_results":
-        top = args.get("top") if isinstance(args.get("top"), int) else 5
-        out["content"] = read_results(state, max(1, min(top, TOP_READ)))
-    elif name in ("update_features", "relax_condition", "widen_radius") and reruns >= MAX_RERUNS:
+    if name in ("update_features", "relax_condition", "widen_radius") and reruns >= MAX_RERUNS:
         out["content"] = {"ok": False, "error": "다시 찾기 횟수를 다 썼습니다. finish 또는 요청으로 끝내세요."}
     elif name == "update_features":
         accepted, rejected = validate_features(args, state.get("agent_source") or source_text(criteria))
@@ -328,7 +324,7 @@ def execute_tool(name: str, args: dict[str, Any], state: dict[str, Any], allowed
 
 def safe_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """기록용 인자. 사용자에게 보일 수 있는 문장은 길이만 제한해 남긴다."""
-    keep = {k: v for k, v in args.items() if k in ("top", "colors", "breed", "sex", "marks", "field")}
+    keep = {k: v for k, v in args.items() if k in ("colors", "breed", "sex", "marks", "field")}
     for k in ("reason", "note"):
         if args.get(k):
             keep[k] = str(args[k])[:80]
