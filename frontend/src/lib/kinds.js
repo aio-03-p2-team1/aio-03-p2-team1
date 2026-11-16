@@ -12,10 +12,15 @@ export function loadKinds(species, fetcher = api) {
 }
 
 export function withSpecies(form, species) {
-  return { ...form, species, breed: form.species === species ? (form.breed || '') : '' }
+  const { breed, ...rest } = form
+  return { ...rest, species, breed_code: form.species === species ? (form.breed_code || '') : '' }
 }
 
 export function withPhotoBreed(form, result) {
-  const next = result.species ? withSpecies(form, result.species) : { ...form }
-  return { ...next, breed: next.breed || (result.breed_code ? result.breed : '') || '' }
+  const next = withSpecies(form, result.species || form.species)
+  return { ...next, breed_code: next.breed_code || result.breed_code || '' }
+}
+
+export function breedRequest(form) {
+  return { breed_code: form.breed_code || '' }
 }

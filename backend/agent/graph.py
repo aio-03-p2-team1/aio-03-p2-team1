@@ -110,7 +110,7 @@ async def context(state: SearchState, config) -> dict:
             memory = await deps["store"].get(state["owner"], "memory", profile_id)
         confirmed = (memory or {}).get("confirmed") or {}
         for key in crit.OPTIONAL_FIELDS:
-            if key == "breed" and (origin.get("breed") == "request"):
+            if key in ("breed", "breed_code") and origin.get(key) == "request":
                 continue
             if not criteria.get(key) and confirmed.get(key):
                 criteria[key] = str(confirmed[key])[:500]
@@ -155,14 +155,21 @@ def route_after_context(state: SearchState) -> str:
 async def normalize_breed(state: SearchState, config) -> dict:
     normalizer = _deps(config).get("breed_normalizer")
     criteria = dict(state["criteria"])
+    code = criteria.get("breed_code")
     criteria["breed_code"] = None
+    if code:
+        criteria.pop("breed", None)
     if normalizer and criteria.get("species") in {"dog", "cat", "etc"}:
         try:
-            row = await normalizer.resolve(criteria["species"], criteria.get("breed", ""))
+            row = (await normalizer.resolve_code(criteria["species"], code) if code
+                   else await normalizer.resolve(criteria["species"], criteria.get("breed", "")))
         except Exception:
             return {"criteria": criteria, "trace": ["breed"], "error": {"code": "breed_normalization_failed", "message": "품종을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."}}
         if row:
             criteria.update(breed=row["name"], breed_code=row["kind_code"])
+    if code and not criteria.get("breed_code"):
+        return {"criteria": criteria, "trace": ["breed"], "error": {
+            "code": "invalid_breed_code", "message": "선택한 축종의 품종 코드를 확인해 주세요."}}
     return {"criteria": criteria, "trace": ["breed"]}
 
 

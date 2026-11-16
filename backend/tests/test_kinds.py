@@ -209,3 +209,36 @@ def test_lifespan_warms_catalog_before_requests(repository):
     assert repository.catalog() == ()
     with TestClient(create_app(ctx)):
         assert repository.catalog() == (('1', '푸들'), ('2', '코리안 숏헤어'))
+
+
+def test_search_accepts_code_and_uses_server_name_without_ai(repository):
+    from backend.schemas.api import SearchBody
+    from backend.tests.test_graph import deps, search, START
+    d = deps()
+    d['breed_normalizer'] = BreedNormalizer(repository, SimpleNamespace(
+        bind_tools=lambda *a, **k: pytest.fail('code must not invoke AI')))
+    body = SearchBody.model_validate({'criteria': {
+        'species': 'cat', 'region': '전체', 'lost_date': START, 'breed_code': '2', 'breed': '위조 이름'}})
+    result = search(d, body.criteria.model_dump(exclude_none=True))
+    assert result['status'] == 'completed'
+    assert result['criteria']['breed_code'] == '2'
+    assert result['criteria']['breed'] == '코리안 숏헤어'
+
+
+@pytest.mark.parametrize('species,code', [('dog', 'unknown'), ('dog', '2'), ('all', '1')])
+def test_search_rejects_unknown_or_wrong_species_code(repository, species, code):
+    from backend.tests.test_graph import deps, search, START
+    d = deps()
+    d['breed_normalizer'] = BreedNormalizer(repository)
+    result = search(d, {'species': species, 'region': '전체', 'lost_date': START, 'breed_code': code})
+    assert result['status'] == 'failed'
+    assert result['error']['code'] == 'invalid_breed_code'
+    assert 'execute' not in result['trace']
+
+
+def test_clearing_or_changing_species_clears_session_code_and_name():
+    from backend.agent.criteria import merge_conditions
+    prior = {'species': 'dog', 'breed_code': '1', 'breed': '푸들'}
+    for current in ({'species': 'dog', 'breed_code': ''}, {'species': 'cat'}):
+        merged, _ = merge_conditions(current, prior, prior)
+        assert merged['breed_code'] == merged['breed'] == ''

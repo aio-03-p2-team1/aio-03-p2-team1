@@ -12,6 +12,10 @@ class BreedNormalizer:
         self.repository = repository
         self.client = client
 
+    async def resolve_code(self, species, code):
+        rows = await self.repository.rows(species)
+        return next((row for row in rows if row['kind_code'] == code), None)
+
     async def resolve(self, species, text):
         query = normalize(text)
         if not query:

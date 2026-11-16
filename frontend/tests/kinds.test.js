@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { loadKinds, withSpecies, withPhotoBreed } from '../src/lib/kinds.js'
+import { loadKinds, withSpecies, withPhotoBreed, breedRequest } from '../src/lib/kinds.js'
 
 let calls = 0
 const fetcher = async () => { calls++; return { kinds: [{ name: '푸들' }] } }
@@ -13,13 +13,14 @@ await assert.rejects(loadKinds('etc', failing))
 await assert.rejects(loadKinds('etc', failing))
 assert.equal(attempts, 2)
 
-// Photo-driven automatic resubmission must never carry a dog breed into cat search.
-const photoSearch = withSpecies({ species: 'dog', breed: '푸들', description: '사진 특징' }, 'cat')
-assert.equal(photoSearch.breed, '')
+// Manual selection and photo resubmission retain codes, never request names.
+const photoSearch = withSpecies({ species: 'dog', breed_code: '1', description: '사진 특징' }, 'cat')
+assert.equal(photoSearch.breed_code, '')
 assert.equal(photoSearch.description, '사진 특징')
-assert.equal(withSpecies({ species: 'dog', breed: '푸들' }, 'dog').breed, '푸들')
-assert.equal(withSpecies({ species: 'dog', breed: '푸들' }, '').breed, '')
-
-assert.equal(withPhotoBreed({ species: 'dog', breed: '' }, { species: 'dog', breed_code: '1', breed: '푸들' }).breed, '푸들')
-assert.equal(withPhotoBreed({ species: 'dog', breed: '푸들' }, { species: 'cat', breed_code: '2', breed: '코리안 숏헤어' }).breed, '코리안 숏헤어')
-assert.equal(withPhotoBreed({ species: 'dog', breed: '' }, { species: 'dog', breed_code: '', breed: '임의 품종' }).breed, '')
+assert.equal(withSpecies({ species: 'dog', breed_code: '1' }, 'dog').breed_code, '1')
+assert.equal(withSpecies({ species: 'dog', breed_code: '1' }, '').breed_code, '')
+assert.equal(withPhotoBreed({ species: 'dog', breed_code: '' }, { species: 'dog', breed_code: '1', breed: '푸들' }).breed_code, '1')
+assert.equal(withPhotoBreed({ species: 'dog', breed_code: '1' }, { species: 'cat', breed_code: '2', breed: '코리안 숏헤어' }).breed_code, '2')
+assert.deepEqual(breedRequest({ breed_code: '1', breed: '푸들' }), { breed_code: '1' })
+assert.deepEqual(breedRequest({}), { breed_code: '' })
+assert.equal(withPhotoBreed({ species: 'dog', breed_code: '' }, { species: 'dog', breed_code: '', breed: '임의 품종' }).breed_code, '')

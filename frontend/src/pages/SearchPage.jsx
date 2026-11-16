@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
-import { loadKinds, withSpecies, withPhotoBreed } from '../lib/kinds.js'
+import { loadKinds, withSpecies, withPhotoBreed, breedRequest } from '../lib/kinds.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
@@ -18,7 +18,7 @@ import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
-const initialForm = () => ({ breed: '', species: '', lost_date: today(), description: '' })
+const initialForm = () => ({ breed_code: '', species: '', lost_date: today(), description: '' })
 export default function SearchPage() {
   const [kinds, setKinds] = useState([])
   const [kindsError, setKindsError] = useState('')
@@ -118,7 +118,7 @@ export default function SearchPage() {
     if (oldAuto || oldSpecies) {
       setForm((current) => ({
         ...current,
-        ...(oldSpecies && current.species === oldSpecies ? { species: '', breed: '' } : {}),
+        ...(oldSpecies && current.species === oldSpecies ? { species: '', breed_code: '' } : {}),
         ...(oldAuto && current.description.startsWith(oldAuto)
           ? { description: current.description.slice(oldAuto.length).trimStart() }
           : {}),
@@ -231,8 +231,8 @@ export default function SearchPage() {
   }
 
   function buildCriteria(values, answerValues) {
-    const criteria = { breed: values.breed || '' }
-    for (const [k, v] of Object.entries(values)) if (v.trim()) criteria[k] = v.trim()
+    const criteria = breedRequest(values)
+    for (const [k, v] of Object.entries(values)) if (k !== 'breed' && v.trim()) criteria[k] = v.trim()
     if (location?.region) criteria.region = location.region
     if (location?.address) criteria.lost_place = location.address
     // 지도에서 찍은 점을 반경 중심으로 보낸다(서버가 한국 범위 검사). 미리 보기와 실제 검색 범위가 같아진다.
@@ -304,10 +304,10 @@ export default function SearchPage() {
               <span className="field-label">종류 <em className="req">필수</em></span>
               <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => withSpecies(f, species))} />
               <label>품종 (선택)
-                <select aria-label="품종" value={form.breed || ''} onChange={set('breed')}
+                <select aria-label="품종" value={form.breed_code || ''} onChange={set('breed_code')}
                   disabled={!form.species || form.species === 'all' || kindsLoading || !kinds.length}>
                   <option value="">{kindsLoading ? '품종 불러오는 중…' : '품종을 선택해 주세요'}</option>
-                  {kinds.map((kind) => <option key={kind.kind_code} value={kind.name}>{kind.name}</option>)}
+                  {kinds.map((kind) => <option key={kind.kind_code} value={kind.kind_code}>{kind.name}</option>)}
                 </select>
               </label>
               {kindsError && <p role="alert">{kindsError}</p>}

@@ -15,7 +15,7 @@ SPECIES_ALIASES = {
 LAT_RANGE = (33.0, 39.0)
 LNG_RANGE = (124.0, 132.0)
 REGION_ALL = {"all", "전체", "전국", "전체 지역"}
-OPTIONAL_FIELDS = ("pet_name", "breed", "color", "sex", "age", "size", "description", "lost_place", "lost_date")
+OPTIONAL_FIELDS = ("pet_name", "breed", "breed_code", "color", "sex", "age", "size", "description", "lost_place", "lost_date")
 
 QUESTION_TEXT = {
     "species": "찾는 동물의 종류를 알려 주세요. (개 · 고양이 · 기타 · 전체)",
@@ -44,9 +44,9 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
     # (세션의 start_date 가 새 실종 날짜보다 우선해 기간이 엉뚱하게 좁아지던 문제).
     date_sent = bool(_clean(current.get("lost_date")))
     for key in keys:
-        if key == "breed" and ("breed" in current or (
+        if key in ("breed", "breed_code") and ("breed_code" in current or "breed" in current or (
             current.get("species") and current.get("species") != (session or {}).get("species"))):
-            merged[key] = _clean(current.get(key))
+            merged[key] = "" if key == "breed" and "breed_code" in current else _clean(current.get(key))
             origin[key] = "request"
             continue
         # 넓히기 단계도 위치·날짜에 묶인다. 위치나 날짜를 새로 보냈으면 이전 넓히기 단계를 잇지 않고
