@@ -110,7 +110,7 @@ cd frontend && npm test && npm run build
 
 ### 품종 기준정보 초기화
 
-`.env`에 `ANIMAL_API_KEY`와 원하는 `STORAGE_BACKEND`를 설정한 뒤 `uv run python scripts/init_kinds.py`를 실행한다. `sqlite`는 `SQLITE_PATH` DB에 `scripts/bootstrap_schema.sql` 전체를 실행한 뒤 데이터를 동기화한다. `supabase`는 같은 파일의 `SUPABASE_BOOTSTRAP_BEGIN`~`SUPABASE_BOOTSTRAP_END` 블록 안 SQL을 SQL Editor에서 실행하고 해당 스키마를 Data API의 Exposed schemas에 추가해야 한다. 테이블 DDL은 이 파일만이 원본이다. 스크립트는 `kind_v2`에서 개·고양이·기타 품종 전체 페이지를 읽고, totalCount보다 적게 도착한 응답과 호출 오류를 최대 3회 재시도한다(0.5초, 1초, 2초 대기). 반복 실행 시 코드 기준으로 갱신하며 API에서 사라진 코드는 비활성으로 보존한다. API 키가 없거나 재시도 후에도 실패하면 오류로 종료한다.
+`.env`에 `ANIMAL_API_KEY`와 대상 `STORAGE_BACKEND`를 설정한다. SQLite는 `uv run python scripts/init_kinds_sqlite.py`를 실행하며, `SQLITE_PATH` DB에 `scripts/bootstrap_sqlite.sql` 전체를 실행한 뒤 데이터를 동기화한다. Supabase는 `scripts/bootstrap_schema.sql` 전체를 SQL Editor에서 먼저 실행하고 해당 스키마를 Data API의 Exposed schemas에 추가한 뒤 `uv run python scripts/init_kinds_supabase.py`를 실행한다. 백엔드별 테이블 DDL은 각 bootstrap SQL에만 둔다. 두 초기화 스크립트는 공통 `scripts/kind_sync.py`를 사용해 `kind_v2`의 전체 페이지를 읽는다. totalCount보다 적은 응답과 호출 오류는 최대 3회 재시도한다(0.5초, 1초, 2초 대기). 반복 실행 시 코드 기준으로 갱신하며 API에서 사라진 코드는 비활성으로 보존한다. API 키가 없거나 재시도 후에도 실패하면 오류로 종료한다.
 
 이름은 저장할 때 공백을 제거해 `search_name`에 보관한다. 검색 입력도 같은 규칙으로 정규화하고 `(species, search_name)` 동등 조건으로 조회하면 `kinds_search_name_idx` B-tree 인덱스를 사용한다. SQLite의 `EXPLAIN QUERY PLAN`으로 인덱스 사용을 검증한다. 이름 컬럼에 매번 공백 제거 함수를 씌우는 함수 인덱스는 SQLite·PostgreSQL 간 함수 호환 차이가 있어 사용하지 않는다. 표기만 공백이 다른 이름은 alias로 중복 저장하지 않고, 의미가 다른 별칭은 `kind_aliases`에 큐레이션한다.
 

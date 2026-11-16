@@ -6,14 +6,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from scripts.init_kinds import (
-    SqliteSink,
+from scripts.kind_sync import (
     fetch_all,
     normalize,
     normalize_record,
     parse_items,
     require_api_key,
 )
+from scripts.init_kinds_sqlite import SqliteSink
 
 
 def test_parse_api_response_object_and_list():
@@ -47,7 +47,7 @@ def test_sqlite_sync_upserts_and_preserves_removed_codes(tmp_path):
 def test_sqlite_schema_has_search_indexes_and_foreign_key():
     db = sqlite3.connect(":memory:")
     db.execute("PRAGMA foreign_keys=ON")
-    bootstrap = Path("scripts/bootstrap_schema.sql").read_text(encoding="utf-8")
+    bootstrap = Path("scripts/bootstrap_sqlite.sql").read_text(encoding="utf-8")
     db.executescript(bootstrap)
     db.executescript(bootstrap)
     db.execute("insert into kinds(species,kind_code,name,search_name,created_at,updated_at) values('dog','001','믹스견','믹스견','x','x')")
@@ -59,6 +59,15 @@ def test_sqlite_schema_has_search_indexes_and_foreign_key():
         pass
     else:
         raise AssertionError("kind_aliases foreign key was not enforced")
+
+
+def test_supabase_bootstrap_is_uncommented_and_separate_from_sqlite():
+    supabase_sql = Path("scripts/bootstrap_schema.sql").read_text(encoding="utf-8")
+    sqlite_sql = Path("scripts/bootstrap_sqlite.sql").read_text(encoding="utf-8")
+    assert "/* SUPABASE_BOOTSTRAP_BEGIN" not in supabase_sql
+    assert 'create schema if not exists "aio-03-p2-team1-demo"' in supabase_sql
+    assert 'create table if not exists "aio-03-p2-team1-demo".kinds' in supabase_sql
+    assert "create schema" not in sqlite_sql.lower()
 
 
 def test_api_key_is_required():
