@@ -255,6 +255,7 @@ function PostForm({ regions, onCancel, onCreated }) {
   }
 
   return (
+    <>
     <form className="panel post-form" onSubmit={submit} noValidate>
       <div className="panel-title">
         <span aria-hidden="true">＋</span>
@@ -314,6 +315,18 @@ function PostForm({ regions, onCancel, onCreated }) {
       {serverError && (
         <p className="state-box state-error" role="alert">{errorMessage(serverError)}</p>
       )}
+      <div className="form-bottom">
+        <p className="fineprint">
+          게시글은 로그인하지 않은 사람도 볼 수 있어요. 연락처·주소 같은 개인정보는 적지 마세요. 내가 쓴 글은 상세 화면에서 지울 수 있어요.
+        </p>
+        <div>
+          <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>취소</button>
+          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? '등록 중…' : '게시글 등록'}</button>
+        </div>
+      </div>
+    </form>
+    {/* 지역 선택 창은 등록 폼 밖에 둔다. 창 안의 주소 검색도 <form> 이라, 폼 안에 두면 검색(Enter)이
+        바깥 등록 폼 제출로 번져 창이 닫히고 검증 오류가 뜬다. */}
       <RegionPicker
         open={regionOpen}
         regions={regions.list}
@@ -332,16 +345,7 @@ function PostForm({ regions, onCancel, onCreated }) {
           setRegionOpen(false)
         }}
       />
-      <div className="form-bottom">
-        <p className="fineprint">
-          게시글은 로그인하지 않은 사람도 볼 수 있어요. 연락처·주소 같은 개인정보는 적지 마세요. 내가 쓴 글은 상세 화면에서 지울 수 있어요.
-        </p>
-        <div>
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>취소</button>
-          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? '등록 중…' : '게시글 등록'}</button>
-        </div>
-      </div>
-    </form>
+    </>
   )
 }
 
