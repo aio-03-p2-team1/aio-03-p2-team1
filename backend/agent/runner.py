@@ -17,7 +17,6 @@ from typing import Any
 from backend.agent.graph import GRAPH
 from backend.agent import criteria as crit
 from backend.agent.search_cache import condition_key
-from backend.agent import assess as assess_mod
 from backend.agent.embeddings import DIMENSIONS
 from backend.agent.llm import PROMPT_VERSION
 from backend.agent.radius import RADIUS_VERSION
@@ -31,7 +30,7 @@ RUN_FIELDS = (
     "ranking_method", "cache_key", "cache_hit", "snapshot_id", "radius",
     "confidence", "agent_request", "agent_decision",
 )
-# 에이전트 요청은 대화(thread)마다 다르므로(이미 물은 것, '모르겠어요') 캐시에 넣지 않고 매번 판단한다.
+# 에이전트 요청은 대화(thread)마다 다르므로(이미 물은 것, '모르겠어요') 캐시에 넣지 않는다.
 AGENT_FIELDS = ("agent_request", "agent_decision")
 
 
@@ -82,7 +81,8 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "trace": [],
         "agent_history": history,
     }
-    config = {"configurable": deps, "recursion_limit": 40}
+    # 에이전트 루프(걸음 최대 6, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
+    config = {"configurable": deps, "recursion_limit": 80}
     cache = deps.get("search_cache")
     key = condition_key(owner, normalized, source=deps["animal"].source,
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
@@ -106,7 +106,9 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
                 if result is None:
                     result = await execute()
                     result["snapshot_id"] = run_id
-                    if not result.get("error") and result.get("status") == "completed":
+                    # 에이전트가 조건을 고쳐 다시 찾은 결과는 저장하지 않는다(원래 조건의 결과가 아니므로).
+                    if (not result.get("error") and result.get("status") == "completed"
+                            and not (result.get("agent_decision") or {}).get("reruns")):
                         snapshot = {k: result.get(k) for k in RUN_FIELDS
                                     if k not in ("run_id", "thread_id", "cache_key", "cache_hit", *AGENT_FIELDS)}
                         await cache.put(key, snapshot)
@@ -116,13 +118,13 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             cache_hit = True
     else:
         result = await execute()
+    if cache_hit and (result.get("confidence") or {}).get("low") and deps.get("search_agent"):
+        # 애매한 결과는 캐시를 쓰지 않고 다시 돌려 에이전트가 이 대화 기준으로 읽고 판단하게 한다.
+        result = await execute()
+        cache_hit = False
     if cache_hit:
         result["context_summary"] = {**(result.get("context_summary") or {}), "origin": origins}
         result["memory_used"] = {k: normalized[k] for k, source in origins.items() if source == "memory" and k in normalized}
-    if cache_hit:
-        # 캐시 결과에도 이 대화의 기록 기준으로 에이전트 판단을 다시 한다(그래프 assess 노드와 같은 함수).
-        outcome = await assess_mod.assess(deps.get("assessor"), result.get("confidence"), history)
-        result["agent_request"], result["agent_decision"] = outcome["request"], outcome["record"]
     run = {k: result.get(k) for k in RUN_FIELDS}
     run["run_id"] = run_id
     run["thread_id"] = thread_id
