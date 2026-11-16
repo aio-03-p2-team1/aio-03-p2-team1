@@ -20,6 +20,8 @@ from urllib.parse import unquote
 
 import httpx
 
+from backend.timeutil import kst_today
+
 UPKIND = {"dog": "417000", "cat": "422400", "etc": "429900"}
 UPKIND_REVERSE = {v: k for k, v in UPKIND.items()}
 SPECIES_LABEL = {"dog": "개", "cat": "고양이", "etc": "기타", "all": "전체"}
@@ -241,7 +243,7 @@ _SAMPLE_ROWS = [
 
 
 def sample_items(today: date | None = None) -> list[dict[str, Any]]:
-    today = today or date.today()
+    today = today or kst_today()
     rows = []
     for index, (photo, up, kind, sex, color, region, place, days, special) in enumerate(_SAMPLE_ROWS, start=1):
         happen = (today - timedelta(days=days)).strftime("%Y%m%d")

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
 from backend.deps import AppContext, get_ctx
 from backend.errors import ApiError
+from backend.timeutil import kst_today
 from backend.tools.animal_api import AnimalApiError
 
 router = APIRouter(tags=["public"])
@@ -75,7 +76,7 @@ async def notices(
     rows: int = Query(default=20, ge=4, le=40),
     ctx: AppContext = Depends(get_ctx),
 ):
-    end = date.today()
+    end = kst_today()  # 한국 날짜 기준
     start = end - timedelta(days=days)
     key = (ctx.animal.source, species, region_code, start, end, page, rows)
     cached = _list_cache.get(key)

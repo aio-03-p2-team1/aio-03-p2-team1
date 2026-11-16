@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date
+
+from backend.timeutil import kst_today
 from typing import Any
 
 SPECIES_ALIASES = {
@@ -48,7 +50,7 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
 
 def normalize(raw: dict[str, Any], today: date | None = None) -> tuple[dict[str, Any], list[str], list[dict[str, str]]]:
 
-    today = today or date.today()
+    today = today or kst_today()  # 서버 시간대(UTC)가 아니라 한국 날짜 기준
     criteria: dict[str, Any] = {}
     missing: list[str] = []
     errors: list[dict[str, str]] = []

@@ -25,6 +25,7 @@ from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
 from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody
+from backend.timeutil import kst_today  # noqa: F401  (tests 에서 posts.kst_today 로도 import)
 from backend.tools.lost_animal_api import LostAnimalApiError
 
 router = APIRouter(tags=["posts"])
@@ -43,16 +44,13 @@ _LOST_ID = re.compile(r"^lost-\d{8}-[0-9a-f]{12}$")  # lost_animal_api.lost_id()
 PAGE_ROWS = 20  # 목록 한 페이지 글 수
 LOST_WAIT_SECONDS = 8  # 분실 신고 첫 조회를 기다리는 최대 시간. 넘으면 회원 글 먼저 보여 주고 조회는 계속한다
 
-KST = timezone(timedelta(hours=9))
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def kst_today() -> date:
-    """실종 날짜 검사 기준일. 서버(UTC)와 사용자(한국) 날짜가 다른 새벽 시간대에도 오늘을 허용한다."""
-    return datetime.now(KST).date()
+# kst_today 는 backend.timeutil 로 옮겼다(검색·게시판이 같은 기준을 쓴다). 기존 import 경로를 위해 다시 내보낸다.
 
 
 def _decode_photo(photo: str) -> tuple[str, bytes]:

@@ -16,6 +16,7 @@ import math
 from datetime import date
 from typing import Any
 
+from backend.timeutil import kst_today
 from backend.tools.kakao import KakaoError
 
 RADIUS_VERSION = "radius-v1"
@@ -34,7 +35,7 @@ def recommended_step(lost_date: str | None, today: date | None = None) -> int:
     if not lost_date:
         return len(RADIUS_STEPS_KM) - 1
     try:
-        days = ((today or date.today()) - date.fromisoformat(lost_date)).days
+        days = ((today or kst_today()) - date.fromisoformat(lost_date)).days  # 한국 날짜 기준 경과일
     except ValueError:
         return len(RADIUS_STEPS_KM) - 1
     for limit, step in STEP_BY_DAYS:
