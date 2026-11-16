@@ -118,6 +118,7 @@ async def test_supabase_like_and_pagination():
 
     def handler(request):
         requests.append(request)
+        assert request.url.params['order'] == 'name.asc,kind_code.asc'
         assert request.url.params['species'] == 'eq.other'
         assert request.url.params['search_name'] == 'like.%토끼%'
         if request.url.params['offset'] == '0':
@@ -269,3 +270,18 @@ async def test_shared_catalog_reflects_sync_invalidation_without_restart(reposit
     result = await model.analyze_photo(b'image', 'image/jpeg')
     assert result.breed_code == '3' and result.breed == '말티즈'
     assert await repository.catalog() == (('3', '말티즈'),)
+
+
+@run_async
+async def test_kinds_are_name_sorted_on_database_and_existing_cache(repository):
+    import json
+    records = [normalize_record('dog', {'kind_cd': code, 'KNm': name}, 'now')
+               for code, name in [('1', '푸들'), ('9', '말티즈'), ('5', '골든 리트리버')]]
+    sink = SqliteSink(repository.settings.sqlite_path)
+    sink.sync(records)
+    sink.close()
+    assert [r['name'] for r in await repository.lookup_db('dog')] == ['골든 리트리버', '말티즈', '푸들']
+    # Previously cached code order must not survive in the API/select response.
+    await repository.redis.set('meet-again:kinds:dog', json.dumps(records), ex=86400)
+    repository._rows = AsyncMock(side_effect=AssertionError('must use existing cache'))
+    assert [r['name'] for r in await repository.lookup('dog')] == ['골든 리트리버', '말티즈', '푸들']
