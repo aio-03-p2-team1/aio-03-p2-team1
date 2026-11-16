@@ -164,6 +164,14 @@ button[disabled]{opacity:.65;cursor:progress}
 @media(min-width:901px){.post-detail-layout{grid-template-columns:minmax(420px,1.2fr) minmax(380px,.8fr)}}
 .post-detail-media>img{aspect-ratio:4/3;max-height:680px;object-fit:contain;background:#f3eee5}
 .post-detail-media>.post-detail-empty{aspect-ratio:4/3}
+/* 넓은 화면: 사진 영역(post-detail-media)을 정보 영역(detail-information)과 같은 높이로 맞춘다.
+   사진은 남는 높이를 채우고(비율 유지, 잘리지 않음), 정보가 짧으면 최소 320px 를 유지한다. */
+@media(min-width:901px){
+  .post-detail-layout{align-items:stretch}
+  .post-detail-media{display:flex;flex-direction:column;min-height:0}
+  .post-detail-media>img,.post-detail-media>.post-detail-empty{flex:1 1 0;min-height:320px;height:auto;max-height:none;aspect-ratio:auto}
+  .post-detail-media>p{flex:none}
+}
 
 .radius-summary{margin:0 0 14px;color:#5d554b;font-size:13px}
 
@@ -196,3 +204,21 @@ button[disabled]{opacity:.65;cursor:progress}
 /* 브랜드 아이콘(헤더 로고) */
 .brand-icon{display:block;width:40px;height:40px;flex:none}
 @media(max-width:480px){.brand-icon{width:32px;height:32px}}
+
+/* 실종 정보 게시판 댓글 */
+.post-comments{margin-top:clamp(28px,4vw,48px)}
+.post-comments-head{display:grid;gap:4px;margin-bottom:14px}
+.post-comments-head h2{margin:0;font-size:20px}
+.post-comments-head h2 span{color:#a67c21}
+.comment-list{display:grid;gap:10px;margin:0 0 16px;padding:0;list-style:none}
+.comment-list li{padding:12px 14px;border:1px solid #eee8df;border-radius:10px;background:#fff}
+.comment-list li.mine{border-color:#efdca8;background:#fffbef}
+.comment-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px;color:#8a837a}
+.comment-meta strong{color:#3d3832;font-size:13px}
+.comment-meta .text-action{margin-left:auto;font-size:12px}
+.comment-body{margin:6px 0 0;color:#3d3832;font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.comment-form{display:grid;gap:8px}
+.comment-form textarea{width:100%;min-height:84px;padding:12px 14px;border:1px solid #e3dccf;border-radius:10px;font:inherit;resize:vertical}
+.comment-form-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.comment-login{margin:0;color:#6e665b;font-size:14px}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

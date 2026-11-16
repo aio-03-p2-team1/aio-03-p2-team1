@@ -19,8 +19,8 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
 | `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다 |
 | `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 20건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
-| `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자) |
-| `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음 |
+| `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자). 본문 아래(`post-detail-layout` 다음) 댓글: `GET/POST /posts/{id}/comments`, `DELETE /posts/{id}/comments/{comment_id}` |
+| `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음. 댓글은 계산된 분실 신고 ID(`lost-YYYYMMDD-해시`)로 같은 댓글 API 사용 |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 
 ## 2. StateGraph
@@ -217,9 +217,13 @@ flowchart LR
 | `GET /posts/lost/{id}` | 없음(공개) | `post_not_found`, `lost_*`(502) |
 | `GET /posts/mine` | 필요 | `not_authenticated`. 로그인 사용자가 쓴 글만(작성자 키는 세션에서 읽음, 응답에 미포함) |
 | `POST /posts` · `DELETE /posts/{id}` | 필요(삭제는 작성자만) | `not_authenticated`, `lost_date_future`, `lost_date_too_old`, `photo_invalid`, `photo_too_large`(413), `post_limit`(429), `post_forbidden`(403) |
+| `GET /posts/{id}/comments` | 없음(공개) | `post_not_found`(ID 형식이 아님). 오래된 순, 최대 200개, 응답에 작성자 키 미포함(`mine` 만) |
+| `POST /posts/{id}/comments` · `DELETE /posts/{id}/comments/{comment_id}` | 필요(삭제는 작성자만) | `not_authenticated`, `invalid_request`(422, 빈 글·500자 초과), `post_not_found`(대상 글 없음), `lost_*`(502, 분실 신고 확인 실패), `comment_rate_limited`(429, 1분 5개), `comment_limit`(429, 글당 200개), `comment_not_found`, `comment_forbidden`(403) |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 
 실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다.
+
+**댓글** (`backend/routers/comments.py`): 게시글 데이터는 저장하지 않고 댓글만 `documents` 에 저장한다. `owner="comment:<게시글 ID>"`, `kind=comment`, `id`=32자 무작위 ID, `data={body, author, author_name, created_at, target_source}`. 게시글 ID 별로 소유자 키가 나뉘어 기존 기본키·인덱스로 한 글의 댓글만 조회한다. 대상은 회원 글(32자 ID)과 분실 신고(계산 ID) 모두이며, 작성 전에 대상이 실제로 있는지 확인한다(회원 글은 DB, 분실 신고는 `LostFeed.get`). 본문 전화번호는 `mask_contacts` 로 가린 뒤 저장하고, 작성자 이메일은 저장하지 않는다(표시 이름만). 회원 글을 지우면 그 글의 댓글도 지운다. **한계:** 분실 신고 ID 는 원본 값으로 계산하므로 원본이 수정되면 ID 가 바뀌어 기존 댓글이 그 글에 보이지 않는다(데이터는 남음). 원본이 조회 기간에서 빠져도 댓글은 남는다. 운영 Supabase 는 `documents.kind` check 제약에 `comment` 를 추가해야 한다(`scripts/bootstrap_schema.sql` 끝 주석).
 
 **공공데이터 분실 신고 합치기** (`backend/tools/lost_animal_api.py`, `backend/tools/lost_feed.py`, `AppContext.lost`)
 - 출처: 분실동물 조회 서비스 `lossInfo`(`LOST_ANIMAL_API_KEY`). 키가 없으면 `ctx.lost=None` 이고 게시판은 회원 글만 보여 준다(샘플로 채우지 않음).

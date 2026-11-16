@@ -89,6 +89,15 @@ class PostBody(BaseModel):
         return value.strip()
 
 
+class CommentBody(BaseModel):
+    body: str = Field(min_length=1, max_length=500)
+
+    @field_validator("body")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+
 class PhotoAnalysisResponse(StrictSchema):
     """Public photo analysis response; the frontend maps reason codes to guidance."""
 

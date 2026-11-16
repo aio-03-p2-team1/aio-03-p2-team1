@@ -3,13 +3,14 @@
 SQLite(로컬)와 Supabase(운영)를 같은 인터페이스로 제공한다.
 모든 문서는 (owner, kind, id) 로 식별하고, owner 는 로그인 사용자 키다.
 실종 정보 게시판(kind=post)만 공용 소유자 키 "board" 아래에 저장한다(routers/posts.py).
+댓글(kind=comment)은 게시글마다 소유자 키 "comment:<게시글 ID>" 아래에 저장한다(routers/comments.py).
 """
 
 from __future__ import annotations
 
 from typing import Any, Protocol
 
-KINDS = {"identity", "thread", "memory", "saved", "run", "subscription", "notification", "post"}
+KINDS = {"identity", "thread", "memory", "saved", "run", "subscription", "notification", "post", "comment"}
 
 
 class StorageError(RuntimeError):
