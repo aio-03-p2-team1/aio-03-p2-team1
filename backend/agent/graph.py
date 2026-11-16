@@ -10,7 +10,8 @@ from langgraph.graph import END, START, StateGraph
 from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
-from backend.agent.ranking import TOP_K, cosine, feature_text, fuse_rrf, in_scope, rank
+from backend.agent import assess as assess_mod
+from backend.agent.ranking import TOP_K, confidence_signals, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
 from backend.tools.animal_api import AnimalApiError, short_region_name
 from backend.tools.kakao import KakaoError
@@ -358,7 +359,9 @@ async def validate(state: SearchState, config) -> dict:
                        "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
     elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
-    return {"issues": issues, "trace": ["validate"]}
+    # 결과가 있으면 확신 신호를 계산한다. 낮으면 assess 노드(LLM 도구 선택)가 추가 정보·사진 요청을 판단한다.
+    confidence = confidence_signals(candidates, criteria, state.get("llm_features")) if candidates else None
+    return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
 FIXES = {
     "duplicates": {"strategy": "dedupe_and_rerank", "next": "rank", "fix": {"dedupe": True}},
@@ -372,7 +375,10 @@ FIXES = {
 def route_after_validate(state: SearchState, config) -> str:
     issues = [i for i in state.get("issues") or [] if i["type"] in FIXES]
     if not issues:
-        return "locate" if not state.get("error") and state.get("candidates") is not None else "finalize"
+        if state.get("error") or state.get("candidates") is None:
+            return "finalize"
+        # 결과가 애매하면(확신 낮음) assess 에서 LLM이 추가 요청 여부를 고른다. 아니면 바로 위치 조회.
+        return "assess" if (state.get("confidence") or {}).get("low") else "locate"
     if not state.get("reflection_enabled", True):
         return "finalize"
     if state.get("reflection_count", 0) >= _deps(config)["settings"].max_reflections:
@@ -459,6 +465,20 @@ async def locate(state: SearchState, config) -> dict:
     return {"candidates": candidates, "tool_calls": calls, "trace": ["locate"]}
 
 
+async def assess_node(state: SearchState, config) -> dict:
+    """결과가 애매할 때 LLM 도구 호출로 다음 행동(사진 요청·정보 요청·그대로 보여 주기)을 고른다.
+
+    결과를 막지 않는다. 고른 요청은 agent_request 로 화면에 전달되고, 후보 목록은 그대로 보여 준다.
+    """
+    deps = _deps(config)
+    outcome = await assess_mod.assess(deps.get("assessor"), state.get("confidence"), state.get("agent_history") or {})
+    record = outcome["record"] or {}
+    calls = [_call("agent_assess", {"reasons": record.get("reasons")}, record.get("tool", "skipped"),
+                   "결과 확신이 낮아 추가 요청 여부 판단", source=record.get("source"))]
+    return {"agent_request": outcome["request"], "agent_decision": outcome["record"], "tool_calls": calls,
+            "trace": ["assess"]}
+
+
 async def finalize(state: SearchState, config) -> dict:
     criteria = state.get("criteria") or {}
     error = state.get("error")
@@ -515,6 +535,7 @@ def build_graph():
     g.add_node("rank", rank_node)
     g.add_node("validate", validate)
     g.add_node("reflect", reflect)
+    g.add_node("assess", assess_node)
     g.add_node("locate", locate)
     g.add_node("finalize", finalize)
 
@@ -529,13 +550,14 @@ def build_graph():
     g.add_conditional_edges(
         "validate",
         route_after_validate,
-        {"reflect": "reflect", "locate": "locate", "finalize": "finalize"},
+        {"reflect": "reflect", "assess": "assess", "locate": "locate", "finalize": "finalize"},
     )
     g.add_conditional_edges(
         "reflect",
         route_after_reflect,
         {"execute": "execute", "rank": "rank", "plan": "plan", "ask": "ask", "finalize": "finalize"},
     )
+    g.add_edge("assess", "locate")
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()

@@ -183,3 +183,12 @@ button[disabled]{opacity:.65;cursor:progress}
 .form-question.blocking strong{color:#b42318}
 .form-questions:has(.blocking){border-color:#f1b9b2;background:#fff6f5}
 .form-question-actions{display:flex;flex-wrap:wrap;gap:8px}
+/* 에이전트 요청 카드(사진·추가 정보). 결과는 그대로 보여 주므로 막는 질문(빨강)이 아닌 안내 색을 쓴다. */
+.agent-request{display:grid;gap:10px;margin:0 0 4px;padding:12px 14px;border:1px solid #b9d3ec;border-radius:12px;background:#f4f9ff}
+.agent-request-reason{margin:0;color:#1f4f7a;font-size:14px;line-height:1.55}
+.agent-request-reason strong{margin-right:4px;color:#174067}
+.agent-request-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.agent-request .text-button{border:0;background:none;padding:6px 4px;color:#4a6782;font-size:13px;text-decoration:underline;cursor:pointer}
+.answer-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px}
+.answer-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid #c9d9ea;border-radius:999px;background:#fff;color:#1f4f7a;font-size:13px;cursor:pointer}
+.answer-chip span{color:#7a8fa3}

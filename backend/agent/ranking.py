@@ -157,3 +157,64 @@ def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[s
     for i, c in enumerate(out, start=1):
         c["rank"] = i
     return out
+
+
+# ── 결과 확신 신호 (에이전트 판단용) ──────────────────────────────
+# RRF 점수는 순위로만 계산(1/(k+순위))해서 결과가 엉망이어도 1등 점수가 비슷하다. "얼마나 닮았나"를 말해 주지 않는다.
+# 그래서 확신은 절대적인 신호(벡터 유사도 값, 특징 일치 근거, 입력 특징의 양)로 판단한다.
+# 기준값은 실제 검색 몇 건을 보고 정한 것이 아니라 임시값이다(CONFIDENCE_VERSION 으로 기록, 측정 후 조정).
+CONFIDENCE_VERSION = "conf-v1(임시 기준)"
+WEAK_SIMILARITY = 0.45  # 1등 후보 벡터 유사도가 이보다 낮으면 애매
+FLAT_GAP = 0.01  # 1·2등 유사도 차이가 이보다 작으면 두드러진 후보가 없음
+MIXED_WORDS = ("믹스", "잡종", "혼종", "mix")
+PHOTO_PREFIX = "사진에서 확인한 특징"  # 화면이 사진 분석 결과를 설명 글 앞에 붙일 때 쓰는 말
+
+
+def input_signals(criteria: dict[str, Any], features: dict[str, Any] | None = None) -> dict[str, Any]:
+    """사용자가 준 특징이 얼마나 구체적인지. 모두 입력·추출 결과에서 계산한다(추측 없음)."""
+    features = features or {}
+    text = " ".join(str(criteria.get(k) or "") for k in ("breed", "color", "description"))
+    colors = tokenize_color_words(f"{criteria.get('color') or ''} {criteria.get('description') or ''}")
+    marks = [k for k in keywords(criteria.get("description")) if k not in MIXED_WORDS]
+    return {
+        "breed_given": bool(criteria.get("breed") or features.get("breed")),
+        "breed_mixed": any(w in text.lower() for w in MIXED_WORDS),
+        "color_given": bool(colors["colors"] or colors["patterns"] or features.get("colors")),
+        "sex_given": bool(criteria.get("sex") or features.get("sex")),
+        "size_given": bool(criteria.get("size")),
+        "marks_given": bool(marks or features.get("marks")),
+        "photo_given": PHOTO_PREFIX in str(criteria.get("description") or ""),
+    }
+
+
+def confidence_signals(candidates: list[dict[str, Any]], criteria: dict[str, Any],
+                       features: dict[str, Any] | None = None) -> dict[str, Any]:
+    """정렬된 후보에서 확신 신호를 계산한다. low=True 면 에이전트가 추가 정보·사진 요청을 판단한다."""
+    given = input_signals(criteria, features)
+    feature_count = sum(given[k] for k in ("breed_given", "color_given", "sex_given", "size_given", "marks_given"))
+    sims = sorted((c["semantic_score"] for c in candidates[:20] if isinstance(c.get("semantic_score"), (int, float))),
+                  reverse=True)
+    top = candidates[0] if candidates else {}
+    evidence = top.get("evidence") or {}
+    signals = {
+        **given,
+        "feature_count": feature_count,
+        "candidates": len(candidates),
+        "top_similarity": round(sims[0], 3) if sims else None,
+        "similarity_gap": round(sims[0] - sims[1], 3) if len(sims) > 1 else None,
+        "top_matched": len(evidence.get("matched") or []),
+        "top_unknown": len(evidence.get("unknown") or []),
+    }
+    reasons = []
+    if candidates:
+        if feature_count <= 1:
+            reasons.append("few_features")  # 특징이 거의 없음
+        if given["breed_mixed"] and not given["photo_given"]:
+            reasons.append("mixed_breed")  # 믹스견: 품종·털색만으로 구분이 어려움
+        if signals["top_similarity"] is not None and signals["top_similarity"] < WEAK_SIMILARITY:
+            reasons.append("weak_similarity")
+        if signals["similarity_gap"] is not None and len(sims) >= 3 and signals["similarity_gap"] < FLAT_GAP:
+            reasons.append("flat_top")
+        if feature_count and signals["top_matched"] == 0:
+            reasons.append("no_feature_match")
+    return {"low": bool(reasons), "reasons": reasons, "signals": signals, "version": CONFIDENCE_VERSION}

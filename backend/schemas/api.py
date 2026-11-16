@@ -37,6 +37,8 @@ class SearchBody(BaseModel):
     thread_id: str | None = Field(default=None, max_length=64, pattern=r"^[0-9a-f]{8,64}$")
     profile_id: str | None = Field(default=None, max_length=40, pattern=r"^[\w-]{1,40}$")
     reflection_enabled: bool = True
+    # 에이전트 요청에 사용자가 '잘 모르겠어요'라고 답한 항목. 같은 대화에서 다시 묻지 않는다.
+    declined: list[Literal["photo", "color", "size", "sex", "marks"]] = Field(default_factory=list, max_length=5)
 
 
 class PhotoAnalysisBody(BaseModel):

@@ -41,7 +41,9 @@ flowchart TD
   X -- 재매핑 --> P
   X -- 중복 제거·재정렬 --> R
   X -- 사용자 확인 필요 --> Q
-  V -- 통과 --> L[locate<br/>상위 3개 보호센터 좌표]
+  V -- 통과·확신 충분 --> L[locate<br/>상위 3개 보호센터 좌표]
+  V -- 통과·확신 낮음 --> AS[assess<br/>LLM 도구 호출: 사진·정보 요청 판단]
+  AS --> L
   V -- 수정 불가·성찰 비활성·한도 초과 --> F
   L --> F[finalize<br/>상위 300개·범위·종료 상태]
   Q --> END1([END awaiting_input])
@@ -124,6 +126,10 @@ sequenceDiagram
 | `radius` | 반경 단계·km·중심 좌표·포함/미확인/제외 건수·미적용 사유 | dict | — | radius | run, scope |
 | `radius_items` | 반경 안 + 거리 미확인 공고(반경 밖 제외, 임베딩 대상) | list \| None | None | radius | — |
 | `candidates` | 후보(점수·근거·위치) | list | — | rank, locate, finalize | run |
+| `confidence` | 결과 확신 신호 `{low, reasons, signals, version}` | dict \| None | — | validate | run(캐시 포함) |
+| `agent_history` | 같은 대화에서 이미 한 요청 수·물은 항목·'모르겠어요' 항목 | dict | thread | runner | thread(`agent`) |
+| `agent_request` | assess 가 고른 화면 요청(`photo` 또는 `info`+보기) | dict \| None | — | assess | run(캐시 제외) |
+| `agent_decision` | assess 판단 기록(고른 도구, 출처 llm/no_llm/llm_error/limit, 허용 행동, 프롬프트 버전) | dict \| None | — | assess | run(캐시 제외) |
 | `issues` | 검증 문제 | list | — | plan, validate, reflect, finalize | run |
 | `reflection_enabled` | 성찰 사용 여부(평가 변수) | bool | True | — | run |
 | `reflection_count` / `reflections` | 판단 오류 수정 횟수·기록(누적) | int / list | 0 / [] | reflect | run |
@@ -258,3 +264,29 @@ flowchart LR
 
 - **날짜 기준:** 실종 후 경과일과 검색 기간의 '오늘'은 한국 날짜(`backend/timeutil.kst_today`)다. 서버가 UTC 여도 한국 시간 0~9시에 하루 어긋나지 않는다.
 - **화면 안내용 요약 필드:** `radius.days_since_lost`(실종 후 경과일), `auto`(날짜로 정한 단계면 true, 사용자가 넓히기를 골랐으면 false), `next_widen_day`(자동 단계에서 다음 단계로 넓어지는 경과일). 화면은 이 값으로 "실종 후 N일 · M km" 안내를 만든다. 검색 전 미리 보기(실종 지역 선택 창: 실종 날짜 입력, 위치를 고르는 즉시 반경 원과 안내 표시)는 같은 기준표(`frontend/src/lib/radius.js` 의 `STEP_BY_DAYS`)로 브라우저에서 계산하며, 두 표가 같은지 프론트 테스트로 확인한다.
+
+## 12. 결과 확신 판단과 에이전트 요청 (assess, assess-v1 · conf-v1)
+
+검색 결과가 애매할 때 LLM이 **도구 호출(function calling)** 로 다음 행동을 고른다. 결과는 막지 않고, 요청 카드와 후보 목록을 함께 보여 준다.
+
+- **확신 신호(`ranking.confidence_signals`, validate 에서 계산):** RRF 점수는 순위 기반(1/(k+순위))이라 결과가 엉망이어도 1등 점수가 비슷해 쓰지 않는다. 대신
+  - 입력 특징 수(품종·털색·성별·크기·특징) ≤ 1 → `few_features`
+  - 믹스견(믹스·잡종·혼종)이고 사진 특징이 없음 → `mixed_breed`
+  - 1등 벡터 유사도 < 0.45 → `weak_similarity`, 상위 3건 이상에서 1·2등 차이 < 0.01 → `flat_top`
+  - 특징을 줬는데 1등 후보 일치 근거가 0개 → `no_feature_match`
+  - 사유가 하나라도 있으면 `low=true`. **기준값은 임시(conf-v1)이며 측정 후 조정한다(미측정).**
+- **도구(`backend/agent/assess.py`, `bind_tools(tool_choice="required", parallel_tool_calls=False)`):**
+
+| 도구 | 인자 | 화면 |
+| --- | --- | --- |
+| `request_photo` | `reason` | [사진 올리기] → 사진 분석 → 특징을 설명 앞에 넣고 같은 대화로 재검색(재임베딩·재정렬) |
+| `request_info` | `field ∈ color·size·sex·marks`, `reason` | 서버 보기 버튼(털색 9종, 소형/중형/대형, 수컷/암컷, 특징 7종) → 고르면 칩으로 남기고 같은 대화로 재검색 |
+| `accept_results` | `note` | 요청 없음 |
+
+- **사실 생성 방지:** 프롬프트에서 번호·날짜·숫자·연락처·특징을 지어내지 말라고 하고, 서버가 다시 검증한다. 보기는 서버 목록만 쓰고(LLM이 준 보기는 무시), 이유 문장에 숫자·링크가 있거나 60자를 넘으면 고정 문구로 바꾼다. LLM 입력에는 계산된 신호만 넣고 공고 내용·개인정보는 넣지 않는다.
+- **반복 제한(thread `agent`):** 사진 1회, 정보 2회, 이미 물은 항목·이미 받은 정보·'잘 모르겠어요'(`SearchBody.declined`) 항목은 다시 묻지 않는다. 허용 행동 밖을 고르면 요청 없음(`rejected=true`).
+- **실패:** LLM 키 없음(`no_llm`)·오류(`llm_error`)·한도(`limit`)는 모두 요청 없이 결과만 보여 준다. `tool_calls` 에 `agent_assess` 로 기록한다.
+- **캐시:** `confidence` 는 조건 캐시에 넣고, `agent_request`/`agent_decision` 은 대화마다 달라 넣지 않는다. 캐시 적중 시에도 같은 `assess` 함수로 다시 판단한다.
+- **API 계약 변경:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5) 추가. 응답 run 에 `confidence`, `agent_request`, `agent_decision` 추가. 의존성 `AppContext.assessor`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델 사용).
+- **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색, 막지 않는 안내), 아래에 답한 값 칩(`털색: 흰색 ✕`). 설명 글은 고치지 않고 칩 값을 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
+- **검증:** 가짜 도구 client 로 시험(`backend/tests/test_assess.py`). 실제 OpenAI 도구 호출과 판단 품질은 서버에서 확인 예정(미측정).

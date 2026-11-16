@@ -14,6 +14,7 @@ import SourceBadge from '../components/SourceBadge.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { photoAnalysisError, photoErrorMessage, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
 import { useRegions } from './useRegions.js'
+import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const initialForm = () => ({ species: '', lost_date: today(), description: '' })
@@ -36,6 +37,11 @@ export default function SearchPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [history, setHistory] = useState([])
+  // 에이전트 요청(사진·추가 정보)에 대한 답. 설명 글을 고치지 않고 칩으로 따로 보관해 검색 조건에 합친다.
+  const [answers, setAnswers] = useSearchViewState('answers', {})
+  const [declined, setDeclined] = useSearchViewState('declined', []) // '잘 모르겠어요'한 항목(같은 대화에서 다시 묻지 않음)
+  const descriptionRef = useRef(null)
+  const photoInputRef = useRef(null)
 
   const [params, setParams] = useSearchParams()
   const runParam = params.get('run')
@@ -89,6 +95,7 @@ export default function SearchPage() {
       return setPhotoMessage(photoErrorMessage(selectionError))
     }
     const oldAuto = photoFeatureText
+    const photoAsked = visibleRequest(run, answers, declined)?.type === 'photo'
     const oldSpecies = photoSpecies
     if (oldAuto || oldSpecies) {
       setForm((current) => ({
@@ -135,6 +142,16 @@ export default function SearchPage() {
       setPhotoFeatureText(extracted)
       setPhotoSpecies(result.species || '')
       setPhotoFeedbackOpen(true)
+      // 에이전트가 사진을 요청한 상태였다면, 사진 특징을 넣어 같은 대화로 바로 다시 찾는다(다시 임베딩·정렬).
+      if (photoAsked && extracted) {
+        const base = oldAuto && form.description.startsWith(oldAuto) ? form.description.slice(oldAuto.length).trimStart() : form.description
+        const nextForm = {
+          ...form,
+          ...(result.species ? { species: result.species } : {}),
+          description: [extracted, base].filter(Boolean).join('\n'),
+        }
+        submit(buildCriteria(nextForm, answers), run.thread_id)
+      }
     } catch (err) {
       if (requestId === photoRequestId.current) setPhotoMessage(photoErrorMessage(photoAnalysisError(err)))
     } finally {
@@ -150,6 +167,8 @@ export default function SearchPage() {
   }))
   const widenStep = run?.status === 'awaiting_input' ? widenRadiusAction(run.questions, run.radius || run.scope?.radius) : null
   const canWidenRegion = pending.some((q) => q.field === 'region' && run?.scope)
+  const agentRequest = visibleRequest(run, answers, declined)
+  const chips = answerChips(answers)
 
   // 실종 지역 버튼에 보여 줄 요약(위치 · 실종 날짜 · 반경). 반경은 검색과 같은 기준표로 계산한다.
   const preview = previewRadius(location, form.lost_date, today())
@@ -174,6 +193,9 @@ export default function SearchPage() {
     try {
       const body = { criteria, reflection_enabled: true }
       if (threadId) body.thread_id = threadId
+      // 같은 대화면 '모르겠어요' 항목을 함께 보내 다시 묻지 않게 한다. 새 대화면 초기화.
+      if (threadId && declined.length) body.declined = declined
+      if (!threadId) setDeclined([])
       const result = await api('/searches', { method: 'POST', body })
       setRun(result)
       setPageCache((previous) => rememberPage(previous, `${result.run_id}:1`, result))
@@ -181,6 +203,8 @@ export default function SearchPage() {
       loadHistory()
       // 무엇이 필요한지 알 수 있게 첫 질문을 그대로 보여 준다(예: 지역을 넓혀 볼까요?)
       if (result.status === 'awaiting_input') toast(result.questions?.[0]?.message || '추가 정보가 필요해요.')
+      // 결과는 보여 주되, 에이전트가 사진·정보를 요청했으면 알림으로도 알려 준다(카드는 입력란 위에 있음).
+      else if (result.agent_request) toast(`${result.agent_request.reason} 입력란 위에서 골라 주세요.`)
       document.getElementById('results-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (err) {
       setError(err)
@@ -189,10 +213,9 @@ export default function SearchPage() {
     }
   }
 
-  function onSubmit(event) {
-    event.preventDefault()
+  function buildCriteria(values, answerValues) {
     const criteria = {}
-    for (const [k, v] of Object.entries(form)) if (v.trim()) criteria[k] = v.trim()
+    for (const [k, v] of Object.entries(values)) if (v.trim()) criteria[k] = v.trim()
     if (location?.region) criteria.region = location.region
     if (location?.address) criteria.lost_place = location.address
     // 지도에서 찍은 점을 반경 중심으로 보낸다(서버가 한국 범위 검사). 미리 보기와 실제 검색 범위가 같아진다.
@@ -200,7 +223,25 @@ export default function SearchPage() {
       criteria.lost_lat = Number(location.lat.toFixed(6))
       criteria.lost_lng = Number(location.lng.toFixed(6))
     }
-    submit(criteria, run?.status === 'awaiting_input' ? run.thread_id : undefined)
+    return applyAnswers(criteria, answerValues)
+  }
+
+  function onSubmit(event) {
+    event.preventDefault()
+    // 질문에 답하는 중이거나 에이전트 요청이 있던 검색이면 같은 대화로 이어서 찾는다.
+    const followUp = run?.status === 'awaiting_input' || run?.agent_request
+    submit(buildCriteria(form, answers), followUp ? run.thread_id : undefined)
+  }
+
+  // 요청 카드의 보기를 고르면 칩으로 남기고 같은 대화로 바로 다시 찾는다.
+  function chooseAnswer(field, value) {
+    const next = addAnswer(answers, field, value)
+    setAnswers(next)
+    submit(buildCriteria(form, next), run.thread_id)
+  }
+
+  function declineRequest(key) {
+    setDeclined((current) => (current.includes(key) ? current : [...current, key]))
   }
 
   function widenRegion() {
@@ -234,7 +275,7 @@ export default function SearchPage() {
           <div className="photo-upload-column">
             <label className="upload-box">
               사진 올리기
-              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhoto} />
+              <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhoto} />
             <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '찾을 동물이 중심에 선명하게 보이는 사진 (JPG, PNG 또는 WEBP · 최대 8MB)'}</span>
               {photo && <img src={photo} alt="올린 반려동물 사진" />}
               {photoAnalyzing && <span className="photo-analyzing">사진 특징을 살펴보고 있어요…</span>}
@@ -269,10 +310,34 @@ export default function SearchPage() {
                 )}
               </div>
             )}
+            {agentRequest && (
+              <div className="agent-request" role="status" aria-live="polite" id="agent-request">
+                <p className="agent-request-reason"><strong>{agentRequest.type === 'photo' ? '사진 요청' : `${agentRequest.label} 확인`}</strong> {agentRequest.reason}</p>
+                <div className="agent-request-actions">
+                  {agentRequest.type === 'info' && agentRequest.options.map((option) => (
+                    <button key={option} type="button" className="secondary-button" disabled={busy} onClick={() => chooseAnswer(agentRequest.field, option)}>{option}</button>
+                  ))}
+                  {agentRequest.type === 'photo' && (
+                    <button type="button" className="secondary-button" disabled={busy || photoAnalyzing} onClick={() => photoInputRef.current?.click()}>사진 올리기</button>
+                  )}
+                  <button type="button" className="text-button" onClick={() => descriptionRef.current?.focus()}>직접 적을게요</button>
+                  <button type="button" className="text-button" onClick={() => declineRequest(agentRequest.type === 'photo' ? 'photo' : agentRequest.field)}>잘 모르겠어요</button>
+                </div>
+              </div>
+            )}
             <label className="search-description">
               특징과 상황
-              <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
+              <textarea ref={descriptionRef} rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
             </label>
+            {chips.length > 0 && (
+              <div className="answer-chips" aria-label="요청에 답한 값">
+                {chips.map((chip) => (
+                  <button key={chip.label} type="button" className="answer-chip" onClick={() => setAnswers(removeAnswer(answers, chip.field, chip.value))} aria-label={`${chip.label} 지우기`}>
+                    {chip.label} <span aria-hidden="true">✕</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {/* 실종 날짜는 실종 지역 선택 창 안에서 함께 고른다(위치·날짜·검색 범위를 한 화면에서). */}
             <div className="field-block">
               <span className="field-label">실종 지역 · 날짜 <em className="req">필수</em></span>

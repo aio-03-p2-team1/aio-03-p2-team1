@@ -17,6 +17,7 @@ from typing import Any
 from backend.agent.graph import GRAPH
 from backend.agent import criteria as crit
 from backend.agent.search_cache import condition_key
+from backend.agent import assess as assess_mod
 from backend.agent.embeddings import DIMENSIONS
 from backend.agent.llm import PROMPT_VERSION
 from backend.agent.radius import RADIUS_VERSION
@@ -28,7 +29,28 @@ RUN_FIELDS = (
     "reflection_enabled", "reflection_count", "reflections", "retry_count", "scope", "error", "trace",
     "data_source",
     "ranking_method", "cache_key", "cache_hit", "snapshot_id", "radius",
+    "confidence", "agent_request", "agent_decision",
 )
+# 에이전트 요청은 대화(thread)마다 다르므로(이미 물은 것, '모르겠어요') 캐시에 넣지 않고 매번 판단한다.
+AGENT_FIELDS = ("agent_request", "agent_decision")
+
+
+def agent_history(thread: dict[str, Any], declined: list[str] | None) -> dict[str, Any]:
+    """같은 대화에서 이미 한 요청과 사용자가 '모르겠어요'한 항목을 모은다(반복 요청 방지)."""
+    history = dict(thread.get("agent") or {})
+    history["declined"] = sorted(set(history.get("declined") or []) | set(declined or []))
+    return history
+
+
+def next_history(history: dict[str, Any], request: dict[str, Any] | None) -> dict[str, Any]:
+    history = {"photo_requests": history.get("photo_requests", 0), "info_requests": history.get("info_requests", 0),
+               "asked_fields": list(history.get("asked_fields") or []), "declined": list(history.get("declined") or [])}
+    if request and request["type"] == "photo":
+        history["photo_requests"] += 1
+    elif request and request["type"] == "info":
+        history["info_requests"] += 1
+        history["asked_fields"].append(request["field"])
+    return history
 
 
 def _now() -> str:
@@ -40,6 +62,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     thread_id = request.get("thread_id") or uuid.uuid4().hex
     thread = await store.get(owner, "thread", thread_id) or {}
     session_criteria = thread.get("criteria")
+    history = agent_history(thread, request.get("declined"))
     profile = (await store.get(owner, "memory", request["profile_id"]) or {}) if request.get("profile_id") else None
     merged, origins = crit.merge_conditions(request.get("criteria", {}), session_criteria, (profile or {}).get("confirmed"))
     normalized, missing, errors = crit.normalize(merged)
@@ -57,6 +80,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "tool_calls": [],
         "reflections": [],
         "trace": [],
+        "agent_history": history,
     }
     config = {"configurable": deps, "recursion_limit": 40}
     cache = deps.get("search_cache")
@@ -83,7 +107,8 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
                     result = await execute()
                     result["snapshot_id"] = run_id
                     if not result.get("error") and result.get("status") == "completed":
-                        snapshot = {k: result.get(k) for k in RUN_FIELDS if k not in ("run_id", "thread_id", "cache_key", "cache_hit")}
+                        snapshot = {k: result.get(k) for k in RUN_FIELDS
+                                    if k not in ("run_id", "thread_id", "cache_key", "cache_hit", *AGENT_FIELDS)}
                         await cache.put(key, snapshot)
                 else:
                     cache_hit = True
@@ -94,6 +119,10 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     if cache_hit:
         result["context_summary"] = {**(result.get("context_summary") or {}), "origin": origins}
         result["memory_used"] = {k: normalized[k] for k, source in origins.items() if source == "memory" and k in normalized}
+    if cache_hit:
+        # 캐시 결과에도 이 대화의 기록 기준으로 에이전트 판단을 다시 한다(그래프 assess 노드와 같은 함수).
+        outcome = await assess_mod.assess(deps.get("assessor"), result.get("confidence"), history)
+        result["agent_request"], result["agent_decision"] = outcome["request"], outcome["record"]
     run = {k: result.get(k) for k in RUN_FIELDS}
     run["run_id"] = run_id
     run["thread_id"] = thread_id
@@ -122,6 +151,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             "status": run["status"],
             "questions": run.get("questions") or [],
             "last_run_id": run_id,
+            "agent": next_history(history, run.get("agent_request")),
             "updated_at": _now(),
         },
     )
