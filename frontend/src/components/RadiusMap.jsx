@@ -50,13 +50,14 @@ export default function RadiusMap({ radius, preview = false }) {
         }
         const circle = new kakao.maps.Circle({
           map, center: position, radius: km * 1000,
-          strokeWeight: 2, strokeColor: '#d9a520', strokeOpacity: 0.9,
-          fillColor: '#f5d76e', fillOpacity: 0.18
+          strokeWeight: 3, strokeColor: '#c98f12', strokeOpacity: 0.95,
+          fillColor: '#f5d76e', fillOpacity: 0.28
         })
         overlays.push(circle)
         overlaysRef.current = overlays
         map.relayout()
-        map.setBounds(circle.getBounds())
+        // 여백을 작게 줘서 원이 지도 칸을 최대한 채우게 한다(기본 여백 32px 이면 원이 너무 작게 보임).
+        map.setBounds(circle.getBounds(), 8, 8, 8, 8)
         setState('ready')
       })
       .catch(() => {
