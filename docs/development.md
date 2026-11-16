@@ -108,6 +108,12 @@ cd frontend && npm test && npm run build
 
 공식 API 문서는 [공공데이터포털 구조동물 조회 서비스](https://www.data.go.kr/data/15098931/openapi.do)다. 응답 필드 `desertionNo`(유기번호), `colorCd`(털색)는 프로젝트의 실제 API 검증 기록 및 `backend/tools/animal_api.py` 정규화 매핑과 일치한다.
 
+### 품종 기준정보 초기화
+
+`.env`에 `ANIMAL_API_KEY`와 원하는 `STORAGE_BACKEND`를 설정한 뒤 `uv run python scripts/init_kinds.py`를 실행한다. `sqlite`는 `SQLITE_PATH` DB에 테이블 생성 및 동기화까지 수행한다. `supabase`는 먼저 `scripts/bootstrap_schema.sql`을 SQL Editor에서 실행하고 해당 스키마를 Data API의 Exposed schemas에 추가해야 한다. 스크립트는 `kind_v2`에서 개·고양이·기타 품종 전체 페이지를 읽고 반복 실행 시 코드 기준으로 갱신한다. 실행 시점 API 응답에서 사라진 코드는 비활성 상태로 남겨 과거 코드 참조를 유지한다.
+
+이름 비교는 검색 시 `search_name`과 입력 양쪽에서 공백을 제거한 뒤 수행한다. `kinds_search_name_idx`가 종과 정규화 이름 검색을 지원한다. 표기만 공백이 다른 이름은 별칭으로 중복 저장하지 않으며, 의미가 다른 별칭은 `kind_aliases`에 큐레이션한다.
+
 ## 배포 설정
 
 | 대상 | 플랫폼 설정 |

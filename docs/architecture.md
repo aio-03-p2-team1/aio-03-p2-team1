@@ -180,6 +180,14 @@ flowchart LR
 
 털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다.
 
+## 7.1 공공 품종 기준정보
+
+`scripts/init_kinds.py`는 `ANIMAL_API_KEY`로 `kind_v2`를 축종별(개 `417000`, 고양이 `422400`, 기타 `429900`) 전체 페이지 조회해 `kinds` 기준정보를 동기화한다. `STORAGE_BACKEND=sqlite`이면 `SQLITE_PATH`, `supabase`이면 `SUPABASE_SCHEMA`의 Data API 테이블을 사용한다. 실행 전 Supabase에서는 `scripts/bootstrap_schema.sql`의 품종 테이블 정의를 적용한다.
+
+`kinds.kind_code`는 공공 API 코드이며, `species`, 표시 이름, 공백을 제거한 `search_name`, `active`, 출처와 갱신 시각을 함께 둔다. 품종이 API에서 사라져도 행을 삭제하지 않고 비활성화해 과거 코드 참조를 유지한다. 이름 검색은 `(species, search_name)` 인덱스를 이용하며, 요청 문자열도 공백 제거 후 비교한다. 이름 자체가 대표 이름의 공백 유무를 흡수하므로 별칭으로 중복 등록하지 않는다.
+
+`kind_aliases`는 별도 사용 별칭만 저장하고, 품종 코드 FK와 `(kind_code, search_alias)` 유일 제약 및 alias 검색 인덱스를 둔다. 현재 `scripts/init_kinds.py`의 ALIASES는 관리 가능한 초기 큐레이션 목록이며, 동기화는 API 원본 행을 갱신하고 별칭 행은 큐레이션 원본만 교체한다. 테이블에 출처와 타임스탬프를 두어 이후 API 변경과 alias 출처를 추적할 수 있다.
+
 ## 8. 백엔드 API 계약 (요약)
 
 | 경로 | 인증 | 주요 오류 코드 |
