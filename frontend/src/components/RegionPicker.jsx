@@ -114,6 +114,8 @@ export default function RegionPicker({
 
   function search(event) {
     event.preventDefault()
+    // 이 창이 다른 폼 안에 렌더돼도 주소 검색 제출이 바깥 폼으로 번지지 않게 막는다(React 이벤트는 컴포넌트 트리로 전파).
+    event.stopPropagation()
     const kakao = kakaoRef.current
     const q = query.trim()
     if (!kakao || !q) return
