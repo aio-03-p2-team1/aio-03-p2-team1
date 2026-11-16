@@ -182,3 +182,12 @@ button[disabled]{opacity:.65;cursor:progress}
 .region-guide{color:#5a5145;line-height:1.6}
 .region-guide strong{color:#3f382f}
 .region-date-error{color:#b42318;font-weight:700}
+
+/* 입력 카드 안 추가 질문: 답해야 하는 질문은 빨강(#b42318, 크림 바탕 대비 4.5:1 이상), 범위 넓히기는 금색 */
+.form-questions{display:grid;gap:8px;margin:0 0 4px;padding:12px 14px;border:1px solid #ecd9a8;border-radius:12px;background:#fffaf0}
+.form-question{margin:0;color:#6b5418;font-size:14px;line-height:1.55}
+.form-question strong{margin-right:4px;color:#8a6a1c}
+.form-question.blocking{color:#b42318}
+.form-question.blocking strong{color:#b42318}
+.form-questions:has(.blocking){border-color:#f1b9b2;background:#fff6f5}
+.form-question-actions{display:flex;flex-wrap:wrap;gap:8px}

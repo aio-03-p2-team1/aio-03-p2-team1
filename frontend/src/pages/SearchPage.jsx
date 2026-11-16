@@ -143,6 +143,15 @@ export default function SearchPage() {
     }
   }
 
+  // 입력 카드에 보여 줄 추가 질문. 범위 넓히기(radius, 결과가 있는 상태의 region)는 권하는 질문, 나머지는 답해야 하는 질문.
+  const pending = run?.status === 'awaiting_input' ? run.questions || [] : []
+  const questionNotes = pending.map((q) => ({
+    ...q,
+    blocking: !(q.field === 'radius' || (q.field === 'region' && run?.scope)),
+  }))
+  const widenStep = run?.status === 'awaiting_input' ? widenRadiusAction(run.questions, run.radius || run.scope?.radius) : null
+  const canWidenRegion = pending.some((q) => q.field === 'region' && run?.scope)
+
   // 실종 지역 버튼에 보여 줄 요약(위치 · 실종 날짜 · 반경). 반경은 검색과 같은 기준표로 계산한다.
   const preview = previewRadius(location, form.lost_date, today())
   const locationSummary = !location
@@ -231,9 +240,32 @@ export default function SearchPage() {
               <span className="field-label">종류 <em className="req">필수</em></span>
               <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => ({ ...f, species }))} />
             </div>
+            {/* 추가 질문을 입력 카드 안에도 보여 준다. 답해야 하는 질문(빈 칸·입력 오류)은 빨간색,
+                범위를 넓힐지 묻는 질문은 금색으로 구분하고, 넓히기 버튼을 바로 옆에 둔다. */}
+            {questionNotes.length > 0 && (
+              <div className="form-questions" role="status" aria-live="polite" id="form-questions">
+                {questionNotes.map((q) => (
+                  <p key={q.field + q.message} className={q.blocking ? 'form-question blocking' : 'form-question'}>
+                    <strong>{q.blocking ? '확인 필요' : '범위 넓히기'}</strong> {q.message}
+                  </p>
+                ))}
+                {(widenStep || canWidenRegion) && (
+                  <div className="form-question-actions">
+                    {widenStep && (
+                      <button type="button" className="secondary-button" disabled={busy} onClick={() => widenRadius(widenStep.step)}>
+                        {widenStep.label}
+                      </button>
+                    )}
+                    {canWidenRegion && (
+                      <button type="button" className="secondary-button" disabled={busy} onClick={widenRegion}>전체 지역으로 넓혀 찾기</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <label className="search-description">
               특징과 상황
-              <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
+              <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
             </label>
             {/* 실종 날짜는 실종 지역 선택 창 안에서 함께 고른다(위치·날짜·검색 범위를 한 화면에서). */}
             <div className="field-block">
