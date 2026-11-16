@@ -25,6 +25,9 @@ COORDS = {
     "서울특별시 강서구": (37.551, 126.849),  # 약 1.3km
     "서울특별시 양천구": (37.517, 126.866),  # 약 3.5km
     "서울특별시 노원구": (37.654, 127.056),  # 약 23km
+    # 넓은 시: 시청 좌표와 읍 좌표가 약 18km 떨어진 실제 사례(경주시 외동읍, 2026-11-16 로컬 확인)
+    "경상북도 경주시": (35.856, 129.225),
+    "경상북도 경주시 외동읍": (35.717, 129.328),
 }
 
 
@@ -244,3 +247,35 @@ def test_summary_has_days_and_next_widen_day_for_guide_text():
     assert r["days_since_lost"] == 2 and r["auto"] is True and r["next_widen_day"] == 4  # 4일째부터 10km
     widened = search(deps(FakeAnimal(pages=[items("서울특별시 강서구")])), base(days=2, radius_step=1))
     assert widened["radius"]["auto"] is False and widened["radius"]["next_widen_day"] is None
+
+
+
+# ── 구조 장소(읍면동) 기준 거리 ─────────────────────────────────
+
+@pytest.mark.parametrize("place, token", [
+    ("외동읍 석계평리길 부근", "외동읍"),
+    ("경주시 외동읍 입실리", "외동읍"),
+    ("이촌동 이촌아파트 도로변 상가", "이촌동"),
+    ("고덕래미안힐스테이트 306동 놀이터 앞", None),  # 아파트 동 번호는 읍면동이 아님
+    ("홍은동주민센터옆 주차장", None),  # 붙여 쓴 말은 뽑지 않음(관할 기준으로 대신)
+    ("서울 구로구 고척로21다길 13 인근", None),
+    ("차량으로 이동 중 발견", None),  # 두 글자 일반 낱말은 읍면동으로 보지 않음
+    (None, None),
+])
+def test_area_token(place, token):
+    assert radius_mod.area_token(place) == token
+
+
+def test_rescue_area_is_used_before_jurisdiction_center():
+    # 실종: 경주시 외동읍. 같은 읍에서 구조됐지만 관할(경주시청)까지는 약 18km 인 공고가 반경 안에 들어와야 한다.
+    pin = (35.7174, 129.3276)
+    same_town = api_item(1, orgNm="경상북도 경주시", happenPlace="외동읍 석계평리길 부근")
+    no_town = api_item(2, orgNm="경상북도 경주시", happenPlace="시내 공원")
+    animal = FakeAnimal(pages=[[same_town, no_town]])
+    criteria = {"species": "dog", "region": "경상북도", "lost_date": lost(2), "lost_place": "경상북도 경주시 외동읍",
+                "lost_lat": pin[0], "lost_lng": pin[1]}
+    run = search(deps(animal), criteria)
+    r = run["radius"]
+    assert r["applied"] is True and r["inside"] == 1 and r["excluded"] == 1 and r["by_rescue_area"] == 1
+    near = run["candidates"][0]
+    assert near["distance_basis"] == "rescue_area" and near["distance_km"] < 1.0

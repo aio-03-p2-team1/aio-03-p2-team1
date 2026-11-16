@@ -204,7 +204,7 @@ export default function RegionPicker({
               // 위치를 고르면 반경 안내, 고르기 전에는 사용법 안내
               <p className="map-note region-guide" role="status">
                 {guide
-                  ? <><strong>{guide}</strong>{nextGuide && <> {nextGuide}</>}{radiusKm != null && ' 거리는 공고를 맡은 시·군·구 중심까지로 재요.'}</>
+                  ? <><strong>{guide}</strong>{nextGuide && <> {nextGuide}</>}{radiusKm != null && ' 거리는 동물이 구조된 읍·면·동(모르면 시·군·구) 중심까지로 재요.'}</>
                   : '지도를 누르거나 주소를 검색해 실종 위치를 고르면 찾을 범위가 지도에 표시돼요.'}
               </p>
             ) : (

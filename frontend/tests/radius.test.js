@@ -29,6 +29,7 @@ test('widen action reads next step from the radius question', () => {
 
 test('distance label distinguishes unknown from no radius', () => {
   assert.equal(distanceLabel({ distance_basis: 'jurisdiction_center', distance_km: 2.4 }), '약 2.4km(관할 기준)')
+  assert.equal(distanceLabel({ distance_basis: 'rescue_area', distance_km: 0.3 }), '약 0.3km(구조 장소 기준)')
   assert.equal(distanceLabel({ distance_basis: 'unknown', distance_km: null }), '거리 미확인')
   assert.equal(distanceLabel({}), '')
   assert.equal(kmLabel(null), '조회 지역 전체')

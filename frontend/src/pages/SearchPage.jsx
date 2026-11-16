@@ -153,12 +153,17 @@ export default function SearchPage() {
 
   // 실종 지역 버튼에 보여 줄 요약(위치 · 실종 날짜 · 반경). 반경은 검색과 같은 기준표로 계산한다.
   const preview = previewRadius(location, form.lost_date, today())
+  // 넓히기를 눌러 검색한 뒤에는 실제로 찾은 반경(서버 값)을 요약에 보여 준다(날짜 기준 기본 반경과 다를 수 있음).
+  const searched = run?.radius || run?.scope?.radius
+  const shownKm = searched && searched.auto === false && searched.lost_place === location?.address
+    ? searched.radius_km
+    : preview?.radius_km
   const locationSummary = !location
     ? '실종 지역과 날짜 선택'
     : [
         location.region === '전체' ? '전체 지역' : location.address || location.region,
         form.lost_date && `${form.lost_date.slice(5).replace('-', '.')} 실종`,
-        preview && (preview.radius_km != null ? kmLabel(preview.radius_km) : '조회 지역 전체'),
+        preview && (shownKm != null ? kmLabel(shownKm) : '조회 지역 전체'),
       ].filter(Boolean).join(' · ')
 
   async function submit(criteria, threadId) {

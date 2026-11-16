@@ -97,14 +97,15 @@ export function radiusText(radius) {
   parts.push(`${radius.inside ?? 0}건`)
   if (radius.unknown) parts.push(`거리 미확인 ${radius.unknown}건 포함`)
   if (radius.excluded) parts.push(`반경 밖 ${radius.excluded}건 제외`)
-  return `${parts.join(' · ')} (관할 구청 기준 직선거리, 도로 거리 아님)`
+  return `${parts.join(' · ')} (구조된 읍·면·동 기준 직선거리, 모르면 관할 시·군·구 기준, 도로 거리 아님)`
 }
 
 /** 공고 카드에 붙일 거리 문구. */
 export function distanceLabel(candidate) {
   if (!candidate || candidate.distance_basis == null) return ''
   if (candidate.distance_km == null) return '거리 미확인'
-  return `약 ${candidate.distance_km}km(관할 기준)`
+  // rescue_area: 구조 장소 읍면동 중심, jurisdiction_center: 관할 시군구 중심(구조 장소를 못 읽었을 때)
+  return `약 ${candidate.distance_km}km(${candidate.distance_basis === 'rescue_area' ? '구조 장소 기준' : '관할 기준'})`
 }
 
 /** 반경 넓히기 질문(field=radius)에서 다음 단계와 버튼 문구를 꺼낸다. */
