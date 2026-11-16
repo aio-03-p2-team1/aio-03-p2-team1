@@ -35,7 +35,7 @@ class KindRepository:
                         db.row_factory = sqlite3.Row
                         return [dict(r) for r in db.execute(
                             'SELECT k.kind_code,k.name,k.species,a.alias FROM kinds k LEFT JOIN kind_aliases a '
-                            "ON a.kind_code=k.kind_code WHERE k.active=1 AND k.species=? AND k.search_name LIKE ? ESCAPE '!' ORDER BY k.name", (species, pattern))]
+                            "ON a.kind_code=k.kind_code WHERE k.active=1 AND k.species=? AND k.search_name LIKE ? ESCAPE '!' ORDER BY k.name ASC, k.kind_code ASC", (species, pattern))]
                 return await asyncio.to_thread(read)
             key = self.settings.supabase_service_role_key.get_secret_value()
             headers = {'apikey': key, 'Authorization': f'Bearer {key}', 'Accept-Profile': self.settings.supabase_schema}
@@ -46,7 +46,7 @@ class KindRepository:
                     response = await client.get(self.settings.supabase_url.rstrip('/') + '/rest/v1/kinds', params={
                         'select': 'kind_code,name,species,kind_aliases(alias)', 'active': 'eq.true',
                         'species': f'eq.{species}', 'search_name': 'like.%' + query.replace(chr(92), chr(92) * 2).replace('%', chr(92) + '%').replace('_', chr(92) + '_') + '%',
-                        'order': 'kind_code', 'offset': offset, 'limit': 1000})
+                        'order': 'name.asc,kind_code.asc', 'offset': offset, 'limit': 1000})
                     response.raise_for_status()
                     page = response.json()
                     for row in page:
@@ -78,9 +78,11 @@ class KindRepository:
 
     @staticmethod
     def _public_rows(rows):
-        return list({r['kind_code']: {'kind_code': r['kind_code'], 'name': r['name'],
-                                    'species': 'etc' if r['species'] == 'other' else r['species']}
-                     for r in rows}.values())
+        unique = {r['kind_code']: {'kind_code': r['kind_code'], 'name': r['name'],
+                                  'species': 'etc' if r['species'] == 'other' else r['species']}
+                  for r in rows}
+        # Also order snapshots cached before the database ordering changed.
+        return sorted(unique.values(), key=lambda row: (row['name'], row['kind_code']))
 
     async def lookup_db(self, species: str, name: str = '') -> list[dict]:
         """AI tool: execute a scoped LIKE query against the source database."""

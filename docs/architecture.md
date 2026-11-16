@@ -314,7 +314,7 @@ flowchart LR
 
 ## 13. 품종 검색 (breed-v4)
 
-공개 `GET /kinds?species=dog|cat|etc&name=선택`은 활성 품종 목록을 Redis에 1일 캐시한다. AI 조회 도구는 SQLite/Supabase에서 축종과 LIKE 부분 이름 조건으로 조회한다. 7일 주기 upsert 작업은 성공 후 Redis 목록 캐시를 무효화한다.
+공개 `GET /kinds?species=dog|cat|etc&name=선택`은 활성 품종 목록을 Redis에 1일 캐시한다. 목록은 품종명 오름차순(한글 가나다순), 같은 이름은 코드 오름차순이다. SQLite는 `ORDER BY k.name ASC, k.kind_code ASC`, Supabase는 `order=name.asc,kind_code.asc`로 조회한다. 기존 Redis 캐시도 응답 구성 시 같은 순서로 정렬한다. AI 조회 도구는 SQLite/Supabase에서 축종과 LIKE 부분 이름 조건으로 조회한다. 7일 주기 upsert 작업은 성공 후 Redis 목록 캐시를 무효화한다.
 
 `POST /searches` 요청의 `criteria.breed_code`는 품종 코드 문자열이다. 프론트는 `/kinds`의 코드·이름을 함께 받고 option의 value에는 코드, 표시에는 이름을 쓴다. 사진 자동 검색도 코드만 전송한다.
 
