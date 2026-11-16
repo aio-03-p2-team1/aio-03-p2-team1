@@ -16,6 +16,7 @@ import { useToast } from '../components/Toast.jsx'
 import { photoAnalysisError, photoErrorMessage, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
+import { takePostSearch } from '../lib/postSearch.js'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const initialForm = () => ({ breed_code: '', species: '', lost_date: today(), description: '' })
@@ -69,6 +70,24 @@ export default function SearchPage() {
   useEffect(() => {
     document.title = '다시 만나 · 우리 아이 찾기'
     loadHistory()
+  }, [])
+
+  // 실종 정보 게시판의 [이 정보로 구조 공고 찾기]로 들어오면 그 글의 정보로 입력을 채운다.
+  // 이전 검색 결과·답한 값·사진은 비우고, 검색은 사용자가 확인한 뒤 직접 누른다.
+  useEffect(() => {
+    const prefill = takePostSearch()
+    if (!prefill) return
+    setForm(prefill.form)
+    setLocation(prefill.location)
+    setRun(null)
+    setPageCache({})
+    setAnswers({})
+    setDeclined([])
+    setPhoto('')
+    setPhotoFeatureText('')
+    setPhotoSpecies('')
+    setParams({}, { replace: true })
+    toast(`'${prefill.source?.title || '게시글'}' 정보로 채웠어요. 확인하고 [후보 찾아보기]를 눌러 주세요.`)
   }, [])
 
   useEffect(() => {
