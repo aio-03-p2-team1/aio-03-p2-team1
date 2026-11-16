@@ -11,7 +11,9 @@
   경주시처럼 넓은 시·군은 시청 좌표와 실제 구조 장소가 20km 가까이 떨어질 수 있어서다.
   둘 다 못 구한 공고는 '거리 미확인'으로 남기고 제외하지 않는다(누락 ≠ 불일치).
 - 반경 밖으로 확인된 공고만 제외한다. 제외된 공고는 임베딩하지 않는다.
-- 범위 확대는 사용자 동의가 필요하다. 이 모듈은 단계만 계산하고, 넓히기는 그래프의 ask 경로가 맡는다.
+- 반경 안에 공고가 하나도 없으면 3km → 10km → 20km 순서로 자동으로 넓힌다(AUTO_WIDEN_MAX_KM 까지).
+  이미 구한 좌표로 거리만 다시 비교하므로 카카오를 추가로 호출하지 않는다. 넓힌 사실은 radius.auto_widened·
+  widen_trail 로 화면에 알린다. 20km 에서도 없으면 '조회 지역 전체'로는 넓히지 않고 그래프의 ask 경로가 사용자에게 묻는다.
 """
 
 from __future__ import annotations
@@ -25,11 +27,13 @@ from typing import Any
 from backend.timeutil import kst_today
 from backend.tools.kakao import KakaoError
 
-RADIUS_VERSION = "radius-v1"
+RADIUS_VERSION = "radius-v2"  # v2: 0건이면 20km 까지 자동 확대
 # 단계별 반경(km). 마지막 단계(None)는 반경 없이 조회 지역(시·도) 전체.
 RADIUS_STEPS_KM: tuple[float | None, ...] = (3.0, 10.0, 20.0, None)
 # 실종 후 지난 날짜 → 추천 단계 (이하 기준)
 STEP_BY_DAYS = ((3, 0), (7, 1), (14, 2))
+# 0건일 때 자동으로 넓히는 최대 반경(km). 이보다 넓은 단계(조회 지역 전체)는 사용자 동의를 받는다.
+AUTO_WIDEN_MAX_KM = 20.0
 MAX_GEOCODE_REQUESTS = 80  # 한 번의 검색에서 카카오에 새로 묻는 주소 수 상한(캐시 적중은 제외). 시군구 먼저, 남는 몫으로 읍면동
 
 # 구조 장소 글에서 읍·면·동 이름만 뽑는다. 한글로 시작하고 앞부분이 두 글자 이상인 낱말이 읍/면/동으로 끝나야 한다.
@@ -172,27 +176,56 @@ async def apply_radius(kakao, criteria: dict[str, Any], items: list[dict[str, An
     area_points = await asyncio.gather(*(_coord(kakao, area, counter) for area in areas))
     area_point = dict(zip(areas, area_points))
 
-    kept: list[dict[str, Any]] = []
-    inside = unknown = outside = by_area = 0
+    # 공고별 거리를 한 번만 계산한다(자동 확대 때 다시 계산·조회하지 않음).
+    measured: list[tuple[dict[str, Any], float | None, str]] = []
     for item in items:
         area = rescue_area(item)
         point, basis = (area_point.get(area), "rescue_area") if area else (None, None)
         if point is None:
             point, basis = org_point.get((item.get("care") or {}).get("org")), "jurisdiction_center"
         if point is None:
-            unknown += 1
-            kept.append({**item, "distance_km": None, "distance_basis": "unknown"})
+            measured.append((item, None, "unknown"))
             continue
-        by_area += basis == "rescue_area"
-        km = round(haversine_km(center, point), 1)
-        if km <= radius_km:
-            inside += 1
-            kept.append({**item, "distance_km": km, "distance_basis": basis})
-        else:
-            outside += 1
+        measured.append((item, round(haversine_km(center, point), 1), basis))
+
+    def keep(limit_km: float) -> tuple[list[dict[str, Any]], int, int, int]:
+        kept_items: list[dict[str, Any]] = []
+        n_in = n_unknown = n_out = 0
+        for item, km, basis in measured:
+            if km is None:
+                n_unknown += 1
+                kept_items.append({**item, "distance_km": None, "distance_basis": "unknown"})
+            elif km <= limit_km:
+                n_in += 1
+                kept_items.append({**item, "distance_km": km, "distance_basis": basis})
+            else:
+                n_out += 1
+        return kept_items, n_in, n_unknown, n_out
+
+    requested_km = radius_km
+    trail = [radius_km]
+    kept, inside, unknown, outside = keep(radius_km)
+    # 반경 안(거리 미확인 포함)에 하나도 없으면 다음 단계로 자동 확대한다. 20km 를 넘는 단계로는 넓히지 않는다.
+    while not kept and step + 1 < len(RADIUS_STEPS_KM):
+        wider = RADIUS_STEPS_KM[step + 1]
+        if wider is None or wider > AUTO_WIDEN_MAX_KM:
+            break
+        step, radius_km = step + 1, wider
+        trail.append(radius_km)
+        kept, inside, unknown, outside = keep(radius_km)
+    widened = len(trail) > 1
+    by_area = sum(basis == "rescue_area" for _, _, basis in measured)
     summary = {
         **base,
         "applied": True,
+        "step": step,
+        "radius_km": radius_km,
+        "next_radius_km": RADIUS_STEPS_KM[step + 1] if step + 1 < len(RADIUS_STEPS_KM) else None,
+        # 자동으로 넓혔으면 경과일 기준 다음 단계 안내는 의미가 없어 지운다.
+        "next_widen_day": None if widened else base["next_widen_day"],
+        "requested_km": requested_km,  # 처음 적용한 반경(경과일·사용자 선택 기준)
+        "auto_widened": widened,
+        "widen_trail": trail,  # 실제로 비교한 반경 순서. 예: [3.0, 10.0, 20.0]
         "center": {"lat": center[0], "lng": center[1]},
         "center_source": center_source,  # user_pin: 사용자가 찍은 좌표, address: 주소를 좌표로 변환
         "inside": inside,
