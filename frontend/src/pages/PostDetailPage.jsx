@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
 import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
+import PostComments from '../components/PostComments.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { PostPhoto } from './PostBoardPage.jsx'
 
@@ -144,6 +145,7 @@ export default function PostDetailPage() {
           </p>
         </section>
       </div>
+      <PostComments key={post.id} targetId={post.id} lostReport={lost} />
     </main>
   )
 }

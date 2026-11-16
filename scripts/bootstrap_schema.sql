@@ -6,7 +6,7 @@ create schema if not exists "aio-03-p2-team1-demo";
 
 create table if not exists "aio-03-p2-team1-demo".documents (
     owner      text        not null,
-    kind       text        not null check (kind in ('identity','thread','memory','saved','run','subscription','notification','post')),
+    kind       text        not null check (kind in ('identity','thread','memory','saved','run','subscription','notification','post','comment')),
     id         text        not null,
     data       jsonb       not null,
     updated_at timestamptz not null default now(),
@@ -64,3 +64,9 @@ grant usage, select on all sequences in schema "aio-03-p2-team1-demo" to service
 -- alter table "aio-03-p2-team1-demo".documents drop constraint if exists documents_kind_check;
 -- alter table "aio-03-p2-team1-demo".documents add constraint documents_kind_check
 --     check (kind in ('identity','thread','memory','saved','run','subscription','notification','post'));
+
+-- 2026-11-16 실종 정보 게시판 댓글(kind=comment) 추가. owner 는 'comment:<게시글 ID>'.
+-- 이미 documents 테이블이 있는 DB 는 아래로 check 제약을 바꾼다(제약 이름은 기본 이름 기준. 다르면 \d 로 확인).
+-- alter table "aio-03-p2-team1-demo".documents drop constraint if exists documents_kind_check;
+-- alter table "aio-03-p2-team1-demo".documents add constraint documents_kind_check
+--     check (kind in ('identity','thread','memory','saved','run','subscription','notification','post','comment'));
