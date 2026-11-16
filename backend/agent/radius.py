@@ -1,8 +1,10 @@
 """실종 위치 기준 검색 반경 (실종 후 지난 날짜에 따라 단계적으로 넓힌다).
 
 - 반경은 직선거리(km)다. 도로 거리·이동 시간이 아니다.
-- 실종 위치: 사용자가 지도에서 고른 동 단위 주소(criteria.lost_place)를 서버가 카카오로 좌표 변환한다.
-  클라이언트가 보낸 좌표는 쓰지 않는다.
+- 실종 위치(반경 중심): 사용자가 지도에서 찍은 좌표(criteria.lost_lat/lost_lng)를 쓴다.
+  좌표는 criteria.normalize 에서 숫자·한국 범위를 검사한 값만 들어온다. 좌표가 없으면(이전 화면, API 직접 호출)
+  실종 위치 주소(criteria.lost_place)를 서버가 카카오로 좌표 변환한다.
+  좌표를 조작해도 그 사용자 자신의 검색 결과만 바뀌므로 다른 사용자·데이터에 영향이 없다.
 - 공고 위치: 공고의 관할 시군구(care.org, 예: '서울특별시 강서구') 중심 좌표로 근사한다.
   좌표를 구하지 못한 공고는 '거리 미확인'으로 남기고 제외하지 않는다(누락 ≠ 불일치).
 - 반경 밖으로 확인된 공고만 제외한다. 제외된 공고는 임베딩하지 않는다.
@@ -42,6 +44,24 @@ def recommended_step(lost_date: str | None, today: date | None = None) -> int:
         if days <= limit:
             return step
     return len(RADIUS_STEPS_KM) - 1
+
+
+def days_since(lost_date: str | None, today: date | None = None) -> int | None:
+    """실종 후 지난 날(한국 날짜 기준). 날짜가 없거나 읽을 수 없으면 None."""
+    if not lost_date:
+        return None
+    try:
+        return ((today or kst_today()) - date.fromisoformat(lost_date)).days
+    except ValueError:
+        return None
+
+
+def next_widen_day(step: int) -> int | None:
+    """자동 단계에서 다음 단계로 넓어지는 경과일(예: 3km 단계 → 4일째부터 10km). 마지막 단계면 None."""
+    for limit, s in STEP_BY_DAYS:
+        if s == step:
+            return limit + 1
+    return None
 
 
 def effective_step(criteria: dict[str, Any], today: date | None = None) -> int:
@@ -86,7 +106,12 @@ async def apply_radius(kakao, criteria: dict[str, Any], items: list[dict[str, An
     """반환: {"items": 반경 안 + 거리 미확인 공고, "radius": 화면·이력용 요약, "call": 도구 호출 요약 또는 None}."""
     step = effective_step(criteria, today)
     radius_km = RADIUS_STEPS_KM[step]
+    auto = not isinstance(criteria.get("radius_step"), int)  # False: 사용자가 넓히기를 골랐음
     base = {
+        # 화면 안내("실종 후 N일 → M km")용. 화면에서 따로 계산하지 않고 이 값을 그대로 보여 준다.
+        "days_since_lost": days_since(criteria.get("lost_date") or criteria.get("start_date"), today),
+        "auto": auto,
+        "next_widen_day": next_widen_day(step) if auto else None,
         "version": RADIUS_VERSION,
         "step": step,
         "max_step": len(RADIUS_STEPS_KM) - 1,
@@ -106,7 +131,10 @@ async def apply_radius(kakao, criteria: dict[str, Any], items: list[dict[str, An
         return {"items": items, "radius": {**base, "applied": False, "reason": "not_configured"}, "call": None}
 
     counter = {"requests": 0, "cached": 0, "errors": 0, "not_found": 0, "skipped": 0}
-    center = await _coord(kakao, criteria["lost_place"], counter)
+    if isinstance(criteria.get("lost_lat"), float) and isinstance(criteria.get("lost_lng"), float):
+        center, center_source = (criteria["lost_lat"], criteria["lost_lng"]), "user_pin"  # 지도에서 찍은 점
+    else:
+        center, center_source = await _coord(kakao, criteria["lost_place"], counter), "address"
     if center is None:
         call = {"requests": counter["requests"], "cached": counter["cached"], "outcome": "center_unavailable"}
         return {"items": items, "radius": {**base, "applied": False, "reason": "center_unavailable"}, "call": call}
@@ -133,6 +161,7 @@ async def apply_radius(kakao, criteria: dict[str, Any], items: list[dict[str, An
         **base,
         "applied": True,
         "center": {"lat": center[0], "lng": center[1]},
+        "center_source": center_source,  # user_pin: 사용자가 찍은 좌표, address: 주소를 좌표로 변환
         "inside": inside,
         "unknown": unknown,
         "excluded": outside,

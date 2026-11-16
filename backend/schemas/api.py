@@ -25,6 +25,9 @@ class SearchCriteria(BaseModel):
     age: str | None = Field(default=None, max_length=20)
     size: str | None = Field(default=None, max_length=20)
     lost_place: str | None = Field(default=None, max_length=100)
+    # 사용자가 지도에서 찍은 실종 위치 좌표(반경 중심). 한국 범위를 벗어나면 422. 없으면 서버가 lost_place 주소로 좌표를 구한다.
+    lost_lat: float | None = Field(default=None, ge=33.0, le=39.0)
+    lost_lng: float | None = Field(default=None, ge=124.0, le=132.0)
     radius_step: int | None = Field(default=None, ge=0, le=3)  # 반경 넓히기에 동의한 단계(검색 요청에서만 사용)
     description: str | None = Field(default=None, max_length=1000)
 
