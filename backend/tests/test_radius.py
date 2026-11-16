@@ -13,9 +13,11 @@ from backend.agent import radius as radius_mod
 from backend.agent.radius import haversine_km, recommended_step
 from backend.agent.runner import run_search
 from backend.storage.sqlite import SqliteStore
+from backend.tools.animal_api import Region
+from backend.timeutil import kst_today
 from backend.tools.kakao import KakaoGeocoder
 
-from .conftest import FakeAnimal, FakeEmbedder, api_item, make_settings
+from .conftest import FakeAnimal, FakeEmbedder, api_item, make_settings, signup
 
 OWNER = "owner-radius"
 LOST_PLACE = "서울특별시 강서구 화곡동"
@@ -24,6 +26,9 @@ COORDS = {
     "서울특별시 강서구": (37.551, 126.849),  # 약 1.3km
     "서울특별시 양천구": (37.517, 126.866),  # 약 3.5km
     "서울특별시 노원구": (37.654, 127.056),  # 약 23km
+    # 넓은 시: 시청 좌표와 읍 좌표가 약 18km 떨어진 실제 사례(경주시 외동읍, 2026-11-16 로컬 확인)
+    "경상북도 경주시": (35.856, 129.225),
+    "경상북도 경주시 외동읍": (35.717, 129.328),
 }
 
 
@@ -76,7 +81,7 @@ def items(*orgs):
 
 
 def lost(days):
-    return (date.today() - timedelta(days=days)).isoformat()
+    return (kst_today() - timedelta(days=days)).isoformat()
 
 
 def search(d, criteria, **extra):
@@ -191,3 +196,88 @@ def test_geocode_default_still_rejects_ambiguous_address():
     assert result == {"status": "unavailable", "reason": "address_ambiguous"}
     first = asyncio.run(kakao().geocode(LOST_PLACE, allow_ambiguous=True))
     assert first["status"] == "ok" and first["ambiguous"] == 3
+
+
+# ── 지도에서 찍은 좌표를 반경 중심으로 ─────────────────────────────
+
+PIN = (37.552, 126.851)  # 강서구 중심(시험값)에서 약 0.2km
+
+
+def test_user_pin_is_center_without_geocoding_lost_place():
+    calls = []
+    animal = FakeAnimal(pages=[items("서울특별시 강서구", "서울특별시 노원구")])
+    run = search(deps(animal, kakao(calls)), base(days=2, lost_lat=PIN[0], lost_lng=PIN[1]))
+    assert run["radius"]["applied"] is True and run["radius"]["center_source"] == "user_pin"
+    assert run["radius"]["center"] == {"lat": PIN[0], "lng": PIN[1]}
+    assert LOST_PLACE not in calls  # 실종 위치 주소는 다시 좌표화하지 않는다
+    assert run["radius"]["inside"] == 1 and run["radius"]["excluded"] == 1
+
+
+@pytest.mark.parametrize("lat, lng", [(10.0, 126.8), (37.5, 200.0), ("abc", 126.8)])
+def test_bad_pin_falls_back_to_address(lat, lng):
+    from backend.agent import criteria as crit
+
+    criteria, _, errors = crit.normalize({**base(days=2), "lost_lat": lat, "lost_lng": lng})
+    assert errors == [] and "lost_lat" not in criteria  # 범위 밖·숫자 아님 → 좌표 버리고 주소로
+    animal = FakeAnimal(pages=[items("서울특별시 강서구")])
+    calls = []
+    run = asyncio.run(run_search(deps(animal, kakao(calls)), OWNER, {"criteria": {**base(days=2)}}))
+    assert run["radius"]["center_source"] == "address" and LOST_PLACE in calls
+
+
+def test_new_lost_place_does_not_reuse_previous_pin():
+    from backend.agent import criteria as crit
+
+    session = {"lost_place": "서울특별시 마포구 망원동", "lost_lat": "37.55", "lost_lng": "126.90"}
+    merged, _ = crit.merge_conditions({"lost_place": LOST_PLACE}, session, None)
+    assert "lost_lat" not in merged and merged["lost_place"] == LOST_PLACE
+    merged, _ = crit.merge_conditions({"radius_step": "1"}, session, None)  # 넓히기만 보내면 이전 좌표 유지
+    assert merged["lost_lat"] == "37.55"
+
+
+def test_api_rejects_pin_outside_korea(client):
+    signup(client)
+    body = {"criteria": {**base(days=2), "lost_lat": 51.5, "lost_lng": -0.12}}
+    assert client.post("/api/v1/searches", json=body).status_code == 422
+
+
+def test_summary_has_days_and_next_widen_day_for_guide_text():
+    animal = FakeAnimal(pages=[items("서울특별시 강서구")])
+    run = search(deps(animal), base(days=2, lost_lat=PIN[0], lost_lng=PIN[1]))
+    r = run["radius"]
+    assert r["days_since_lost"] == 2 and r["auto"] is True and r["next_widen_day"] == 4  # 4일째부터 10km
+    widened = search(deps(FakeAnimal(pages=[items("서울특별시 강서구")])), base(days=2, radius_step=1))
+    assert widened["radius"]["auto"] is False and widened["radius"]["next_widen_day"] is None
+
+
+
+# ── 구조 장소(읍면동) 기준 거리 ─────────────────────────────────
+
+@pytest.mark.parametrize("place, token", [
+    ("외동읍 석계평리길 부근", "외동읍"),
+    ("경주시 외동읍 입실리", "외동읍"),
+    ("이촌동 이촌아파트 도로변 상가", "이촌동"),
+    ("고덕래미안힐스테이트 306동 놀이터 앞", None),  # 아파트 동 번호는 읍면동이 아님
+    ("홍은동주민센터옆 주차장", None),  # 붙여 쓴 말은 뽑지 않음(관할 기준으로 대신)
+    ("서울 구로구 고척로21다길 13 인근", None),
+    ("차량으로 이동 중 발견", None),  # 두 글자 일반 낱말은 읍면동으로 보지 않음
+    (None, None),
+])
+def test_area_token(place, token):
+    assert radius_mod.area_token(place) == token
+
+
+def test_rescue_area_is_used_before_jurisdiction_center():
+    # 실종: 경주시 외동읍. 같은 읍에서 구조됐지만 관할(경주시청)까지는 약 18km 인 공고가 반경 안에 들어와야 한다.
+    pin = (35.7174, 129.3276)
+    same_town = api_item(1, orgNm="경상북도 경주시", happenPlace="외동읍 석계평리길 부근")
+    no_town = api_item(2, orgNm="경상북도 경주시", happenPlace="시내 공원")
+    # 가짜 API 지역 목록 기본값은 서울·경기뿐이라 경상북도를 넣어 준다(없으면 지역 매핑 실패로 질문 상태가 됨).
+    animal = FakeAnimal(pages=[[same_town, no_town]], regions=[Region("6470000", "경상북도")])
+    criteria = {"species": "dog", "region": "경상북도", "lost_date": lost(2), "lost_place": "경상북도 경주시 외동읍",
+                "lost_lat": pin[0], "lost_lng": pin[1]}
+    run = search(deps(animal), criteria)
+    r = run["radius"]
+    assert r["applied"] is True and r["inside"] == 1 and r["excluded"] == 1 and r["by_rescue_area"] == 1
+    near = run["candidates"][0]
+    assert near["distance_basis"] == "rescue_area" and near["distance_km"] < 1.0

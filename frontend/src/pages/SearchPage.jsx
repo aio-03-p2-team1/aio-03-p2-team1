@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
-import { distanceLabel, radiusText, widenRadiusAction } from '../lib/radius.js'
-import RadiusMap from '../components/RadiusMap.jsx'
+import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import Pagination from '../components/Pagination.jsx'
 import { useSearchScroll, useSearchViewState } from '../lib/searchView.jsx'
@@ -143,6 +142,32 @@ export default function SearchPage() {
     }
   }
 
+  // 입력 카드에 보여 줄 추가 질문. 범위 넓히기(radius, 결과가 있는 상태의 region)는 권하는 질문, 나머지는 답해야 하는 질문.
+  const pending = run?.status === 'awaiting_input' ? run.questions || [] : []
+  const questionNotes = pending.map((q) => ({
+    ...q,
+    blocking: !(q.field === 'radius' || (q.field === 'region' && run?.scope)),
+  }))
+  const widenStep = run?.status === 'awaiting_input' ? widenRadiusAction(run.questions, run.radius || run.scope?.radius) : null
+  const canWidenRegion = pending.some((q) => q.field === 'region' && run?.scope)
+
+  // 실종 지역 버튼에 보여 줄 요약(위치 · 실종 날짜 · 반경). 반경은 검색과 같은 기준표로 계산한다.
+  const preview = previewRadius(location, form.lost_date, today())
+  // 넓히기를 눌러 검색한 뒤에는 실제로 찾은 반경(서버 값)을 요약에 보여 준다.
+  // 단, 그 검색과 위치·실종 날짜가 같을 때만. 위치나 날짜를 바꿨으면 새 날짜 기준 반경을 보여 준다
+  // (서버도 위치·날짜가 바뀌면 넓히기 단계를 잇지 않는다).
+  const searched = run?.radius || run?.scope?.radius
+  const sameSearch = searched?.auto === false && searched.lost_place === location?.address
+    && run?.criteria?.lost_date === form.lost_date
+  const shownKm = sameSearch ? searched.radius_km : preview?.radius_km
+  const locationSummary = !location
+    ? '실종 지역과 날짜 선택'
+    : [
+        location.region === '전체' ? '전체 지역' : location.address || location.region,
+        form.lost_date && `${form.lost_date.slice(5).replace('-', '.')} 실종`,
+        preview && (shownKm != null ? kmLabel(shownKm) : '조회 지역 전체'),
+      ].filter(Boolean).join(' · ')
+
   async function submit(criteria, threadId) {
     setBusy(true)
     setError(null)
@@ -154,7 +179,8 @@ export default function SearchPage() {
       setPageCache((previous) => rememberPage(previous, `${result.run_id}:1`, result))
       setParams({ run: result.run_id, page: '1' })
       loadHistory()
-      if (result.status === 'awaiting_input') toast('추가 정보가 필요해요.')
+      // 무엇이 필요한지 알 수 있게 첫 질문을 그대로 보여 준다(예: 지역을 넓혀 볼까요?)
+      if (result.status === 'awaiting_input') toast(result.questions?.[0]?.message || '추가 정보가 필요해요.')
       document.getElementById('results-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (err) {
       setError(err)
@@ -169,6 +195,11 @@ export default function SearchPage() {
     for (const [k, v] of Object.entries(form)) if (v.trim()) criteria[k] = v.trim()
     if (location?.region) criteria.region = location.region
     if (location?.address) criteria.lost_place = location.address
+    // 지도에서 찍은 점을 반경 중심으로 보낸다(서버가 한국 범위 검사). 미리 보기와 실제 검색 범위가 같아진다.
+    if (location?.address && Number.isFinite(location?.lat) && Number.isFinite(location?.lng)) {
+      criteria.lost_lat = Number(location.lat.toFixed(6))
+      criteria.lost_lng = Number(location.lng.toFixed(6))
+    }
     submit(criteria, run?.status === 'awaiting_input' ? run.thread_id : undefined)
   }
 
@@ -215,24 +246,40 @@ export default function SearchPage() {
               <span className="field-label">종류 <em className="req">필수</em></span>
               <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => ({ ...f, species }))} />
             </div>
+            {/* 추가 질문을 입력 카드 안에도 보여 준다. 답해야 하는 질문(빈 칸·입력 오류)은 빨간색,
+                범위를 넓힐지 묻는 질문은 금색으로 구분하고, 넓히기 버튼을 바로 옆에 둔다. */}
+            {questionNotes.length > 0 && (
+              <div className="form-questions" role="status" aria-live="polite" id="form-questions">
+                {questionNotes.map((q) => (
+                  <p key={q.field + q.message} className={q.blocking ? 'form-question blocking' : 'form-question'}>
+                    <strong>{q.blocking ? '확인 필요' : '범위 넓히기'}</strong> {q.message}
+                  </p>
+                ))}
+                {(widenStep || canWidenRegion) && (
+                  <div className="form-question-actions">
+                    {widenStep && (
+                      <button type="button" className="secondary-button" disabled={busy} onClick={() => widenRadius(widenStep.step)}>
+                        {widenStep.label}
+                      </button>
+                    )}
+                    {canWidenRegion && (
+                      <button type="button" className="secondary-button" disabled={busy} onClick={widenRegion}>전체 지역으로 넓혀 찾기</button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <label className="search-description">
               특징과 상황
-              <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
+              <textarea rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털 푸들, 빨간 목줄" />
             </label>
-            <div className="form-pair">
-              <div className="field-block">
-                <span className="field-label">실종 지역 <em className="req">필수</em></span>
-                <button type="button" className={`region-trigger${location ? ' filled' : ''}`} onClick={() => setRegionOpen(true)} aria-haspopup="dialog">
-                  <span aria-hidden="true">⌖</span>
-                  {location
-                    ? location.region === '전체' ? '전체 지역' : location.address || location.region
-                    : '실종 지역 선택'}
-                </button>
-              </div>
-              <label>
-                <span>실종 날짜 <em className="req">필수</em></span>
-                <input type="date" value={form.lost_date} max={today()} onChange={set('lost_date')} />
-              </label>
+            {/* 실종 날짜는 실종 지역 선택 창 안에서 함께 고른다(위치·날짜·검색 범위를 한 화면에서). */}
+            <div className="field-block">
+              <span className="field-label">실종 지역 · 날짜 <em className="req">필수</em></span>
+              <button type="button" className={`region-trigger${location ? ' filled' : ''}`} onClick={() => setRegionOpen(true)} aria-haspopup="dialog">
+                <span aria-hidden="true">⌖</span>
+                {locationSummary}
+              </button>
             </div>
           </div>
         </div>
@@ -249,8 +296,11 @@ export default function SearchPage() {
         regions={regions.list}
         initial={location}
         onClose={() => setRegionOpen(false)}
-        onSelect={(value) => {
+        withRadius
+        lostDate={form.lost_date}
+        onSelect={({ lost_date: lostDate, ...value }) => {
           setLocation(value)
+          if (lostDate) setForm((f) => ({ ...f, lost_date: lostDate }))
           setRegionOpen(false)
         }}
       />
@@ -327,7 +377,6 @@ function Results({ run, busy, error, onWiden, onWidenRadius }) {
     const widenRadiusStep = widenRadiusAction(run.questions, radius)
     return (
       <>
-        <RadiusMap radius={radius} />
         <div className="panel question-panel" role="status">
           <strong>조금만 더 알려 주세요</strong>
           <ul>{run.questions?.map((q) => <li key={q.field + q.message}>{q.message}</li>)}</ul>
@@ -355,7 +404,7 @@ function Results({ run, busy, error, onWiden, onWidenRadius }) {
       {run.status === 'partial' && !run.error && (
         <p className="state-box">일부 결과만 확인했어요. 조건을 바꿔 다시 검색해 주세요.</p>
       )}
-      <RadiusMap radius={radius} />
+      {/* 검색 범위 지도는 실종 지역 선택 창 하나로 통일하고, 결과 위에는 한 줄 요약만 둔다. */}
       {radius && <p className="radius-summary">{radiusText(radius)}</p>}
       {run.status !== 'failed' && candidates.length === 0 && (
         <p className="empty-results">

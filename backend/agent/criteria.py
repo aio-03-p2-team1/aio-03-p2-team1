@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import date
+
+from backend.timeutil import kst_today
 from typing import Any
 
 SPECIES_ALIASES = {
@@ -9,6 +11,9 @@ SPECIES_ALIASES = {
     "etc": "etc", "기타": "etc",
     "all": "all", "전체": "all",
 }
+# 지도에서 찍은 실종 위치 좌표의 허용 범위(대한민국 대략 범위). 벗어나면 좌표를 쓰지 않는다.
+LAT_RANGE = (33.0, 39.0)
+LNG_RANGE = (124.0, 132.0)
 REGION_ALL = {"all", "전체", "전국", "전체 지역"}
 OPTIONAL_FIELDS = ("pet_name", "breed", "color", "sex", "age", "size", "description", "lost_place", "lost_date")
 
@@ -31,8 +36,34 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
     """
     merged: dict[str, Any] = {}
     origin: dict[str, str] = {}
-    keys = {"species", "region", "start_date", "end_date", "radius_step", *OPTIONAL_FIELDS}
+    keys = {"species", "region", "start_date", "end_date", "radius_step", "lost_lat", "lost_lng", *OPTIONAL_FIELDS}
+    # 좌표는 실종 위치와 한 묶음이다. 이번 요청에서 실종 위치를 새로 보냈으면 좌표도 이번 요청 값만 쓴다
+    # (이전 세션의 다른 위치 좌표가 따라오지 않게).
+    place_sent = bool(_clean(current.get("lost_place")))
+    # 기간도 실종 날짜와 한 묶음이다. 이번 요청에 실종 날짜만 왔으면 이전 세션의 시작·종료일을 잇지 않는다
+    # (세션의 start_date 가 새 실종 날짜보다 우선해 기간이 엉뚱하게 좁아지던 문제).
+    date_sent = bool(_clean(current.get("lost_date")))
     for key in keys:
+        # 넓히기 단계도 위치·날짜에 묶인다. 위치나 날짜를 새로 보냈으면 이전 넓히기 단계를 잇지 않고
+        # 새 날짜 기준 반경부터 다시 시작한다(이번 요청에 radius_step 이 있으면 그 값).
+        if key == "radius_step" and (place_sent or date_sent):
+            value = _clean(current.get(key))
+            if value:
+                merged[key] = value
+                origin[key] = "request"
+            continue
+        if key in ("start_date", "end_date") and date_sent:
+            value = _clean(current.get(key))
+            if value:
+                merged[key] = value
+                origin[key] = "request"
+            continue
+        if key in ("lost_lat", "lost_lng") and place_sent:
+            value = _clean(current.get(key))
+            if value:
+                merged[key] = value
+                origin[key] = "request"
+            continue
         for source_name, source in (("request", current), ("session", session or {})):
             value = _clean(source.get(key))
             if value:
@@ -48,7 +79,7 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
 
 def normalize(raw: dict[str, Any], today: date | None = None) -> tuple[dict[str, Any], list[str], list[dict[str, str]]]:
 
-    today = today or date.today()
+    today = today or kst_today()  # 서버 시간대(UTC)가 아니라 한국 날짜 기준
     criteria: dict[str, Any] = {}
     missing: list[str] = []
     errors: list[dict[str, str]] = []
@@ -94,11 +125,26 @@ def normalize(raw: dict[str, Any], today: date | None = None) -> tuple[dict[str,
     step_raw = _clean(raw.get("radius_step"))
     if step_raw.isdigit() and 0 <= int(step_raw) <= 3:
         criteria["radius_step"] = int(step_raw)
+    point = _coords(raw.get("lost_lat"), raw.get("lost_lng"))
+    if point and criteria.get("lost_place"):
+        # 소수점 6자리(약 0.1m)로 맞춰 같은 위치는 같은 조건 캐시 키가 되게 한다.
+        criteria["lost_lat"], criteria["lost_lng"] = point
     if criteria.get("sex") and criteria["sex"] not in ("M", "F"):
         criteria["sex"] = {"수컷": "M", "남아": "M", "암컷": "F", "여아": "F"}.get(criteria["sex"], "")
         if not criteria["sex"]:
             criteria.pop("sex")
     return criteria, missing, errors
+
+
+def _coords(lat: Any, lng: Any) -> tuple[float, float] | None:
+    """지도 좌표 검증. 숫자이고 한국 범위 안일 때만 (lat, lng). 아니면 None(주소로 좌표를 구하게 둔다)."""
+    try:
+        la, ln = float(_clean(lat)), float(_clean(lng))
+    except ValueError:
+        return None
+    if not (LAT_RANGE[0] <= la <= LAT_RANGE[1] and LNG_RANGE[0] <= ln <= LNG_RANGE[1]):
+        return None
+    return round(la, 6), round(ln, 6)
 
 
 def questions_for(missing: list[str], errors: list[dict[str, str]]) -> list[dict[str, str]]:
