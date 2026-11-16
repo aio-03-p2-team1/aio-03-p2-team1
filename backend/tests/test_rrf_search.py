@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from backend.agent.embeddings import DIMENSIONS, Embedder
 from backend.agent.llm import LlmError
-from backend.agent.ranking import feature_text, fuse_rrf
+from backend.agent.ranking import DISTANCE_WEIGHT, distance_positions, feature_text, fuse_rrf
 from backend.agent.search_cache import SearchCache, condition_key
 from backend.agent.runner import run_search
 from backend.main import create_app
@@ -22,6 +22,29 @@ def test_rrf_combines_rank_positions_not_raw_score_scales():
     assert [item["rank"] for item in result] == [1, 2, 3]
     assert result[0]["lexical_score"] == 9999
     assert "secret" not in feature_text({"breed": "푸들", "id": "secret", "care": {"tel": "secret"}})
+
+
+def test_distance_rank_per_km_unknown_last_and_weighted():
+    items = [{"id": "far", "score": 3, "distance_km": 9.7}, {"id": "unknown", "score": 3, "distance_km": None},
+             {"id": "near", "score": 3, "distance_km": 2.1}, {"id": "near2", "score": 3, "distance_km": 2.9}]
+    # 같은 km(2.1·2.9 → 2km)는 같은 순위, 거리 미확인은 맨 뒤
+    assert distance_positions(items) == {"near": 1, "near2": 1, "far": 3, "unknown": 4}
+    # 키워드는 미확인이 1위, 벡터는 근처가 1위로 엇갈리면 거리 순위가 근처 공고를 앞세운다.
+    pair = [{"id": "unknown", "score": 3, "distance_km": None}, {"id": "near", "score": 2, "distance_km": 2.1}]
+    result = fuse_rrf(pair, {"unknown": 0.6, "near": 0.7})
+    assert [r["id"] for r in result] == ["near", "unknown"]
+    near = result[0]
+    assert near["rrf_ranks"] == {"lexical": 2, "semantic": 1, "distance": 1}
+    assert near["score"] == pytest.approx(1 / 62 + 1 / 61 + DISTANCE_WEIGHT / 61)
+    # 외모 순위가 둘 다 앞서면 거리만으로 뒤집히지 않는다(가중치 0.5).
+    result = fuse_rrf(pair, {"unknown": 0.9, "near": 0.7})
+    assert result[0]["id"] == "unknown"
+
+
+def test_no_distance_term_when_radius_not_applied():
+    items = [{"id": "a", "score": 1}, {"id": "b", "score": 0}]
+    assert distance_positions(items) is None
+    assert "distance" not in fuse_rrf(items, {"a": 0.1, "b": 0.2})[0]["rrf_ranks"]
 
 
 def test_hash_order_owner_and_model_scope():

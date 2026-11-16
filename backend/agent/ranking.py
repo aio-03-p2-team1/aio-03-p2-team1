@@ -28,20 +28,47 @@ def cosine(left, right):
     return sum((a / left_norm) * (b / right_norm) for a, b in zip(left, right))
 
 
-def fuse_rrf(lexical, semantic_scores):
+# 거리 순위 가중치(임시값, 측정 후 조정). 외모(키워드·벡터)보다 덜 중요하게 본다.
+DISTANCE_WEIGHT = 0.5
+
+
+def distance_positions(items: list[dict[str, Any]]) -> dict[str, int] | None:
+    """실종 위치에서 가까운 순위. 1km 단위로 묶어 같은 km 안은 같은 순위(거리가 읍·면·동 중심 기준 근사값이라).
+
+    거리를 모르는 공고는 모두 맨 뒤 같은 순위. 거리를 아는 공고가 하나도 없으면(반경 미적용) None → 거리 순위를 쓰지 않는다.
+    """
+    km = {item["id"]: int(item["distance_km"]) for item in items
+          if isinstance(item.get("distance_km"), (int, float)) and math.isfinite(item["distance_km"])}
+    if not km:
+        return None
+    ordered = sorted(set(km.values()))
+    # 같은 km 묶음은 같은 순위, 다음 묶음은 앞 묶음 공고 수만큼 건너뛴 순위(1, 1, 3 …).
+    start, first = 1, {}
+    for bucket in ordered:
+        first[bucket] = start
+        start += sum(1 for v in km.values() if v == bucket)
+    return {item["id"]: first[km[item["id"]]] if item["id"] in km else start for item in items}
+
+
+def fuse_rrf(lexical, semantic_scores, distance_weight: float = DISTANCE_WEIGHT):
+    """키워드 순위 + 벡터 순위 + (반경 적용 시) 거리 순위를 RRF로 합친다. 순위만 쓰므로 점수·km 단위를 맞출 필요가 없다."""
     semantic = sorted(lexical, key=lambda item: (-semantic_scores[item["id"]], item["id"]))
     lexical_positions, semantic_positions = {}, {}
     for pos, item in enumerate(lexical, 1):
         lexical_positions.setdefault(item["id"], pos)
     for pos, item in enumerate(semantic, 1):
         semantic_positions.setdefault(item["id"], pos)
+    distance = distance_positions(lexical)
     result = []
     for item in lexical:
         identifier = item["id"]
         rrf = 1 / (RRF_K + lexical_positions[identifier]) + 1 / (RRF_K + semantic_positions[identifier])
+        ranks = {"lexical": lexical_positions[identifier], "semantic": semantic_positions[identifier]}
+        if distance is not None:
+            rrf += distance_weight / (RRF_K + distance[identifier])
+            ranks["distance"] = distance[identifier]
         result.append({**item, "lexical_score": item["score"], "score": rrf,
-                       "semantic_score": semantic_scores[identifier],
-                       "rrf_ranks": {"lexical": lexical_positions[identifier], "semantic": semantic_positions[identifier]}})
+                       "semantic_score": semantic_scores[identifier], "rrf_ranks": ranks})
     result.sort(key=lambda item: (-item["score"], lexical_positions[item["id"]], item["id"]))
     return [{**item, "rank": index} for index, item in enumerate(result, 1)]
 
