@@ -40,7 +40,16 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
     # 좌표는 실종 위치와 한 묶음이다. 이번 요청에서 실종 위치를 새로 보냈으면 좌표도 이번 요청 값만 쓴다
     # (이전 세션의 다른 위치 좌표가 따라오지 않게).
     place_sent = bool(_clean(current.get("lost_place")))
+    # 기간도 실종 날짜와 한 묶음이다. 이번 요청에 실종 날짜만 왔으면 이전 세션의 시작·종료일을 잇지 않는다
+    # (세션의 start_date 가 새 실종 날짜보다 우선해 기간이 엉뚱하게 좁아지던 문제).
+    date_sent = bool(_clean(current.get("lost_date")))
     for key in keys:
+        if key in ("start_date", "end_date") and date_sent:
+            value = _clean(current.get(key))
+            if value:
+                merged[key] = value
+                origin[key] = "request"
+            continue
         if key in ("lost_lat", "lost_lng") and place_sent:
             value = _clean(current.get(key))
             if value:

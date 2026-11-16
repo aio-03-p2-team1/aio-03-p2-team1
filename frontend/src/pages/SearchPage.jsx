@@ -164,7 +164,8 @@ export default function SearchPage() {
       setPageCache((previous) => rememberPage(previous, `${result.run_id}:1`, result))
       setParams({ run: result.run_id, page: '1' })
       loadHistory()
-      if (result.status === 'awaiting_input') toast('추가 정보가 필요해요.')
+      // 무엇이 필요한지 알 수 있게 첫 질문을 그대로 보여 준다(예: 지역을 넓혀 볼까요?)
+      if (result.status === 'awaiting_input') toast(result.questions?.[0]?.message || '추가 정보가 필요해요.')
       document.getElementById('results-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     } catch (err) {
       setError(err)

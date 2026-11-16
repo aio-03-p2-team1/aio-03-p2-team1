@@ -28,3 +28,16 @@ def test_radius_step_uses_kst_today(monkeypatch):
     monkeypatch.setattr(radius, "kst_today", lambda: date(2026, 11, 16))
     assert radius.recommended_step("2026-11-13") == 0  # 3일 경과 → 3km
     assert radius.recommended_step("2026-11-12") == 1  # 4일 경과 → 10km
+
+
+def test_new_lost_date_replaces_previous_session_period():
+    # 같은 대화에서 실종 날짜를 바꿔 다시 검색하면, 이전 검색의 시작일이 아니라 새 실종 날짜부터 찾아야 한다.
+    session = {"species": "dog", "region": "서울특별시", "lost_date": "2026-11-14",
+               "start_date": "2026-11-14", "end_date": "2026-11-16"}
+    merged, origin = crit.merge_conditions({"lost_date": "2026-11-13"}, session, None)
+    assert "start_date" not in merged and merged["lost_date"] == "2026-11-13"
+    criteria, _, errors = crit.normalize(merged, today=date(2026, 11, 16))
+    assert errors == [] and criteria["start_date"] == "2026-11-13"
+    # 실종 날짜 없이 다른 값만 보내면(예: 반경 넓히기) 이전 기간을 그대로 쓴다.
+    merged, _ = crit.merge_conditions({"radius_step": "1"}, session, None)
+    assert merged["start_date"] == "2026-11-14"
