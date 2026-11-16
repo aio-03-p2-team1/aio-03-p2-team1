@@ -300,14 +300,16 @@ flowchart LR
 - **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색, 막지 않는 안내), 아래에 답한 값 칩(`털색: 흰색 ✕`). 설명 글은 고치지 않고 칩 값을 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
 - **검증:** 가짜 도구 client 로 시험(`backend/tests/test_assess.py`). 실제 OpenAI 도구 호출과 판단 품질은 서버에서 확인 예정(미측정).
 
-## 13. 품종 검색 (breed-v1)
+## 13. 품종 검색 (breed-v2)
 
-[현행 규칙·변경 영향](breed-search.md)에 계약을 기록한다. `AppContext.kinds`는 SQLite/Supabase 활성 품종과 별칭을 읽고 Redis 축종별 1일 캐시를 사용한다. `GET /kinds`는 공개이며 species 필수, name 선택이다. 저장소 실패는 `kinds_unavailable`이며 Redis 장애 시 DB로 조회한다.
+공개 `GET /kinds?species=dog|cat|etc&name=선택`은 활성 품종 목록을 Redis에 1일 캐시한다. AI 조회 도구는 SQLite/Supabase에서 축종과 LIKE 부분 이름 조건으로 조회한다. 7일 주기 upsert 작업은 성공 후 Redis 목록 캐시를 무효화한다.
 
-`context → breed → plan` 전이로 `criteria.breed_code`를 서버에서 생성한다. breed 노드는 공식명/별칭 매칭 후 최대 4회 AI 호출을 허용하고, `lookup_kinds(species, name="")` 도구로 확인한 활성 코드만 채택한다. 품종 오류는 finalize로 종료한다. 기존 공고 범위·품종 가중치는 유지한다.
+`context → breed → plan`에서 breed 노드는 **명시적 criteria.breed만** 정규화한다. 공식명·별칭 우선, 필요 시 DB 조회 도구 AI 보완 순서다. 설명은 인자로 받지도, 모델에 전달하지도 않는다. 글 특징 추출 모델 및 결과 스키마는 colors/sex/marks만 포함한다(결과에는 모델·버전 메타데이터 포함). 기존 후보 순위의 품종 근거도 criteria.breed만 읽는다.
 
-특징 추출 모델 스키마에서 breed를 제거했다(호환 결과 필드는 빈 문자열). 사진 모델에는 축종별 전체 공식 목록을 고정 system 접두부로 전달한다. ChatOpenAI `prompt_cache_key`를 지정하며 실제 접두부 재사용은 제공자 자동 캐시 정책에 따른다. 캐시 적중률·실제 품질은 미측정이다. [OpenAI 공식 문서](https://developers.openai.com/api/docs/guides/prompt-caching).
+FastAPI lifespan에서 `KindRepository.load_catalog()`를 실행해 모든 축종의 활성 DB 품종을 읽고 `(kind_code, name)` 쌍만 정렬된 불변 tuple로 보관한다. `functools.lru_cache(maxsize=1)`를 적용한 `catalog()`를 시작 시 예열한다. 사진마다 DB·Redis를 읽지 않는다. 초기 적재 실패 시 서버 시작이 실패하며 리소스는 닫힌다. 이 프로세스 스냅샷의 갱신은 서버 재시작 시 반영한다. Redis 공개 목록 캐시와는 별개다.
 
-품종 DB 도구는 `KindRepository.lookup_db`에서 SQLite의 매개변수 LIKE 쿼리 또는 Supabase의 `search_name=like.%이름%` 필터를 실행한다. 공개 API의 목록 캐시와 도구의 DB 조회를 구분한다. Supabase는 1,000행 단위로 마지막 페이지까지 읽는다.
+사진 프롬프트에는 이 코드·이름 목록만 전달한다. 모델 스키마는 `breed` 대신 `breed_code`, confidence는 `breed_code`를 사용한다. 적합성·확신 기준을 통과한 코드라도 LRU 목록에 없으면 빈 코드로 버린다. API `/photo-analysis`는 `breed_code`와 서버가 해당 코드에서 조회한 표시용 `breed`를 반환한다. 품종명은 모델이 생성하지 않는다. 목록이 비어 있으면 모든 품종 코드를 버린다.
 
-사진 목록은 `(species, kind_code)` 순으로 정렬해 동일한 데이터의 프롬프트 접두부를 유지하고, 빈 공식 목록에서도 목록 밖 품종은 반환하지 않는다. 프론트는 수동 선택뿐 아니라 사진 분석 후 즉시 재검색하는 경로에서도 축종 변경과 품종 초기화를 함께 적용한다.
+프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
+
+프롬프트/조건 캐시 버전은 feature-extract-v5 / rrf-breed-v2다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.

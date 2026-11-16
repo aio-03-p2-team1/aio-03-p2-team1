@@ -21,7 +21,7 @@ from backend.schemas.llm import (
 
 log = logging.getLogger("dasimanna.llm")
 
-PROMPT_VERSION = "feature-extract-v4"
+PROMPT_VERSION = "feature-extract-v5"
 PHOTO_CONFIDENCE_THRESHOLD = 0.8
 COLOR_VALUES = get_args(Color)
 COLOR_VALUES_TEXT = ", ".join(COLOR_VALUES)
@@ -53,13 +53,13 @@ PHOTO_SYSTEM_PROMPT_TEMPLATE = (
     "동물이 여러 마리여도 특정 한 마리를 고를 근거가 없으면 false다. 사진의 동물 수만으로 적합 판정을 높이지 않는다. "
     "각 confidence 값은 해당 판단의 근거 강도다: 0.0은 근거 없음, 0.5는 약하거나 모호함, 0.8은 분명한 근거, 1.0은 매우 명확함이다. "
     "확신을 과장하지 않는다. confidence는 모두 0과 1 사이여야 한다. 핵심 세 판정 중 하나라도 0.8 미만이면 부적합으로 본다. "
-    "품종과 성별은 사진만으로 추측하기 쉬우므로 시각적으로 뚜렷한 근거가 없으면 빈 문자열과 낮은 confidence를 반환한다. "
+    "품종은 제공한 코드·이름 목록에서 시각적 근거가 뚜렷한 항목의 코드만 breed_code로 반환한다. 확신이 없으면 빈 문자열과 낮은 confidence를 반환한다. 성별도 뚜렷한 근거가 없으면 비운다. "
     "털색·무늬는 다음 허용값으로만 반환한다: {color_values}. "
     "한 동물에게 명확히 구분되는 색이 여러 개 보이면 colors에 각 색상을 모두 별도 항목으로 반환하고, 색들을 삼색 하나로 합치지 않는다. "
     "삼색·고등어는 사진에서 해당 무늬가 분명하게 보일 때만 반환한다. 각 색과 무늬의 confidence를 개별적으로 평가한다. "
     "종은 명확한 경우 dog, cat, etc 중 하나로 반환하고 판별이 안 되면 빈 문자열로 둔다. "
     "colors와 marks의 각 항목에는 값과 그 항목의 confidence를 넣는다. 목줄·하네스·무늬·흉터·귀나 꼬리 모양 등 보이는 식별 단서만 marks에 넣는다. "
-    "animal_present가 false이면 종·품종·성별·색·표식을 모두 비운다. suitable 여부는 사진 내용으로만 판단하고 confidence 기준을 낮추지 않는다. "
+    "animal_present가 false이면 종·품종 코드·성별·색·표식을 모두 비운다. suitable 여부는 사진 내용으로만 판단하고 confidence 기준을 낮추지 않는다. "
     "주어진 구조화 응답 스키마의 모든 필드를 채우고, 값 외 설명이나 마크다운을 덧붙이지 않는다."
 )
 PHOTO_SYSTEM_PROMPT = PHOTO_SYSTEM_PROMPT_TEMPLATE.format(color_values=COLOR_VALUES_TEXT)
@@ -93,7 +93,7 @@ class FeatureExtractor:
         self._http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if client is None else None
         self._client = client or ChatOpenAI(
             model=model, api_key=api_key, timeout=timeout, max_retries=0, http_async_client=self._http_client,
-            model_kwargs={"prompt_cache_key": "dasimanna-features-photo-v4"}
+            model_kwargs={"prompt_cache_key": "dasimanna-features-photo-v5"}
         )
 
     async def aclose(self) -> None:
@@ -148,10 +148,8 @@ class FeatureExtractor:
         colors = list(dict.fromkeys(c for c in response.colors if c in ALLOWED_COLORS))
         sex = response.sex if response.sex in ("M", "F") else ""
         marks = [m[:20] for m in response.marks if m.strip()][:6]
-        breed = ""
         return FeatureExtractionResult(
             colors=colors,
-            breed=breed,
             sex=sex,
             marks=marks,
             model=self.model,
@@ -163,12 +161,8 @@ class FeatureExtractor:
             request = PhotoAnalysisRequest(image=image, mime_type=mime_type)
         except ValidationError as exc:
             raise LlmError("llm_request") from exc
-        catalog = []
-        if getattr(self, "kinds", None) is not None:
-            for species in ("dog", "cat", "etc"):
-                catalog.extend(await self.kinds.lookup(species))
-        catalog.sort(key=lambda row: (row["species"], row["kind_code"]))
-        prefix = PHOTO_SYSTEM_PROMPT + "\n공식 품종 목록(목록에 있는 이름만 반환):" + json.dumps(catalog, ensure_ascii=False, sort_keys=True)
+        catalog = self.kinds.catalog() if getattr(self, "kinds", None) is not None else ()
+        prefix = PHOTO_SYSTEM_PROMPT + "\n공식 품종 목록 [코드, 이름]:" + json.dumps(catalog, ensure_ascii=False)
         encoded = base64.b64encode(request.image).decode("ascii")
         response = await self._invoke_structured([
             ("system", prefix),
@@ -204,9 +198,11 @@ class FeatureExtractor:
             for item in data.marks
             if item.value.strip() and item.confidence >= PHOTO_CONFIDENCE_THRESHOLD
         ][:6]
-        breed = data.breed[:40] if suitable and confident("breed") else ""
-        if getattr(self, "kinds", None) is not None and not any(r["name"] == breed and r["species"] == species for r in catalog):
-            breed = ""
+        breed_code = data.breed_code if suitable and confident("breed_code") else ""
+        # Only codes loaded from the database at startup are trusted.
+        breed = dict(catalog).get(breed_code, "")
+        if not breed:
+            breed_code = ""
         if not animal_present:
             reason_code = "animal_not_detected"
         elif not identifiable:
@@ -224,6 +220,7 @@ class FeatureExtractor:
             species=species if suitable else "",
             colors=colors if suitable else [],
             breed=breed if suitable else "",
+            breed_code=breed_code if suitable else "",
             sex=sex if suitable else "",
             marks=marks if suitable else [],
         )

@@ -109,6 +109,8 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
             settings.animal_data_source,
         )
         try:
+            if app.state.ctx.kinds is not None:
+                await app.state.ctx.kinds.load_catalog()
             yield
         finally:
             ctx = getattr(app.state, "ctx", None)

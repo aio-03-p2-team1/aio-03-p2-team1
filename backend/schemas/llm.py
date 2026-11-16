@@ -34,7 +34,6 @@ class FeatureExtractionModelResponse(StrictSchema):
 
 class FeatureExtractionResult(StrictSchema):
     colors: list[Color]
-    breed: str
     sex: Sex
     marks: list[str]
     model: str
@@ -46,7 +45,7 @@ class PhotoConfidence(StrictSchema):
     identifiable: float
     center_subject_clear: float
     species: float
-    breed: float
+    breed_code: float
     sex: float
 
     @model_validator(mode="after")
@@ -75,7 +74,7 @@ class PhotoAnalysisModelResponse(StrictSchema):
     confidence: PhotoConfidence
     species: Species
     colors: list[PhotoFeature]
-    breed: str
+    breed_code: str
     sex: Sex
     marks: list[PhotoFeature]
 
@@ -88,8 +87,9 @@ class PhotoAnalysisResult(StrictSchema):
     center_subject_clear: bool
     suitable: bool
     reason_code: PhotoAnalysisReason | None
+    breed: str
     species: Species
     colors: list[Color]
-    breed: str
+    breed_code: str
     sex: Sex
     marks: list[str]

@@ -97,6 +97,7 @@ class PhotoAnalysisResponse(StrictSchema):
     suitable: bool
     species: Species
     colors: list[Color]
+    breed_code: str
     breed: str
     sex: Sex
     marks: list[str]

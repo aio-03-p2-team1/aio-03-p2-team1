@@ -44,7 +44,7 @@ async def test_rules_alias_and_description(repository):
     client = SimpleNamespace(bind_tools=lambda *a, **k: pytest.fail('rules should win'))
     agent = BreedNormalizer(repository, client)
     assert (await agent.resolve('cat', '코숏'))['kind_code'] == '2'
-    assert (await agent.resolve('dog', '', '갈색 푸들입니다'))['kind_code'] == '1'
+    assert await agent.resolve('dog', '') is None
     assert await BreedNormalizer(repository).resolve('dog', '없는품종') is None
 
 
@@ -175,3 +175,37 @@ def test_graph_finishes_with_error_when_breed_database_fails(repository):
     assert result['status'] == 'failed'
     assert result['error']['code'] == 'breed_normalization_failed'
     assert 'execute' not in result['trace']
+
+
+@run_async
+async def test_startup_catalog_contains_only_codes_and_names_and_is_lru_cached(repository):
+    await repository.load_catalog()
+    assert repository.catalog() == (('1', '푸들'), ('2', '코리안 숏헤어'))
+    assert repository.catalog.cache_info().maxsize == 1
+    repository._rows = AsyncMock(side_effect=AssertionError('runtime DB read'))
+    first = repository.catalog()
+    assert repository.catalog() is first
+    assert repository.catalog.cache_info().hits >= 2
+
+
+def test_description_no_longer_extracts_breed(repository):
+    from backend.tests.test_graph import deps, search, START
+    d = deps()
+    repository.rows = AsyncMock(side_effect=AssertionError('description must not query breeds'))
+    d['breed_normalizer'] = BreedNormalizer(repository)
+    result = search(d, {'species': 'dog', 'region': '전체', 'lost_date': START, 'description': '갈색 푸들입니다'})
+    assert result['status'] == 'completed'
+    assert not result['criteria'].get('breed')
+    assert result['criteria']['breed_code'] is None
+    repository.rows.assert_not_awaited()
+
+
+def test_lifespan_warms_catalog_before_requests(repository):
+    from fastapi.testclient import TestClient
+    from backend.main import create_app
+    from backend.tests.conftest import build_ctx
+    ctx = build_ctx()
+    ctx.kinds = repository
+    assert repository.catalog() == ()
+    with TestClient(create_app(ctx)):
+        assert repository.catalog() == (('1', '푸들'), ('2', '코리안 숏헤어'))

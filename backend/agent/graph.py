@@ -158,7 +158,7 @@ async def normalize_breed(state: SearchState, config) -> dict:
     criteria["breed_code"] = None
     if normalizer and criteria.get("species") in {"dog", "cat", "etc"}:
         try:
-            row = await normalizer.resolve(criteria["species"], criteria.get("breed", ""), criteria.get("description", ""))
+            row = await normalizer.resolve(criteria["species"], criteria.get("breed", ""))
         except Exception:
             return {"criteria": criteria, "trace": ["breed"], "error": {"code": "breed_normalization_failed", "message": "품종을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."}}
         if row:
