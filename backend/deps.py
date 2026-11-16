@@ -27,6 +27,8 @@ class AppContext:
     embedder: Any = None
     search_cache: Any = None
     assessor: Any = None  # 결과가 애매할 때 추가 요청을 고르는 LLM 도구 호출(assess 노드). OPENAI_API_KEY 없으면 None
+    kinds: Any = None
+    breed_normalizer: Any = None
     lost: Any = None  # 분실 신고 목록 캐시(LostFeed). LOST_ANIMAL_API_KEY 가 없으면 None
 
     async def aclose(self) -> None:

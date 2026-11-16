@@ -31,7 +31,8 @@ flowchart TD
   A -- 필수 누락·입력 오류 --> Q[ask<br/>추가 질문]
   A -- 충분 --> C[context<br/>장기 기억·LLM 특징 추출]
   C -- LLM 오류 --> F
-  C --> P[plan<br/>지역 코드 매핑·조회 계획]
+  C --> B[breed<br/>규칙 우선·DB 도구 AI 품종 정규화]
+  B --> P[plan<br/>지역 코드 매핑·조회 계획]
   P -- 인자 매핑 실패 --> V
   P --> E[execute<br/>공고 조회·통신 재시도]
   E --> RD[radius<br/>실종 위치 기준 반경 필터]
@@ -95,8 +96,8 @@ sequenceDiagram
   U->>API: 조건 입력
   API->>G: run_search(owner, criteria, thread_id)
   G->>G: analyze (누락이면 질문 후 종료)
-  G->>LLM: ChatOpenAI 서술 → {colors, breed, sex, marks} (JSON)
-  LLM-->>G: 특징(설명에 없는 품종은 폐기)
+  G->>LLM: ChatOpenAI 서술 → {colors, sex, marks} (JSON)
+  LLM-->>G: 특징(품종은 별도 breed 노드에서 정규화)
   G->>AN: sido_v2 (지역 코드)
   G->>AN: abandonmentPublic_v2 page 1..N
   AN-->>G: 공고 목록
@@ -298,3 +299,11 @@ flowchart LR
 - **API 계약 변경:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5) 추가. 응답 run 에 `confidence`, `agent_request`, `agent_decision` 추가. 의존성 `AppContext.assessor`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델 사용).
 - **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색, 막지 않는 안내), 아래에 답한 값 칩(`털색: 흰색 ✕`). 설명 글은 고치지 않고 칩 값을 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
 - **검증:** 가짜 도구 client 로 시험(`backend/tests/test_assess.py`). 실제 OpenAI 도구 호출과 판단 품질은 서버에서 확인 예정(미측정).
+
+## 13. 품종 검색 (breed-v1)
+
+[현행 규칙·변경 영향](breed-search.md)에 계약을 기록한다. `AppContext.kinds`는 SQLite/Supabase 활성 품종과 별칭을 읽고 Redis 축종별 1일 캐시를 사용한다. `GET /kinds`는 공개이며 species 필수, name 선택이다. 저장소 실패는 `kinds_unavailable`이며 Redis 장애 시 DB로 조회한다.
+
+`context → breed → plan` 전이로 `criteria.breed_code`를 서버에서 생성한다. breed 노드는 공식명/별칭 매칭 후 최대 4회 AI 호출을 허용하고, `lookup_kinds(species, name="")` 도구로 확인한 활성 코드만 채택한다. 품종 오류는 finalize로 종료한다. 기존 공고 범위·품종 가중치는 유지한다.
+
+특징 추출 모델 스키마에서 breed를 제거했다(호환 결과 필드는 빈 문자열). 사진 모델에는 축종별 전체 공식 목록을 고정 system 접두부로 전달한다. ChatOpenAI `prompt_cache_key`를 지정하며 실제 접두부 재사용은 제공자 자동 캐시 정책에 따른다. 캐시 적중률·실제 품질은 미측정이다. [OpenAI 공식 문서](https://developers.openai.com/api/docs/guides/prompt-caching).

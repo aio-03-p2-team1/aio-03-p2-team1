@@ -1,0 +1,102 @@
+import asyncio
+from functools import wraps
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import fakeredis
+import pytest
+
+from backend.agent.breed import BreedNormalizer
+from backend.tests.conftest import make_settings
+from backend.tools.kinds import KindRepository
+from scripts.init_kinds_sqlite import SqliteSink
+from scripts.kind_sync import normalize_record
+
+
+def run_async(fn):
+    @wraps(fn)
+    def run(*args, **kwargs):
+        return asyncio.run(fn(*args, **kwargs))
+    return run
+
+
+@pytest.fixture
+def repository(tmp_path):
+    path = str(tmp_path / 'kinds.db')
+    sink = SqliteSink(path)
+    sink.sync([normalize_record('dog', {'kind_cd': '1', 'KNm': '푸들'}, 'now'),
+               normalize_record('cat', {'kind_cd': '2', 'KNm': '코리안 숏헤어'}, 'now')])
+    sink.close()
+    return KindRepository(make_settings(sqlite_path=path), fakeredis.FakeAsyncRedis())
+
+
+@run_async
+async def test_lookup_is_scoped_cached_and_partial(repository):
+    assert [r['name'] for r in await repository.lookup('dog', '푸')] == ['푸들']
+    assert await repository.lookup('cat', '푸') == []
+    assert await repository.redis.ttl('meet-again:kinds:dog') > 86390
+    repository._rows = AsyncMock(side_effect=AssertionError('cache miss'))
+    assert len(await repository.lookup('dog')) == 1
+
+
+@run_async
+async def test_rules_alias_and_description(repository):
+    client = SimpleNamespace(bind_tools=lambda *a, **k: pytest.fail('rules should win'))
+    agent = BreedNormalizer(repository, client)
+    assert (await agent.resolve('cat', '코숏'))['kind_code'] == '2'
+    assert (await agent.resolve('dog', '', '갈색 푸들입니다'))['kind_code'] == '1'
+    assert await BreedNormalizer(repository).resolve('dog', '없는품종') is None
+
+
+@run_async
+async def test_ai_code_must_have_been_seen_in_tool(repository):
+    client = SimpleNamespace(bind_tools=lambda *a, **k: SimpleNamespace(
+        ainvoke=AsyncMock(return_value=SimpleNamespace(tool_calls=[], content='1'))))
+    assert await BreedNormalizer(repository, client).resolve('dog', '애매한품종') is None
+
+
+@run_async
+async def test_ai_uses_lookup_then_validates_code(repository):
+    calls = [SimpleNamespace(tool_calls=[{'name': 'lookup_kinds', 'args': {'species': 'dog', 'name': '푸'}, 'id': 'call1'}], content=''),
+             SimpleNamespace(tool_calls=[], content='1')]
+    client = SimpleNamespace(bind_tools=lambda *a, **k: SimpleNamespace(ainvoke=AsyncMock(side_effect=calls)))
+    assert (await BreedNormalizer(repository, client).resolve('dog', '푸드르'))['kind_code'] == '1'
+
+
+@run_async
+async def test_refresh_invalidates_and_skips_within_seven_days(repository, monkeypatch):
+    from contextlib import asynccontextmanager
+    from scripts import refresh_kinds
+
+    @asynccontextmanager
+    async def lock(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(repository.redis, 'lock', lock)
+    fetch = AsyncMock(return_value=[normalize_record('dog', {'kind_cd': '1', 'KNm': '푸들'}, 'now')])
+    monkeypatch.setattr(refresh_kinds, 'fetch_records', fetch)
+    await repository.lookup('dog')
+    assert await refresh_kinds.refresh(repository.settings, repository.redis)
+    assert await repository.redis.get('meet-again:kinds:dog') is None
+    assert not await refresh_kinds.refresh(repository.settings, repository.redis)
+    assert fetch.await_count == 1
+
+
+def test_species_change_and_explicit_clear_do_not_inherit_breed():
+    from backend.agent.criteria import merge_conditions
+    prior = {'species': 'dog', 'breed': '푸들'}
+    assert not merge_conditions({'species': 'cat'}, prior, None)[0]['breed']
+    assert not merge_conditions({'species': 'dog', 'breed': ''}, prior, {'breed': '푸들'})[0]['breed']
+
+
+def test_public_api_validates_species_and_returns_rows(repository):
+    from fastapi.testclient import TestClient
+    from backend.main import create_app
+    from backend.tests.conftest import build_ctx
+    ctx = build_ctx()
+    ctx.kinds = repository
+    client = TestClient(create_app(ctx))
+    assert client.get('/api/v1/kinds?species=bad').status_code == 422
+    result = client.get('/api/v1/kinds?species=dog&name=푸')
+    assert result.status_code == 200
+    assert result.json()['kinds'] == [{'kind_code': '1', 'name': '푸들', 'species': 'dog'}]

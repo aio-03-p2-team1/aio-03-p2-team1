@@ -68,7 +68,14 @@ def build_context(settings: Settings) -> AppContext:
     )
     # assess 노드의 도구 호출은 사진 분석과 같은 채팅 모델·연결을 쓴다(키 없으면 판단 생략, 결과는 그대로).
     assessor = Assessor(photo_llm._client, settings.openai_model) if photo_llm else None
+    from backend.tools.kinds import KindRepository
+    from backend.agent.breed import BreedNormalizer
+    kinds = KindRepository(settings, redis)
+    if photo_llm:
+        photo_llm.kinds = kinds
     return AppContext(
+        kinds=kinds,
+        breed_normalizer=BreedNormalizer(kinds, photo_llm._client if photo_llm else None),
         settings=settings,
         store=build_store(settings),
         sessions=SessionStore(redis, settings.auth_session_ttl_seconds),

@@ -141,3 +141,9 @@ cd frontend && npm test && npm run build
 | 카카오 지도 미표시 | `VITE_KAKAO_JS_KEY`, SDK 도메인 등록, 카카오맵 사용 설정을 확인한다. |
 | Supabase `PGRST106` | Data API의 Exposed schemas에 지정 스키마가 포함되어 있는지 확인한다. |
 
+
+### 품종 주기 갱신 cron
+
+DB 초기화 후 프로젝트 루트에서 `uv run python -m scripts.refresh_kinds`를 실행한다. 매일 실행하되 Redis에 기록된 마지막 성공 이후 7일이 지났을 때만 동기화하며 성공 시 축종별 캐시를 무효화한다. API 조회와 DB 쓰기는 최대 3회 재시도한다. 중복 작업은 Redis 잠금으로 막는다. Redis 마지막 성공 키가 없으면 즉시 갱신한다. 운영 cron 작업의 명령은 위 명령, 스케줄은 `0 18 * * *`(UTC, 한국 오전 3시)로 설정한다. 원격 작업 등록은 별도 운영 작업이며 이 코드 변경에서는 실행하지 않았다. cron은 백엔드와 같은 DB·Redis·공공 API 설정을 사용해야 한다.
+
+`.github/workflows/refresh-kinds.yml`에 매일 실행하는 cron을 정의했다. 내부 7일 게이트를 거쳐 갱신한다. GitHub에서 실행하려면 워크플로의 동명 Secrets(위 DB·Redis·공공 API 변수)가 필요하고 Redis가 실행 환경에서 접근 가능해야 한다. 워크플로 실행·원격 Secrets 등록은 수행하지 않았다.

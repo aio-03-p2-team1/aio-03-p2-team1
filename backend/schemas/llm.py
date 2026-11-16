@@ -28,7 +28,6 @@ class PhotoAnalysisRequest(StrictSchema):
 
 class FeatureExtractionModelResponse(StrictSchema):
     colors: list[Color]
-    breed: str
     sex: Sex
     marks: list[str]
 

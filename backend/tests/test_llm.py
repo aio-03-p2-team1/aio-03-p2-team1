@@ -49,7 +49,7 @@ def extractor(client):
 
 
 def test_extract_keeps_multiple_colors_and_filters_duplicates():
-    client = FakeChatClient({"colors": ["갈색", "흰색", "갈색"], "breed": "시바견", "sex": "F", "marks": ["목줄"]})
+    client = FakeChatClient({"colors": ["갈색", "흰색", "갈색"], "sex": "F", "marks": ["목줄"]})
     out = asyncio.run(extractor(client).extract("갈색과 흰색 푸들, 빨간 목줄"))
     assert out.colors == ["갈색", "흰색"]
     assert out.breed == ""  # 설명에 없는 품종은 버린다
@@ -160,7 +160,7 @@ def test_incomplete_or_bad_json_is_llm_response():
 
 
 def test_input_and_structured_response_are_validated():
-    client = FakeChatClient({"colors": ["보라"], "breed": "", "sex": "", "marks": []})
+    client = FakeChatClient({"colors": ["보라"], "sex": "", "marks": []})
     with pytest.raises(LlmError, match="llm_response"):
         asyncio.run(extractor(client).extract("갈색"))
     with pytest.raises(LlmError, match="llm_request"):
