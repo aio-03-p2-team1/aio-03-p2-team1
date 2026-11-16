@@ -13,6 +13,17 @@ export default function RadiusMap({ radius, preview = false }) {
   const km = radius?.radius_km
   const prevKm = previousRadiusKm(radius)
 
+  // 지도는 한 번만 만들고, 위치·날짜가 바뀌면 마커와 원만 바꿔 그린다.
+  // (매번 새 지도를 만들면 같은 칸에 지도가 겹쳐 쌓이고 이전 원이 남는다.)
+  const mapRef = useRef(null)
+  const overlaysRef = useRef([])
+
+  useEffect(() => () => {
+    overlaysRef.current.forEach((o) => o.setMap(null))
+    overlaysRef.current = []
+    mapRef.current = null
+  }, [])
+
   useEffect(() => {
     if (!center || km == null) return undefined
     let cancelled = false
@@ -21,22 +32,30 @@ export default function RadiusMap({ radius, preview = false }) {
       .then((kakao) => {
         if (cancelled || !boxRef.current) return
         const position = new kakao.maps.LatLng(center.lat, center.lng)
-        const map = new kakao.maps.Map(boxRef.current, { center: position, level: 7 })
-        map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT)
-        new kakao.maps.Marker({ map, position })
+        if (!mapRef.current || mapRef.current.box !== boxRef.current) {
+          const map = new kakao.maps.Map(boxRef.current, { center: position, level: 7 })
+          map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT)
+          mapRef.current = { map, box: boxRef.current }
+        }
+        const { map } = mapRef.current
+        overlaysRef.current.forEach((o) => o.setMap(null))
+        const overlays = [new kakao.maps.Marker({ map, position })]
         if (prevKm) {
           // 넓히기 전 반경(점선)
-          new kakao.maps.Circle({
+          overlays.push(new kakao.maps.Circle({
             map, center: position, radius: prevKm * 1000,
             strokeWeight: 2, strokeColor: '#b9a77c', strokeOpacity: 0.9, strokeStyle: 'dashed',
             fillColor: '#ffffff', fillOpacity: 0
-          })
+          }))
         }
         const circle = new kakao.maps.Circle({
           map, center: position, radius: km * 1000,
           strokeWeight: 2, strokeColor: '#d9a520', strokeOpacity: 0.9,
           fillColor: '#f5d76e', fillOpacity: 0.18
         })
+        overlays.push(circle)
+        overlaysRef.current = overlays
+        map.relayout()
         map.setBounds(circle.getBounds())
         setState('ready')
       })
