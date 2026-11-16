@@ -192,3 +192,7 @@ button[disabled]{opacity:.65;cursor:progress}
 .answer-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:-4px}
 .answer-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border:1px solid #c9d9ea;border-radius:999px;background:#fff;color:#1f4f7a;font-size:13px;cursor:pointer}
 .answer-chip span{color:#7a8fa3}
+
+/* 브랜드 아이콘(헤더 로고) */
+.brand-icon{display:block;width:40px;height:40px;flex:none}
+@media(max-width:480px){.brand-icon{width:32px;height:32px}}
