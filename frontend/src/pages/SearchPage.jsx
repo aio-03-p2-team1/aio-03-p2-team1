@@ -3,7 +3,6 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
-import RadiusMap from '../components/RadiusMap.jsx'
 import NoticePhoto from '../components/NoticePhoto.jsx'
 import Pagination from '../components/Pagination.jsx'
 import { useSearchScroll, useSearchViewState } from '../lib/searchView.jsx'
@@ -371,7 +370,6 @@ function Results({ run, busy, error, onWiden, onWidenRadius }) {
     const widenRadiusStep = widenRadiusAction(run.questions, radius)
     return (
       <>
-        <RadiusMap radius={radius} />
         <div className="panel question-panel" role="status">
           <strong>조금만 더 알려 주세요</strong>
           <ul>{run.questions?.map((q) => <li key={q.field + q.message}>{q.message}</li>)}</ul>
@@ -399,7 +397,7 @@ function Results({ run, busy, error, onWiden, onWidenRadius }) {
       {run.status === 'partial' && !run.error && (
         <p className="state-box">일부 결과만 확인했어요. 조건을 바꿔 다시 검색해 주세요.</p>
       )}
-      <RadiusMap radius={radius} />
+      {/* 검색 범위 지도는 실종 지역 선택 창 하나로 통일하고, 결과 위에는 한 줄 요약만 둔다. */}
       {radius && <p className="radius-summary">{radiusText(radius)}</p>}
       {run.status !== 'failed' && candidates.length === 0 && (
         <p className="empty-results">

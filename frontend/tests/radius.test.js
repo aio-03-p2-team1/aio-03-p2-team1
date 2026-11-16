@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { distanceLabel, kmLabel, previousRadiusKm, radiusText, widenRadiusAction } from '../src/lib/radius.js'
+import { distanceLabel, kmLabel, radiusText, widenRadiusAction } from '../src/lib/radius.js'
 
 const applied = { applied: true, auto: false, step: 1, radius_km: 10, inside: 4, unknown: 1, excluded: 7, lost_place: '서울특별시 강서구 화곡동' }
 
@@ -19,11 +19,6 @@ test('not applied radius explains why', () => {
   assert.equal(radiusText(null), '')
 })
 
-test('previous ring only after widening', () => {
-  assert.equal(previousRadiusKm(applied), 3)
-  assert.equal(previousRadiusKm({ ...applied, step: 0 }), null)
-  assert.equal(previousRadiusKm({ applied: false, step: 2 }), null)
-})
 
 test('widen action reads next step from the radius question', () => {
   const action = widenRadiusAction([{ field: 'radius', next_step: 2, message: '...' }], applied)
@@ -85,7 +80,3 @@ test('guide text explains days and the next widening day', () => {
   assert.match(radiusGuide({ days_since_lost: 20, radius_km: null })[0], /조회 지역 전체/)
 })
 
-test('dashed previous circle only after the user widened', () => {
-  assert.equal(previousRadiusKm({ applied: true, step: 1, radius_km: 10, auto: false }), 3)
-  assert.equal(previousRadiusKm({ applied: true, step: 1, radius_km: 10, auto: true }), null) // 날짜로 자동 10km
-})

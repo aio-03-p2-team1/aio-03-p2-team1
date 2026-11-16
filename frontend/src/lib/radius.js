@@ -36,7 +36,7 @@ export function nextWidenDay(step) {
 
 /**
  * 검색 전 미리 보기용 반경. 지도에서 찍은 위치(location.lat/lng)와 실종 날짜가 있을 때만 만든다.
- * 서버 요약(run.radius)과 같은 모양으로 만들어 RadiusMap 이 그대로 그린다.
+ * 서버 요약(run.radius)과 같은 모양으로 만들어 실종 지역 선택 창(RegionPicker)이 원과 안내를 그린다.
  */
 export function previewRadius(location, lostDate, today) {
   if (!location?.lat || !location?.lng || !lostDate || location.region === '전체') return null
@@ -98,13 +98,6 @@ export function radiusText(radius) {
   if (radius.unknown) parts.push(`거리 미확인 ${radius.unknown}건 포함`)
   if (radius.excluded) parts.push(`반경 밖 ${radius.excluded}건 제외`)
   return `${parts.join(' · ')} (관할 구청 기준 직선거리, 도로 거리 아님)`
-}
-
-/** 이전 단계 반경(km). 사용자가 넓히기를 고른 경우(auto=false)에만 지도에 점선 원으로 함께 보여 준다.
- *  날짜가 지나 자동으로 넓어진 경우에는 '넓히기 전'이 없으므로 그리지 않는다. */
-export function previousRadiusKm(radius) {
-  if (!radius?.applied || !(radius.step > 0) || radius.auto !== false) return null
-  return RADIUS_STEPS_KM[radius.step - 1] ?? null
 }
 
 /** 공고 카드에 붙일 거리 문구. */
