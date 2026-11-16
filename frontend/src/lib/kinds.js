@@ -14,3 +14,8 @@ export function loadKinds(species, fetcher = api) {
 export function withSpecies(form, species) {
   return { ...form, species, breed: form.species === species ? (form.breed || '') : '' }
 }
+
+export function withPhotoBreed(form, result) {
+  const next = result.species ? withSpecies(form, result.species) : { ...form }
+  return { ...next, breed: next.breed || (result.breed_code ? result.breed : '') || '' }
+}

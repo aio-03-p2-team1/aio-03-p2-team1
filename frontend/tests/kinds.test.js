@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { loadKinds, withSpecies } from '../src/lib/kinds.js'
+import { loadKinds, withSpecies, withPhotoBreed } from '../src/lib/kinds.js'
 
 let calls = 0
 const fetcher = async () => { calls++; return { kinds: [{ name: '푸들' }] } }
@@ -19,3 +19,7 @@ assert.equal(photoSearch.breed, '')
 assert.equal(photoSearch.description, '사진 특징')
 assert.equal(withSpecies({ species: 'dog', breed: '푸들' }, 'dog').breed, '푸들')
 assert.equal(withSpecies({ species: 'dog', breed: '푸들' }, '').breed, '')
+
+assert.equal(withPhotoBreed({ species: 'dog', breed: '' }, { species: 'dog', breed_code: '1', breed: '푸들' }).breed, '푸들')
+assert.equal(withPhotoBreed({ species: 'dog', breed: '푸들' }, { species: 'cat', breed_code: '2', breed: '코리안 숏헤어' }).breed, '코리안 숏헤어')
+assert.equal(withPhotoBreed({ species: 'dog', breed: '' }, { species: 'dog', breed_code: '', breed: '임의 품종' }).breed, '')

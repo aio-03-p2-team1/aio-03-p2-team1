@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
-import { loadKinds, withSpecies } from '../lib/kinds.js'
+import { loadKinds, withSpecies, withPhotoBreed } from '../lib/kinds.js'
 import { errorMessage, formatDate, formatDateTime, noticeTitle, runStatusLabel, runSummary, scopeText } from '../lib/format.js'
 import { distanceLabel, kmLabel, previewRadius, radiusText, widenRadiusAction } from '../lib/radius.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
@@ -36,16 +36,9 @@ export default function SearchPage() {
     }
     setKindsLoading(true)
     loadKinds(form.species).then((rows) => { if (active) setKinds(rows) })
-      .catch(() => { if (active) setKindsError('품종 목록을 불러오지 못했어요. 설명에 품종을 적어 주세요.') })
+      .catch(() => { if (active) setKindsError('품종 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.') })
       .finally(() => { if (active) setKindsLoading(false) })
     return () => { active = false }
-  }, [form.species])
-  const previousSpecies = useRef(form.species)
-  useEffect(() => {
-    if (previousSpecies.current !== form.species) {
-      previousSpecies.current = form.species
-      setForm((f) => ({ ...f, breed: '' }))
-    }
   }, [form.species])
   const [location, setLocation] = useSearchViewState('location', null)
   const [regionOpen, setRegionOpen] = useState(false)
@@ -148,7 +141,6 @@ export default function SearchPage() {
         return
       }
       const traits = [
-        result.breed,
         ...result.colors,
         result.sex === 'M' ? '수컷' : result.sex === 'F' ? '암컷' : '',
         ...result.marks,
@@ -161,7 +153,7 @@ export default function SearchPage() {
       }
       setForm((current) => ({
         ...current,
-        ...(result.species ? withSpecies(current, result.species) : {}),
+        ...withPhotoBreed(current, result),
         ...(extracted ? { description: [extracted, current.description].filter(Boolean).join('\n') } : {}),
       }))
       setPhotoFeatureText(extracted)
@@ -172,7 +164,7 @@ export default function SearchPage() {
         const base = oldAuto && form.description.startsWith(oldAuto) ? form.description.slice(oldAuto.length).trimStart() : form.description
         const nextForm = {
           ...form,
-          ...(result.species ? withSpecies(form, result.species) : {}),
+          ...withPhotoBreed(form, result),
           description: [extracted, base].filter(Boolean).join('\n'),
         }
         submit(buildCriteria(nextForm, answers), run.thread_id)
@@ -360,7 +352,7 @@ export default function SearchPage() {
             )}
             <label className="search-description">
               특징과 상황
-              <textarea ref={descriptionRef} rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털, 빨간 목줄. 품종을 모르면 비워 두셔도 돼요." />
+              <textarea ref={descriptionRef} rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털, 빨간 목줄. 품종은 위 목록에서 선택해 주세요." />
             </label>
             {chips.length > 0 && (
               <div className="answer-chips" aria-label="요청에 답한 값">
