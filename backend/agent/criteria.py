@@ -44,6 +44,14 @@ def merge_conditions(current: dict[str, Any], session: dict[str, Any] | None, me
     # (세션의 start_date 가 새 실종 날짜보다 우선해 기간이 엉뚱하게 좁아지던 문제).
     date_sent = bool(_clean(current.get("lost_date")))
     for key in keys:
+        # 넓히기 단계도 위치·날짜에 묶인다. 위치나 날짜를 새로 보냈으면 이전 넓히기 단계를 잇지 않고
+        # 새 날짜 기준 반경부터 다시 시작한다(이번 요청에 radius_step 이 있으면 그 값).
+        if key == "radius_step" and (place_sent or date_sent):
+            value = _clean(current.get(key))
+            if value:
+                merged[key] = value
+                origin[key] = "request"
+            continue
         if key in ("start_date", "end_date") and date_sent:
             value = _clean(current.get(key))
             if value:

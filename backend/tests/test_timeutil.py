@@ -41,3 +41,15 @@ def test_new_lost_date_replaces_previous_session_period():
     # 실종 날짜 없이 다른 값만 보내면(예: 반경 넓히기) 이전 기간을 그대로 쓴다.
     merged, _ = crit.merge_conditions({"radius_step": "1"}, session, None)
     assert merged["start_date"] == "2026-11-14"
+
+
+def test_new_date_or_place_resets_widened_radius_step():
+    # 10km 로 넓혀 찾은 뒤 실종 날짜·위치를 바꿔 다시 찾으면, 새 날짜 기준 반경(예: 1일 → 3km)부터 시작한다.
+    session = {"species": "dog", "region": "경상북도", "lost_date": "2026-11-13", "lost_place": "경상북도 경주시 외동읍",
+               "radius_step": "1"}
+    merged, _ = crit.merge_conditions({"lost_date": "2026-11-15"}, session, None)
+    assert "radius_step" not in merged
+    merged, _ = crit.merge_conditions({"lost_place": "경상북도 경주시 불국동"}, session, None)
+    assert "radius_step" not in merged
+    merged, _ = crit.merge_conditions({"description": "검정 시바"}, session, None)  # 위치·날짜 그대로면 유지
+    assert merged["radius_step"] == "1"

@@ -153,11 +153,13 @@ export default function SearchPage() {
 
   // 실종 지역 버튼에 보여 줄 요약(위치 · 실종 날짜 · 반경). 반경은 검색과 같은 기준표로 계산한다.
   const preview = previewRadius(location, form.lost_date, today())
-  // 넓히기를 눌러 검색한 뒤에는 실제로 찾은 반경(서버 값)을 요약에 보여 준다(날짜 기준 기본 반경과 다를 수 있음).
+  // 넓히기를 눌러 검색한 뒤에는 실제로 찾은 반경(서버 값)을 요약에 보여 준다.
+  // 단, 그 검색과 위치·실종 날짜가 같을 때만. 위치나 날짜를 바꿨으면 새 날짜 기준 반경을 보여 준다
+  // (서버도 위치·날짜가 바뀌면 넓히기 단계를 잇지 않는다).
   const searched = run?.radius || run?.scope?.radius
-  const shownKm = searched && searched.auto === false && searched.lost_place === location?.address
-    ? searched.radius_km
-    : preview?.radius_km
+  const sameSearch = searched?.auto === false && searched.lost_place === location?.address
+    && run?.criteria?.lost_date === form.lost_date
+  const shownKm = sameSearch ? searched.radius_km : preview?.radius_km
   const locationSummary = !location
     ? '실종 지역과 날짜 선택'
     : [
