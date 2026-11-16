@@ -1,7 +1,7 @@
 import asyncio
 from functools import wraps
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import fakeredis
 import pytest
@@ -100,3 +100,55 @@ def test_public_api_validates_species_and_returns_rows(repository):
     result = client.get('/api/v1/kinds?species=dog&name=푸')
     assert result.status_code == 200
     assert result.json()['kinds'] == [{'kind_code': '1', 'name': '푸들', 'species': 'dog'}]
+
+
+@run_async
+async def test_database_like_is_scoped_and_escapes_wildcards(repository):
+    assert [r['kind_code'] for r in await repository.lookup_db('dog', '푸')] == ['1']
+    assert await repository.lookup_db('cat', '푸') == []
+    assert await repository.lookup_db('dog', '%') == []
+    assert await repository.lookup_db('dog', "' OR 1=1 --") == []
+    assert [r['kind_code'] for r in await repository.lookup_db('cat', '코리안숏')] == ['2']
+
+
+@run_async
+async def test_supabase_like_and_pagination():
+    import httpx
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.url.params['species'] == 'eq.other'
+        assert request.url.params['search_name'] == 'like.%토끼%'
+        if request.url.params['offset'] == '0':
+            return httpx.Response(200, json=[{'kind_code': str(i), 'name': '토끼', 'species': 'other', 'kind_aliases': []}
+                                           for i in range(1000)])
+        return httpx.Response(200, json=[{'kind_code': 'last', 'name': '토끼', 'species': 'other', 'kind_aliases': []}])
+
+    repository = KindRepository(make_settings(storage_backend='supabase', supabase_service_role_key='test-only'),
+                                transport=httpx.MockTransport(handler))
+    result = await repository.lookup_db('etc', '토 끼')
+    assert len(result) == 1001
+    assert result[-1]['species'] == 'etc'
+    assert requests[-1].url.params['offset'] == '1000'
+
+
+@run_async
+async def test_refresh_retries_database_write(repository, monkeypatch):
+    from contextlib import asynccontextmanager
+    from scripts import refresh_kinds, init_kinds_sqlite
+
+    @asynccontextmanager
+    async def lock(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(repository.redis, 'lock', lock)
+    monkeypatch.setattr(refresh_kinds, 'fetch_records', AsyncMock(return_value=[{'kind_code': '1'}]))
+    sink = SimpleNamespace(sync=Mock(side_effect=[RuntimeError(), None]),
+                           close=lambda: None)
+    monkeypatch.setattr(init_kinds_sqlite, 'SqliteSink', lambda path: sink)
+    sleep = AsyncMock()
+    monkeypatch.setattr(refresh_kinds.asyncio, 'sleep', sleep)
+    assert await refresh_kinds.refresh(repository.settings, repository.redis)
+    assert sink.sync.call_count == 2
+    sleep.assert_awaited_once_with(0.5)

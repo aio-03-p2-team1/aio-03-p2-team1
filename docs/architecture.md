@@ -307,3 +307,5 @@ flowchart LR
 `context → breed → plan` 전이로 `criteria.breed_code`를 서버에서 생성한다. breed 노드는 공식명/별칭 매칭 후 최대 4회 AI 호출을 허용하고, `lookup_kinds(species, name="")` 도구로 확인한 활성 코드만 채택한다. 품종 오류는 finalize로 종료한다. 기존 공고 범위·품종 가중치는 유지한다.
 
 특징 추출 모델 스키마에서 breed를 제거했다(호환 결과 필드는 빈 문자열). 사진 모델에는 축종별 전체 공식 목록을 고정 system 접두부로 전달한다. ChatOpenAI `prompt_cache_key`를 지정하며 실제 접두부 재사용은 제공자 자동 캐시 정책에 따른다. 캐시 적중률·실제 품질은 미측정이다. [OpenAI 공식 문서](https://developers.openai.com/api/docs/guides/prompt-caching).
+
+품종 DB 도구는 `KindRepository.lookup_db`에서 SQLite의 매개변수 LIKE 쿼리 또는 Supabase의 `search_name=like.%이름%` 필터를 실행한다. 공개 API의 목록 캐시와 도구의 DB 조회를 구분한다. Supabase는 1,000행 단위로 마지막 페이지까지 읽는다.

@@ -31,7 +31,7 @@ class BreedNormalizer:
             """DB 품종 조회. species는 dog/cat/etc, name 생략 시 전체, 지정 시 부분 이름 검색."""
             if species != target:
                 return []
-            return await self.repository.lookup(species, name)
+            return await self.repository.lookup_db(species, name)
 
         target = species
         tool = StructuredTool.from_function(coroutine=lookup_kinds)

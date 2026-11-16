@@ -24,7 +24,10 @@ async def refresh(settings, redis):
         try:
             for attempt in range(4):
                 try:
-                    await asyncio.to_thread(sink.sync, records) if settings.storage_backend == 'supabase' else sink.sync(records)
+                    if settings.storage_backend == 'supabase':
+                        await asyncio.to_thread(sink.sync, records)
+                    else:
+                        sink.sync(records)
                     break
                 except Exception:
                     if attempt == 3:

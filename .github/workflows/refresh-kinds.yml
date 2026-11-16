@@ -23,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v8.1.0
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          for setting_name in ANIMAL_API_KEY SUPABASE_URL SUPABASE_SCHEMA SUPABASE_SERVICE_ROLE_KEY REDIS_URL; do
+            if [ -z "${!setting_name}" ]; then
+              printf '%s is required\n' "$setting_name"
+              exit 1
+            fi
+          done
       - run: uv python install 3.12
       - run: uv sync --frozen --no-dev
       - run: uv run --no-sync python -m scripts.refresh_kinds

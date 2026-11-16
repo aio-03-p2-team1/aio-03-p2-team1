@@ -14,11 +14,14 @@ def normalize(value):
 
 
 class KindRepository:
-    def __init__(self, settings, redis=None):
+    def __init__(self, settings, redis=None, transport=None):
         self.settings = settings
         self.redis = redis
+        self.transport = transport
 
-    async def _rows(self, species):
+    async def _rows(self, species, name=""):
+        query = normalize(name)
+        pattern = "%" + query.replace("!", "!!").replace("%", "!%").replace("_", "!_") + "%"
         species = 'other' if species == 'etc' else species
         try:
             if self.settings.storage_backend == 'sqlite':
@@ -27,16 +30,18 @@ class KindRepository:
                         db.row_factory = sqlite3.Row
                         return [dict(r) for r in db.execute(
                             'SELECT k.kind_code,k.name,k.species,a.alias FROM kinds k LEFT JOIN kind_aliases a '
-                            'ON a.kind_code=k.kind_code WHERE k.active=1 AND k.species=? ORDER BY k.name', (species,))]
+                            "ON a.kind_code=k.kind_code WHERE k.active=1 AND k.species=? AND k.search_name LIKE ? ESCAPE '!' ORDER BY k.name", (species, pattern))]
                 return await asyncio.to_thread(read)
             key = self.settings.supabase_service_role_key.get_secret_value()
             headers = {'apikey': key, 'Authorization': f'Bearer {key}', 'Accept-Profile': self.settings.supabase_schema}
             rows = []
-            async with httpx.AsyncClient(headers=headers, timeout=30) as client:
-                for offset in range(0, 10000, 1000):
+            async with httpx.AsyncClient(headers=headers, timeout=30, transport=self.transport) as client:
+                offset = 0
+                while True:
                     response = await client.get(self.settings.supabase_url.rstrip('/') + '/rest/v1/kinds', params={
                         'select': 'kind_code,name,species,kind_aliases(alias)', 'active': 'eq.true',
-                        'species': f'eq.{species}', 'order': 'kind_code', 'offset': offset, 'limit': 1000})
+                        'species': f'eq.{species}', 'search_name': 'like.%' + query.replace(chr(92), chr(92) * 2).replace('%', chr(92) + '%').replace('_', chr(92) + '_') + '%',
+                        'order': 'kind_code', 'offset': offset, 'limit': 1000})
                     response.raise_for_status()
                     page = response.json()
                     for row in page:
@@ -44,6 +49,7 @@ class KindRepository:
                         rows.extend([{**row, 'alias': a['alias']} for a in aliases] or [{**row, 'alias': None}])
                     if len(page) < 1000:
                         break
+                    offset += len(page)
             return rows
         except (sqlite3.Error, httpx.HTTPError, ValueError) as exc:
             raise StorageError('kinds_unavailable') from exc
@@ -65,11 +71,18 @@ class KindRepository:
                 pass
         return rows
 
+    @staticmethod
+    def _public_rows(rows):
+        return list({r['kind_code']: {'kind_code': r['kind_code'], 'name': r['name'],
+                                    'species': 'etc' if r['species'] == 'other' else r['species']}
+                     for r in rows}.values())
+
+    async def lookup_db(self, species: str, name: str = '') -> list[dict]:
+        """AI tool: execute a scoped LIKE query against the source database."""
+        return self._public_rows(await self._rows(species, name))
+
     async def lookup(self, species: str, name: str = '') -> list[dict]:
-        """축종 및 선택 품종명으로 활성 DB 품종 조회 (LIKE %품종명%)."""
-        # Literal substring matching is LIKE with user wildcards escaped.
+        """Public cached list; filter with the same literal LIKE substring semantics."""
         query = normalize(name)
         rows = await self.rows(species)
-        unique = {r['kind_code']: {k: ('etc' if r[k] == 'other' else r[k]) for k in ('kind_code', 'name', 'species')}
-                  for r in rows if query in normalize(r['name'])}
-        return list(unique.values())
+        return self._public_rows(r for r in rows if query in normalize(r['name']))
