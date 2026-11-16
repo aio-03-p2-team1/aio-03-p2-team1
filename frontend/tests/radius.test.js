@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { distanceLabel, kmLabel, previousRadiusKm, radiusText, widenRadiusAction } from '../src/lib/radius.js'
 
-const applied = { applied: true, step: 1, radius_km: 10, inside: 4, unknown: 1, excluded: 7, lost_place: '서울특별시 강서구 화곡동' }
+const applied = { applied: true, auto: false, step: 1, radius_km: 10, inside: 4, unknown: 1, excluded: 7, lost_place: '서울특별시 강서구 화곡동' }
 
 test('radius summary shows counts and basis', () => {
   const text = radiusText(applied)
@@ -75,12 +75,17 @@ test('preview radius needs a picked point and a date', () => {
 
 test('guide text explains days and the next widening day', () => {
   assert.deepEqual(radiusGuide({ days_since_lost: 5, radius_km: 10, step: 1, auto: true, next_widen_day: 8 }),
-    ['실종 후 5일이 지났어요. 실종 위치에서 10km 안을 찾아요.', '8일째부터는 20km로 넓혀 찾아요.'])
+    ['실종 후 5일이 지났어요. 실종 위치에서 10km 안을 찾아요.', '실종 후 8일이 지나면 20km로 넓혀 찾아요.'])
   assert.deepEqual(radiusGuide({ days_since_lost: 0, radius_km: 3, step: 0, auto: true, next_widen_day: 4 })[0],
     '오늘 실종됐어요. 실종 위치에서 3km 안을 찾아요.')
   assert.equal(radiusGuide({ days_since_lost: 10, radius_km: 20, step: 2, auto: true, next_widen_day: 15 })[1],
-    '15일째부터는 조회 지역 전체에서 찾아요.')
+    '실종 후 15일이 지나면 조회 지역 전체에서 찾아요.')
   assert.deepEqual(radiusGuide({ days_since_lost: 2, radius_km: 10, step: 1, auto: false, next_widen_day: null }),
     ['넓히기를 선택해 실종 위치에서 10km 안을 찾아요.', ''])
   assert.match(radiusGuide({ days_since_lost: 20, radius_km: null })[0], /조회 지역 전체/)
+})
+
+test('dashed previous circle only after the user widened', () => {
+  assert.equal(previousRadiusKm({ applied: true, step: 1, radius_km: 10, auto: false }), 3)
+  assert.equal(previousRadiusKm({ applied: true, step: 1, radius_km: 10, auto: true }), null) // 날짜로 자동 10km
 })

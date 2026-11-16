@@ -70,8 +70,8 @@ export function radiusGuide(radius) {
   if (radius.auto !== false && radius.next_widen_day != null) {
     const nextKm = RADIUS_STEPS_KM[radius.step + 1]
     next = nextKm == null
-      ? `${radius.next_widen_day}일째부터는 조회 지역 전체에서 찾아요.`
-      : `${radius.next_widen_day}일째부터는 ${nextKm}km로 넓혀 찾아요.`
+      ? `실종 후 ${radius.next_widen_day}일이 지나면 조회 지역 전체에서 찾아요.`
+      : `실종 후 ${radius.next_widen_day}일이 지나면 ${nextKm}km로 넓혀 찾아요.`
   }
   return [main, next]
 }
@@ -95,9 +95,10 @@ export function radiusText(radius) {
   return `${parts.join(' · ')} (관할 구청 기준 직선거리, 도로 거리 아님)`
 }
 
-/** 이전 단계 반경(km). 넓힌 경우 지도에 점선 원으로 함께 보여 준다. */
+/** 이전 단계 반경(km). 사용자가 넓히기를 고른 경우(auto=false)에만 지도에 점선 원으로 함께 보여 준다.
+ *  날짜가 지나 자동으로 넓어진 경우에는 '넓히기 전'이 없으므로 그리지 않는다. */
 export function previousRadiusKm(radius) {
-  if (!radius?.applied || !(radius.step > 0)) return null
+  if (!radius?.applied || !(radius.step > 0) || radius.auto !== false) return null
   return RADIUS_STEPS_KM[radius.step - 1] ?? null
 }
 
