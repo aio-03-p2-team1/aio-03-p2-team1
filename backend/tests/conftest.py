@@ -90,7 +90,7 @@ def kakao_transport(handler):
     return httpx.MockTransport(handler)
 
 
-def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None, assessor=None) -> AppContext:
+def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None, search_agent=None) -> AppContext:
     settings = settings or make_settings()
     return AppContext(
         settings=settings,
@@ -100,7 +100,7 @@ def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None, asse
         kakao=kakao or KakaoGeocoder(None),
         llm=llm,
         embedder=FakeEmbedder(),
-        assessor=assessor,
+        search_agent=search_agent,
     )
 
 

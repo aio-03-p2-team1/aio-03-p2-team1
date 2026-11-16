@@ -57,8 +57,18 @@ class SearchState(TypedDict, total=False):
     candidates: list[dict[str, Any]]
     confidence: dict[str, Any] | None  # 결과 확신 신호(low, reasons, signals). validate 가 계산
     agent_history: list[dict[str, Any]]  # 같은 대화에서 에이전트가 이미 요청한 것(반복 요청 방지)
-    agent_request: dict[str, Any] | None  # assess 가 고른 요청(사진·추가 정보). 없으면 None
-    agent_decision: dict[str, Any] | None  # assess 판단 기록(고른 도구, 이유, 허용 행동, 프롬프트 버전)
+    agent_request: dict[str, Any] | None  # 에이전트가 끝내며 고른 요청(사진·추가 정보). 없으면 None
+    agent_decision: dict[str, Any] | None  # 에이전트 판단 기록(출처, 마지막 도구, 걸음·다시 찾기 수, 단계별 로그)
+    # 검색 에이전트 루프(agent ⇄ agent_tools) 작업 상태. 응답(run)에는 agent_decision 만 남긴다.
+    agent_messages: list[Any]  # LLM 대화(시스템·신호·도구 호출·도구 결과)
+    agent_steps: int  # LLM 걸음 수
+    agent_reruns: int  # 조건을 고쳐 다시 찾은 횟수
+    agent_done: bool
+    agent_next: str | None  # 도구 실행 후 갈 노드(rank·radius). 없으면 다시 agent
+    agent_rerun_pending: bool  # 다시 찾은 결과를 다음 agent 걸음에 알려야 함
+    agent_source: str  # 사용자 원문(수정 값 검증의 근거). 처음 걸음에 고정
+    agent_before: dict[str, Any]  # 다시 찾기 전 결과 요약(이전 대비 비교용)
+    agent_log: list[dict[str, Any]]  # 단계별 기록: 읽기·수정·거부·다시 찾은 결과
 
     issues: list[dict[str, Any]]
     reflection_enabled: bool
