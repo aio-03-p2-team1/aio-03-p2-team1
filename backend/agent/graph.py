@@ -10,7 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
-from backend.agent.ranking import TOP_K, cosine, feature_text, fuse_rrf, in_scope, rank
+from backend.agent.ranking import TOP_K, confidence_signals, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
 from backend.tools.animal_api import AnimalApiError, short_region_name
 from backend.tools.kakao import KakaoError
@@ -358,7 +358,9 @@ async def validate(state: SearchState, config) -> dict:
                        "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
     elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
-    return {"issues": issues, "trace": ["validate"]}
+    # 결과가 있으면 확신 신호를 계산한다. 낮으면 assess 노드(LLM 도구 선택)가 추가 정보·사진 요청을 판단한다.
+    confidence = confidence_signals(candidates, criteria, state.get("llm_features")) if candidates else None
+    return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
 FIXES = {
     "duplicates": {"strategy": "dedupe_and_rerank", "next": "rank", "fix": {"dedupe": True}},

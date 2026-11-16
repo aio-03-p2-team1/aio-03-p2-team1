@@ -55,6 +55,9 @@ class SearchState(TypedDict, total=False):
     retry_count: int
 
     candidates: list[dict[str, Any]]
+    confidence: dict[str, Any] | None  # 결과 확신 신호(low, reasons, signals). validate 가 계산
+    agent_history: list[dict[str, Any]]  # 같은 대화에서 에이전트가 이미 요청한 것(반복 요청 방지)
+    agent_request: dict[str, Any] | None  # assess 가 고른 요청(사진·추가 정보). 없으면 None
 
     issues: list[dict[str, Any]]
     reflection_enabled: bool
