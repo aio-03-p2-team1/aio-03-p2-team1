@@ -23,7 +23,7 @@ PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
 
 def _deps(ctx: AppContext) -> dict[str, Any]:
     return {"settings": ctx.settings, "store": ctx.store, "animal": ctx.animal, "kakao": ctx.kakao, "llm": ctx.llm,
-            "embedder": ctx.embedder, "search_cache": ctx.search_cache, "assessor": ctx.assessor, "breed_normalizer": ctx.breed_normalizer}
+            "embedder": ctx.embedder, "search_cache": ctx.search_cache, "search_agent": ctx.search_agent, "breed_normalizer": ctx.breed_normalizer}
 
 
 def page_result(run, page=1, page_size=20):

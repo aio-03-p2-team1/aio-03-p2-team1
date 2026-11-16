@@ -43,8 +43,13 @@ flowchart TD
   X -- 중복 제거·재정렬 --> R
   X -- 사용자 확인 필요 --> Q
   V -- 통과·확신 충분 --> L[locate<br/>상위 3개 보호센터 좌표]
-  V -- 통과·확신 낮음 --> AS[assess<br/>LLM 도구 호출: 사진·정보 요청 판단]
-  AS --> L
+  V -- 통과·확신 낮음·에이전트 진행 중 --> AG[agent<br/>LLM이 도구 하나 선택]
+  AG -- 도구 호출 --> AT[agent_tools<br/>서버 검증·실행]
+  AT -- 읽기·거부 --> AG
+  AT -- 특징 수정·조건 완화 --> R
+  AT -- 반경 넓히기 --> RD
+  AT -- 요청·확정 --> L
+  AG -- LLM 없음·실패·한도 --> L
   V -- 수정 불가·성찰 비활성·한도 초과 --> F
   L --> F[finalize<br/>상위 300개·범위·종료 상태]
   Q --> END1([END awaiting_input])
@@ -129,8 +134,12 @@ sequenceDiagram
 | `candidates` | 후보(점수·근거·위치) | list | — | rank, locate, finalize | run |
 | `confidence` | 결과 확신 신호 `{low, reasons, signals, version}` | dict \| None | — | validate | run(캐시 포함) |
 | `agent_history` | 같은 대화에서 이미 한 요청 수·물은 항목·'모르겠어요' 항목 | dict | thread | runner | thread(`agent`) |
-| `agent_request` | assess 가 고른 화면 요청(`photo` 또는 `info`+보기) | dict \| None | — | assess | run(캐시 제외) |
-| `agent_decision` | assess 판단 기록(고른 도구, 출처 llm/no_llm/llm_error/limit, 허용 행동, 프롬프트 버전) | dict \| None | — | assess | run(캐시 제외) |
+| `agent_request` | 에이전트가 끝내며 고른 화면 요청(`photo` 또는 `info`+보기) | dict \| None | — | agent_tools | run(캐시 제외) |
+| `agent_decision` | 에이전트 기록(출처 llm/no_llm/llm_error/step_limit/no_tool_call, 마지막 도구, 걸음·다시 찾기 수, 단계별 log, 프롬프트 버전) | dict \| None | — | agent, agent_tools | run(캐시 제외) |
+| `agent_messages` | LLM 대화(시스템·신호·도구 호출·도구 결과) | list | — | agent, agent_tools | 저장 안 함 |
+| `agent_steps` / `agent_reruns` | LLM 걸음 수 / 조건 수정 후 다시 찾은 수 | int | — | agent / agent_tools | 저장 안 함 |
+| `agent_done` / `agent_next` / `agent_rerun_pending` | 루프 종료 여부 / 도구 뒤 갈 노드(rank·radius) / 다시 찾은 결과 알림 필요 | — | — | agent_tools | 저장 안 함 |
+| `agent_source` / `agent_before` / `agent_log` | 사용자 원문(수정 근거) / 다시 찾기 전 요약 / 단계별 기록 | — | — | agent, agent_tools | `agent_log` 는 `agent_decision.log` 로 run 에 남음 |
 | `issues` | 검증 문제 | list | — | plan, validate, reflect, finalize | run |
 | `reflection_enabled` | 성찰 사용 여부(평가 변수) | bool | True | — | run |
 | `reflection_count` / `reflections` | 판단 오류 수정 횟수·기록(누적) | int / list | 0 / [] | reflect | run |
@@ -165,7 +174,7 @@ flowchart LR
   C -- duplicates --> DD[중복 공고 제거] --> RR[rank 재실행]
   C -- condition_violation --> RF[필터 재적용] --> RR
   C -- empty_narrow --> W[범위 확대 동의 질문]
-  C -- empty_radius --> WR[반경 확대 동의 질문<br/>동의 시 radius_step+1 로 재검색]
+  C -- empty_radius --> WR[20km 까지 자동 확대 후에도 0건이면<br/>조회 지역 전체 확대 동의 질문]
   C -- tool_error --> STOP[재시도 중단·원인 안내]
   P --> V[같은 검증 반복]
   RR --> V
@@ -245,7 +254,7 @@ flowchart LR
 - 미적중은 Redis NX 잠금 후 다시 GET한다. 그래프 실행은 최대 120초, 잠금은 150초이며 대기는 최대 125초다. 잠금 소유 토큰을 WATCH로 확인한 뒤 해제한다. Redis 장애는 503, 잠금 대기 초과는 409, 실행 시간 초과는 504다.
 - 공고는 1,000건 한 페이지를 조회한다. 실제 전체가 더 크면 `scope.complete=false`와 실제 조회 건수를 표시한다. API 통신 실패 재시도 규칙은 유지한다. `MAX_SEARCH_PAGES`는 호환용 필드이며 조회량에 영향을 주지 않는다.
 - `embeddings.py`는 `text-embedding-3-small`에 검색 특징 + 공고 전부를 128개 단위로 보내고 응답 인덱스/개수/1,536차원/유한값/영벡터를 검사한다. 이메일·전화·좌표·ID는 공고 임베딩 텍스트에 넣지 않는다. 벡터는 그래프 실행 안에서만 사용한다.
-- 기존 규칙 순위와 코사인 순위의 RRF 합산 점수는 `1/(60+rank_lexical)+1/(60+rank_semantic)`이다. `score`는 RRF 점수이며 기존 점수는 `lexical_score`, 유사도는 `semantic_score`, 순위 근거는 `rrf_ranks`로 반환한다. 점수는 동일 개체일 확률이 아니다.
+- 기존 규칙 순위와 코사인 순위의 RRF 합산 점수는 `1/(60+rank_lexical)+1/(60+rank_semantic)`이다. 반경이 적용되면 거리 순위를 더해 `+0.5/(60+rank_distance)`(가중치 `DISTANCE_WEIGHT=0.5`, 임시값·미측정). 거리 순위는 실종 위치에서 1km 단위로 묶어 같은 km는 같은 순위, 거리 미확인은 모두 맨 뒤다. 거리를 아는 공고가 없으면(반경 미적용) 거리 항은 쓰지 않는다. `rrf_ranks.distance`로 반환한다. `score`는 RRF 점수이며 기존 점수는 `lexical_score`, 유사도는 `semantic_score`, 순위 근거는 `rrf_ranks`로 반환한다. 점수는 동일 개체일 확률이 아니다.
 - 상태에 `semantic_scores`(공고 ID→코사인 점수, rank에서 갱신, 비영속), `ranking_method`(rrf/sample_lexical, 실행 이력 저장)를 추가했다. 성찰 재정렬은 이미 계산한 유사도를 재사용한다.
 - 성공한 결과는 상위 최대 300건 및 실행 메타데이터만 TTL 600초로 저장한다. 원본 목록·벡터·사용자 ID·run/thread ID는 조건 캐시 값에서 제외한다. 캐시 조회로 TTL을 연장하지 않는다. 오류·질문 상태는 캐시하지 않는다. 신규 공고 감지를 위한 주기적 조회는 없다.
 - 실행 이력에도 상위 300건을 저장한다. `snapshot_id`를 비교해 같은 조건이 만료 후 갱신되더라도 기존 이력의 후보를 다른 스냅샷으로 교체하지 않는다. Redis 만료 후의 이력 조회는 저장소를 사용하며 API/임베딩을 재실행하지 않는다.
@@ -253,7 +262,7 @@ flowchart LR
 - `SearchViewProvider`를 Routes 위에 두어 검색 폼·지역·결과 페이지를 유지한다. `react-router-dom`의 `/search?run=<id>&page=<n>`과 메모리 캐시(최대 45페이지, 10분)를 함께 사용한다. 상세 화면 뒤로가기 시 페이지와 스크롤을 복원한다. 계정이 바뀌면 Provider를 초기화한다. 새로고침은 URL의 실행 ID/페이지로 이력을 다시 읽는다.
 - 전체 공고(`/`)는 특징 쿼리가 없는 별도 목록이므로 기존 조회 경로를 유지한다. 위 RRF·300건·페이지네이션 계약은 맞춤 검색(`/search`)에 적용된다.
 
-## 11. 검색 반경 (radius-v1)
+## 11. 검색 반경 (radius-v2)
 
 실종 후 지난 날짜로 반경을 정해, 이미 조회한 공고(최대 1,000건) 안에서 실종 위치와 가까운 공고만 남긴다. 공고 API 를 반경 때문에 다시 부르지 않는다.
 
@@ -265,40 +274,43 @@ flowchart LR
 - **실종 위치(반경 중심):** 사용자가 지도에서 찍은 좌표(`criteria.lost_lat`·`lost_lng`)를 쓴다(`radius.center_source=user_pin`). 요청 스키마가 한국 범위(위도 33~39, 경도 124~132)를 벗어나면 422, `criteria.normalize` 가 숫자·범위를 다시 검사하고 소수 6자리로 맞춘다. 좌표는 실종 위치와 한 묶음이라, 새 `lost_place` 를 보낸 요청은 이전 세션 좌표를 이어받지 않는다. 좌표를 조작해도 그 사용자 자신의 검색 결과만 바뀐다. 좌표가 없으면 실종 위치 주소(`criteria.lost_place`)를 서버가 카카오 주소 검색으로 좌표화한다(`center_source=address`). 동 이름은 법정동·행정동(예: 망원동·망원1동·망원2동)이 함께 나오므로 `geocode(..., allow_ambiguous=True)` 로 카카오의 첫 문서를 쓴다. 보호센터 마커 조회는 기존처럼 여러 건이면 좌표를 쓰지 않는다.
 - **공고 위치:** 구조 장소(`happen_place`)에서 읍·면·동 이름(한글로 시작, 앞부분 두 글자 이상)을 뽑아 `관할 시군구 + 읍면동`(예: `경상북도 경주시 외동읍`) 중심으로 근사한다(`distance_basis=rescue_area`). 못 뽑거나 좌표를 못 구하면 관할 시군구(`care.org`) 중심으로 대신한다(`jurisdiction_center`). 넓은 시·군은 시청과 실제 구조 장소가 20km 가까이 떨어질 수 있다(2026-11-16 경주시 외동읍 사례: 같은 읍에서 구조된 공고가 시청 기준 약 18km로 반경 밖 처리). 좌표를 못 구한 공고는 `distance_basis=unknown` 으로 **남긴다**(누락 ≠ 불일치). 반경 밖으로 확인된 공고만 제외하고, 제외된 공고는 임베딩하지 않는다.
 - **거리:** 하버사인 직선거리(km). 도로 거리·이동 시간이 아니다. 화면에 "구조된 읍·면·동 기준 직선거리(모르면 관할 시·군·구 기준)"로, 후보 카드에는 "구조 장소 기준"·"관할 기준"을 구분해 표시한다.
-- **넓히기:** 반경 안 0건이고 반경 밖 공고가 있으면 `validate` 가 `empty_radius` 를 감지하고 `reflect` 가 다음 반경을 묻는다(`questions[].field=radius`, `next_step`). 사용자가 버튼으로 동의하면 같은 `thread_id` 로 `criteria.radius_step` 을 보내 다시 검색한다. 조용히 넓히지 않는다.
+- **자동 확대(radius-v2):** 적용한 반경 안(거리 미확인 포함)에 공고가 0건이면 `radius` 노드가 다음 단계로 자동으로 넓힌다. 3km → 10km → 20km 순서이며 `AUTO_WIDEN_MAX_KM=20` 까지만 넓힌다. 이미 구한 좌표로 거리만 다시 비교하므로 카카오를 추가로 호출하지 않는다. 결과 `radius` 에 `requested_km`(처음 반경), `auto_widened`, `widen_trail`(예: `[3.0, 10.0, 20.0]`)을 남기고, 화면 반경 요약 앞에 '3km 안에 공고가 없어 10km → 20km로 넓혀 찾았어요.'를 붙인다. 자동으로 넓혔으면 경과일 기준 다음 단계 안내(`next_widen_day`)는 지운다.
+- **넓히기 질문:** 20km 까지 넓혀도 반경 안 0건이고 반경 밖 공고가 있으면 `validate` 가 `empty_radius` 를 감지하고 `reflect` 가 '조회 지역 전체'로 넓힐지 묻는다(`questions[].field=radius`, `next_step=3`). 사용자가 버튼으로 동의하면 같은 `thread_id` 로 `criteria.radius_step` 을 보내 다시 검색한다. 조회 지역 전체로는 묻지 않고 넓히지 않는다.
 - **적용하지 않는 경우(`radius.applied=false`, `reason`):** `whole_region`(15일 이상·실종 날짜 없음), `lost_place_missing`, `not_configured`(카카오 REST 키 없음), `center_unavailable`(실종 위치 좌표 실패), `no_items`. 이때는 기존처럼 시·도 단위로 찾는다.
-- **캐시:** 정규화 조건(반경 단계 포함)과 `radius-v1`/카카오 키 유무를 조건 캐시 키에 넣는다. 좌표는 성공한 것만 프로세스 메모리에 캐시한다.
+- **캐시:** 정규화 조건(반경 단계 포함)과 `radius-v2`/카카오 키 유무를 조건 캐시 키에 넣는다. 좌표는 성공한 것만 프로세스 메모리에 캐시한다.
 - **지도:** 범위 지도는 실종 지역 선택 창(`RegionPicker`, `withRadius`) 하나다. 실종 날짜를 창 안에서 받고, 위치를 고르는 즉시 카카오 `Circle` 과 "실종 후 N일 · M km" 안내를 그린다. 검색 결과 위에는 지도 없이 반경 요약 한 줄(`radiusText`)만 보여 준다. 공고 마커는 찍지 않는다(관할 중심이라 실제 발견 위치처럼 보일 수 있음).
-- **한계:** 조회 지역이 시·도라 반경이 시·도 경계를 넘어도 인접 시·도 공고는 가져오지 않는다. 읍면동·관할 중심 근사라 실제 발견 위치와 다를 수 있다. 정렬(RRF)은 바꾸지 않았고 거리는 필터·표시에만 쓴다.
+- **한계:** 조회 지역이 시·도라 반경이 시·도 경계를 넘어도 인접 시·도 공고는 가져오지 않는다. 읍면동·관할 중심 근사라 실제 발견 위치와 다를 수 있다. 거리는 필터·표시와 RRF 거리 순위(10장, 가중치 0.5)에 쓴다.
 
 - **날짜 기준:** 실종 후 경과일과 검색 기간의 '오늘'은 한국 날짜(`backend/timeutil.kst_today`)다. 서버가 UTC 여도 한국 시간 0~9시에 하루 어긋나지 않는다.
 - **화면 안내용 요약 필드:** `radius.days_since_lost`(실종 후 경과일), `auto`(날짜로 정한 단계면 true, 사용자가 넓히기를 골랐으면 false), `next_widen_day`(자동 단계에서 다음 단계로 넓어지는 경과일). 화면은 이 값으로 "실종 후 N일 · M km" 안내를 만든다. 검색 전 미리 보기(실종 지역 선택 창: 실종 날짜 입력, 위치를 고르는 즉시 반경 원과 안내 표시)는 같은 기준표(`frontend/src/lib/radius.js` 의 `STEP_BY_DAYS`)로 브라우저에서 계산하며, 두 표가 같은지 프론트 테스트로 확인한다.
 
-## 12. 결과 확신 판단과 에이전트 요청 (assess, assess-v1 · conf-v1)
+## 12. 검색 에이전트 (search-agent-v1 · conf-v1)
 
-검색 결과가 애매할 때 LLM이 **도구 호출(function calling)** 로 다음 행동을 고른다. 결과는 막지 않고, 요청 카드와 후보 목록을 함께 보여 준다.
+검색 결과가 애매할 때 LLM이 **도구 호출(function calling)로 결과를 읽고, 판단하고, 조건을 고쳐 다시 찾는다.** 결과는 막지 않는다. 규칙 기반 재시도(reflect: 0건·조건 위반·중복)는 그대로 두고, 에이전트는 결과가 있는데 애매할 때만 돈다.
 
-- **확신 신호(`ranking.confidence_signals`, validate 에서 계산):** RRF 점수는 순위 기반(1/(k+순위))이라 결과가 엉망이어도 1등 점수가 비슷해 쓰지 않는다. 대신
+- **언제 도나(`ranking.confidence_signals`, validate 에서 계산, 기준값 임시·미측정):** RRF 점수는 순위 기반(1/(60+순위))이라 쓰지 않는다. 아래 중 하나면 애매함.
   - 입력 특징 수(품종·털색·성별·크기·특징) ≤ 1 → `few_features`
   - 믹스견(믹스·잡종·혼종)이고 사진 특징이 없음 → `mixed_breed`
   - 1등 벡터 유사도 < 0.45 → `weak_similarity`, 상위 3건 이상에서 1·2등 차이 < 0.01 → `flat_top`
   - 특징을 줬는데 1등 후보 일치 근거가 0개 → `no_feature_match`
-  - 사유가 하나라도 있으면 `low=true`. **기준값은 임시(conf-v1)이며 측정 후 조정한다(미측정).**
-- **도구(`backend/agent/assess.py`, `bind_tools(tool_choice="required", parallel_tool_calls=False)`):**
+- **루프(`graph.agent_node` ⇄ `graph.agent_tools_node`, 도구 정의 `backend/agent/search_agent.py`):** 서버가 처음 메시지에 결과 신호·사용자 원문·현재 조건·상위 후보 5개 요약(품종·털색·성별·나이·특징 80자·유사도·일치/불일치/미확인, 공고 번호·날짜·연락처·주소 제외)을 미리 넣는다(읽기 도구 호출을 없애 LLM 호출 수를 줄임). agent 가 `bind_tools(tool_choice="required", parallel_tool_calls=False)` 로 도구 하나를 고르고, agent_tools 가 서버 규칙으로 검증·실행해 결과(ToolMessage)를 대화에 붙인다. 조건을 고치면 rank(또는 radius)부터 다시 돌고, validate 뒤 agent 가 새 신호와 이전 대비 변화를 받아 다시 판단한다.
 
-| 도구 | 인자 | 화면 |
-| --- | --- | --- |
-| `request_photo` | `reason` | [사진 올리기] → 사진 분석 → 특징을 설명 앞에 넣고 같은 대화로 재검색(재임베딩·재정렬) |
-| `request_info` | `field ∈ color·size·sex·marks`, `reason` | 서버 보기 버튼(털색 9종, 소형/중형/대형, 수컷/암컷, 특징 7종) → 고르면 칩으로 남기고 같은 대화로 재검색 |
-| `accept_results` | `note` | 요청 없음 |
+| 구분 | 도구 | 인자 | 서버 처리 |
+| --- | --- | --- | --- |
+| 수정 | `update_features` | `colors`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값만 반영 → 유사도 다시 계산(rank) |
+| 수정 | `relax_condition` | `field ∈ breed·sex`, `reason` | 그 조건 제거 → rank |
+| 수정 | `widen_radius` | `reason` | 반경 적용 중이고 최대 단계가 아니면 `radius_step+1` → radius(공고 API 재호출 없음) |
+| 종료 | `request_photo` | `reason` | 대화당 1회, 사진을 이미 줬거나 '모르겠어요'면 거부 |
+| 종료 | `request_info` | `field ∈ color·size·sex·marks`, `reason` | 보기는 서버 목록(털색 9종, 소형/중형/대형, 수컷/암컷, 특징 7종), 대화당 2회, 이미 받은 정보·이미 물은 항목·'모르겠어요' 거부 |
+| 종료 | `finish` | `note` | 지금 결과로 확정 |
 
-- **사실 생성 방지:** 프롬프트에서 번호·날짜·숫자·연락처·특징을 지어내지 말라고 하고, 서버가 다시 검증한다. 보기는 서버 목록만 쓰고(LLM이 준 보기는 무시), 이유 문장에 숫자·링크가 있거나 60자를 넘으면 고정 문구로 바꾼다. LLM 입력에는 계산된 신호만 넣고 공고 내용·개인정보는 넣지 않는다.
-- **반복 제한(thread `agent`):** 사진 1회, 정보 2회, 이미 물은 항목·이미 받은 정보·'잘 모르겠어요'(`SearchBody.declined`) 항목은 다시 묻지 않는다. 허용 행동 밖을 고르면 요청 없음(`rejected=true`).
-- **실패:** LLM 키 없음(`no_llm`)·오류(`llm_error`)·한도(`limit`)는 모두 요청 없이 결과만 보여 준다. `tool_calls` 에 `agent_assess` 로 기록한다.
-- **캐시:** `confidence` 는 조건 캐시에 넣고, `agent_request`/`agent_decision` 은 대화마다 달라 넣지 않는다. 캐시 적중 시에도 같은 `assess` 함수로 다시 판단한다.
-- **API 계약 변경:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5) 추가. 응답 run 에 `confidence`, `agent_request`, `agent_decision` 추가. 의존성 `AppContext.assessor`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델 사용).
-- **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색, 막지 않는 안내), 아래에 답한 값 칩(`털색: 흰색 ✕`). 설명 글은 고치지 않고 칩 값을 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
-- **검증:** 가짜 도구 client 로 시험(`backend/tests/test_assess.py`). 실제 OpenAI 도구 호출과 판단 품질은 서버에서 확인 예정(미측정).
+- **지어내기 방지:** LLM 출력은 도구 인자뿐이고 모두 서버가 검증한다. 근거 없는 값·허용되지 않은 요청은 거부 이유를 도구 결과로 돌려줘 LLM이 다른 선택을 하게 한다. 원문은 첫 걸음에 `agent_source` 로 고정해, 에이전트가 고친 값이 다음 수정의 근거가 되지 않게 한다. 이유 문장에 숫자·링크가 있거나 60자를 넘으면 서버 고정 문구로 바꾼다(`assess.py`).
+- **한도:** LLM 걸음 최대 4(흔한 흐름은 수정 1 + 종료 1 = 2걸음), 다시 찾기 최대 2. 다시 찾은 뒤 메시지에도 새 상위 후보 요약을 넣는다. 한도를 넘거나 LLM 없음·실패·도구 미선택이면 지금 결과를 그대로 보여 준다(`agent_decision.source`). 그래프 recursion_limit 80.
+- **기록:** `agent_decision.log` 에 시작 신호, 도구별 인자·성공/거부, 다시 찾은 결과(후보 수·1등 유사도·1등 후보)가 순서대로 남고, `tool_calls` 에 `agent_<도구>` 로 남는다.
+- **캐시:** 에이전트가 조건을 고쳐 다시 찾은 결과(reruns>0)는 캐시에 넣지 않는다. 애매한 결과의 캐시 적중은 에이전트가 있으면 쓰지 않고 다시 돌린다. `agent_request`/`agent_decision` 은 캐시에 넣지 않는다.
+- **API 계약:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5). 응답 run 에 `confidence`, `agent_request`, `agent_decision`. 에이전트가 조건을 고치면 run 의 `criteria` 에 고친 값이 보인다(대화 thread 의 확인 조건에는 사용자 입력만 저장). 의존성 `AppContext.search_agent`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델).
+- **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색), 아래에 답한 값 칩(`털색: 흰색 ✕`). 칩 값은 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
+- **검증:** 가짜 도구 client 로 루프·검증·한도·거부를 시험(`backend/tests/test_search_agent.py`). 실제 LLM 판단 품질은 미측정.
 
 ## 13. 품종 검색 (breed-v3)
 
@@ -315,3 +327,5 @@ FastAPI lifespan에서 `KindRepository.load_catalog()`를 실행해 모든 축�
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 
 프롬프트/조건 캐시 버전은 feature-extract-v5 / rrf-breed-v3다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+
+검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.
