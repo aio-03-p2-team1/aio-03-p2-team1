@@ -182,7 +182,7 @@ flowchart LR
 
 ## 7.1 공공 품종 기준정보
 
-`scripts/init_kinds.py`는 `ANIMAL_API_KEY`로 `kind_v2`를 축종별(개 `417000`, 고양이 `422400`, 기타 `429900`) 전체 페이지 조회해 `kinds` 기준정보를 동기화한다. `STORAGE_BACKEND=sqlite`이면 `SQLITE_PATH`, `supabase`이면 `SUPABASE_SCHEMA`의 Data API 테이블을 사용한다. 실행 전 Supabase에서는 `scripts/bootstrap_schema.sql`의 품종 테이블 정의를 적용한다.
+`scripts/init_kinds.py`는 `ANIMAL_API_KEY`로 `kind_v2`를 축종별(개 `417000`, 고양이 `422400`, 기타 `429900`) 전체 페이지 조회해 `kinds` 기준정보를 동기화한다. `STORAGE_BACKEND=sqlite`이면 `SQLITE_PATH`, `supabase`이면 `SUPABASE_SCHEMA`의 Data API 테이블을 사용한다. SQLite는 `scripts/bootstrap_schema.sql` 전체를 실행하고, Supabase는 해당 파일의 Supabase SQL 블록을 적용한다. 모든 테이블·인덱스 DDL은 이 bootstrap 파일에만 둔다.
 
 `kinds.kind_code`는 공공 API 코드이며, `species`, 표시 이름, 공백을 제거한 `search_name`, `active`, 출처와 갱신 시각을 함께 둔다. 품종이 API에서 사라져도 행을 삭제하지 않고 비활성화해 과거 코드 참조를 유지한다. 이름 검색은 `(species, search_name)` 인덱스를 이용하며, 요청 문자열도 공백 제거 후 비교한다. 이름 자체가 대표 이름의 공백 유무를 흡수하므로 별칭으로 중복 등록하지 않는다.
 

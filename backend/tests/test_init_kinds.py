@@ -1,6 +1,19 @@
+import asyncio
 import sqlite3
+from types import SimpleNamespace
+from pathlib import Path
 
-from scripts.init_kinds import SQLITE_SCHEMA, SqliteSink, normalize, normalize_record, parse_items
+import httpx
+import pytest
+
+from scripts.init_kinds import (
+    SqliteSink,
+    fetch_all,
+    normalize,
+    normalize_record,
+    parse_items,
+    require_api_key,
+)
 
 
 def test_parse_api_response_object_and_list():
@@ -34,11 +47,72 @@ def test_sqlite_sync_upserts_and_preserves_removed_codes(tmp_path):
 def test_sqlite_schema_has_search_indexes_and_foreign_key():
     db = sqlite3.connect(":memory:")
     db.execute("PRAGMA foreign_keys=ON")
-    db.executescript(SQLITE_SCHEMA)
+    bootstrap = Path("scripts/bootstrap_schema.sql").read_text(encoding="utf-8")
+    db.executescript(bootstrap)
+    db.executescript(bootstrap)
     db.execute("insert into kinds(species,kind_code,name,search_name,created_at,updated_at) values('dog','001','믹스견','믹스견','x','x')")
+    plan = db.execute("EXPLAIN QUERY PLAN SELECT kind_code FROM kinds WHERE species=? AND search_name=?", ("dog", "골든리트리버")).fetchone()[3]
+    assert "kinds_search_name_idx" in plan
     try:
         db.execute("insert into kind_aliases(kind_code,alias,search_alias,created_at,updated_at) values('missing','x','x','x','x')")
     except sqlite3.IntegrityError:
         pass
     else:
         raise AssertionError("kind_aliases foreign key was not enforced")
+
+
+def test_api_key_is_required():
+    with pytest.raises(RuntimeError, match="ANIMAL_API_KEY"):
+        require_api_key(SimpleNamespace(animal_api_key=None))
+
+
+class ResponseSequence:
+    def __init__(self, payloads):
+        self.payloads = iter(payloads)
+        self.calls = 0
+
+    async def get(self, *_args, **_kwargs):
+        self.calls += 1
+        return httpx.Response(200, json=next(self.payloads), request=httpx.Request("GET", "https://example.test"))
+
+
+def api_page(total, items):
+    return {"response": {"header": {"resultCode": "00"}, "body": {
+        "totalCount": total, "items": {"item": items} if items else ""
+    }}}
+
+
+def test_fetch_retries_when_received_count_is_below_total_count():
+    item1 = {"kind_cd": "1", "KNm": "하나"}
+    item2 = {"kind_cd": "2", "KNm": "둘"}
+    item3 = {"kind_cd": "3", "KNm": "셋"}
+    client = ResponseSequence([
+        api_page(3, [item1, item2]), api_page(3, []),  # truncated first attempt
+        api_page(3, [item1, item2]), api_page(3, [item3]),
+    ])
+    waits = []
+
+    async def fake_sleep(delay):
+        waits.append(delay)
+
+    settings = SimpleNamespace(animal_api_key=SimpleNamespace(get_secret_value=lambda: "test-key"),
+                               animal_api_base_url="https://example.test")
+    records = asyncio.run(fetch_all(client, settings, "417000", sleep=fake_sleep))
+    assert len(records) == 3
+    assert client.calls == 4
+    assert waits == [0.5]
+
+
+def test_fetch_throws_after_three_retries():
+    client = ResponseSequence([api_page(1, [])] * 4)
+    waits = []
+
+    async def fake_sleep(delay):
+        waits.append(delay)
+
+    settings = SimpleNamespace(animal_api_key=SimpleNamespace(get_secret_value=lambda: "test-key"),
+                               animal_api_base_url="https://example.test")
+    with pytest.raises(RuntimeError, match="totalCount 응답 부족"):
+        asyncio.run(fetch_all(client, settings, "417000", sleep=fake_sleep))
+    assert client.calls == 4
+    assert waits == [0.5, 1.0, 2.0]

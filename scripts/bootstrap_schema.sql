@@ -2,6 +2,38 @@
 -- 실행 위치: Supabase SQL Editor. 기존 테이블이 있으면 먼저 열·기본키 호환성을 확인한다.
 -- 실행 후 Data API 설정의 Exposed schemas 에 aio-03-p2-team1-demo 를 추가해야 한다(PGRST106 방지).
 
+-- SQLite 초기화 스크립트가 이 파일 전체를 직접 실행한다.
+CREATE TABLE IF NOT EXISTS kinds (
+    id INTEGER PRIMARY KEY,
+    species TEXT NOT NULL CHECK (species IN ('dog','cat','other')),
+    kind_code TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    search_name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+    source TEXT NOT NULL DEFAULT 'animal_api',
+    source_updated_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS kinds_search_name_idx ON kinds(species, search_name);
+CREATE INDEX IF NOT EXISTS kinds_name_idx ON kinds(species, name COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS kind_aliases (
+    id INTEGER PRIMARY KEY,
+    kind_code TEXT NOT NULL REFERENCES kinds(kind_code) ON UPDATE CASCADE ON DELETE CASCADE,
+    alias TEXT NOT NULL,
+    search_alias TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'curated',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(kind_code, search_alias)
+);
+CREATE INDEX IF NOT EXISTS kind_aliases_search_idx ON kind_aliases(search_alias);
+CREATE INDEX IF NOT EXISTS kind_aliases_code_idx ON kind_aliases(kind_code);
+
+/* SUPABASE_BOOTSTRAP_BEGIN
+-- Supabase 사용 시 SQL Editor에서 이 블록 안의 SQL만 실행한다.
+
 create schema if not exists "aio-03-p2-team1-demo";
 
 create table if not exists "aio-03-p2-team1-demo".documents (
@@ -64,3 +96,4 @@ grant usage, select on all sequences in schema "aio-03-p2-team1-demo" to service
 -- alter table "aio-03-p2-team1-demo".documents drop constraint if exists documents_kind_check;
 -- alter table "aio-03-p2-team1-demo".documents add constraint documents_kind_check
 --     check (kind in ('identity','thread','memory','saved','run','subscription','notification','post'));
+SUPABASE_BOOTSTRAP_END */

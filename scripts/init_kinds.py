@@ -25,23 +25,13 @@ ALIASES = {
     "믹스견": ["믹스", "혼종견"],
 }
 
-SQLITE_SCHEMA = """
-CREATE TABLE IF NOT EXISTS kinds (
- id INTEGER PRIMARY KEY, species TEXT NOT NULL CHECK(species IN ('dog','cat','other')),
- kind_code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, search_name TEXT NOT NULL,
- active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)), source TEXT NOT NULL DEFAULT 'animal_api',
- source_updated_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-);
-CREATE INDEX IF NOT EXISTS kinds_search_name_idx ON kinds(species, search_name);
-CREATE INDEX IF NOT EXISTS kinds_name_idx ON kinds(species, name COLLATE NOCASE);
-CREATE TABLE IF NOT EXISTS kind_aliases (
- id INTEGER PRIMARY KEY, kind_code TEXT NOT NULL REFERENCES kinds(kind_code) ON UPDATE CASCADE ON DELETE CASCADE,
- alias TEXT NOT NULL, search_alias TEXT NOT NULL, source TEXT NOT NULL DEFAULT 'curated',
- created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(kind_code, search_alias)
-);
-CREATE INDEX IF NOT EXISTS kind_aliases_search_idx ON kind_aliases(search_alias);
-CREATE INDEX IF NOT EXISTS kind_aliases_code_idx ON kind_aliases(kind_code);
-"""
+BOOTSTRAP_SQL = Path(__file__).resolve().with_name("bootstrap_schema.sql")
+
+
+def require_api_key(settings: Settings) -> str:
+    if settings.animal_api_key is None:
+        raise RuntimeError("ANIMAL_API_KEY 가 설정되지 않았습니다")
+    return settings.animal_api_key.get_secret_value()
 
 def normalize(value: str) -> str:
     return re.sub(r"\s+", "", value).casefold()
@@ -58,20 +48,48 @@ def parse_items(payload: dict) -> tuple[int, list[dict]]:
         raw = [raw]
     return int(body.get("totalCount", len(raw)) or 0), raw
 
-async def fetch_all(client: httpx.AsyncClient, settings: Settings, up_kind_cd: str) -> list[dict]:
-    collected = []
-    page = 1
-    while True:
-        response = await client.get(f"{settings.animal_api_base_url}/kind_v2", params={
-            "serviceKey": settings.animal_api_key.get_secret_value(), "up_kind_cd": up_kind_cd,
-            "_type": "json", "numOfRows": 1000, "pageNo": page,
-        })
-        response.raise_for_status()
-        total, items = parse_items(response.json())
-        collected.extend(items)
-        if not items or len(collected) >= total:
-            return collected
-        page += 1
+async def fetch_all(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    up_kind_cd: str,
+    *,
+    sleep=asyncio.sleep,
+) -> list[dict]:
+    """Fetch pages and retry failed or short responses (3 retries after first attempt)."""
+    api_key = require_api_key(settings)
+    last_error: Exception | None = None
+    for attempt in range(4):
+        collected: list[dict] = []
+        expected_count: int | None = None
+        page = 1
+        try:
+            while expected_count is None or len(collected) < expected_count:
+                response = await client.get(f"{settings.animal_api_base_url}/kind_v2", params={
+                    "serviceKey": api_key,
+                    "up_kind_cd": up_kind_cd,
+                    "_type": "json",
+                    "numOfRows": 1000,
+                    "pageNo": page,
+                })
+                response.raise_for_status()
+                total, items = parse_items(response.json())
+                expected_count = max(expected_count or 0, total)
+                collected.extend(items)
+                if not items:
+                    break
+                page += 1
+            if expected_count is not None and len(collected) >= expected_count:
+                return collected
+            last_error = RuntimeError(
+                f"totalCount 응답 부족 (축종 코드 {up_kind_cd}: {len(collected)}/{expected_count})"
+            )
+        except (httpx.HTTPError, ValueError, RuntimeError) as exc:
+            # HTTP 예외의 str 에는 serviceKey가 포함된 URL이 들어갈 수 있어 출력하지 않는다.
+            last_error = exc
+        if attempt < 3:
+            await sleep(0.5 * (2 ** attempt))
+    detail = str(last_error) if isinstance(last_error, RuntimeError) else type(last_error).__name__
+    raise RuntimeError(f"품종 API 조회 실패 (축종 코드 {up_kind_cd}): {detail}") from None
 
 def normalize_record(species: str, item: dict, now: str) -> dict:
     code = str(item.get("kind_cd") or item.get("kindCd") or item.get("kind_code") or "").strip()
@@ -86,7 +104,7 @@ class SqliteSink:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA foreign_keys=ON")
-        self.db.executescript(SQLITE_SCHEMA)
+        self.db.executescript(BOOTSTRAP_SQL.read_text(encoding="utf-8"))
     def sync(self, records: list[dict]):
         now = datetime.now(timezone.utc).isoformat()
         self.db.execute("UPDATE kinds SET active=0, updated_at=?", (now,))
@@ -128,9 +146,7 @@ class SupabaseSink:
 
 async def main() -> int:
     settings=Settings()
-    if settings.animal_api_key is None:
-        print("ANIMAL_API_KEY 가 설정되지 않았습니다.")
-        return 1
+    require_api_key(settings)
     records=[]
     now=datetime.now(timezone.utc).isoformat()
     async with httpx.AsyncClient(timeout=30) as client:
