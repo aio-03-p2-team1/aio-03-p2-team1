@@ -23,7 +23,7 @@ PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
 
 def _deps(ctx: AppContext) -> dict[str, Any]:
     return {"settings": ctx.settings, "store": ctx.store, "animal": ctx.animal, "kakao": ctx.kakao, "llm": ctx.llm,
-            "embedder": ctx.embedder, "search_cache": ctx.search_cache}
+            "embedder": ctx.embedder, "search_cache": ctx.search_cache, "assessor": ctx.assessor}
 
 
 def page_result(run, page=1, page_size=20):
@@ -43,6 +43,7 @@ async def create_search(body: SearchBody, user: SessionUser = Depends(current_us
         "thread_id": body.thread_id,
         "profile_id": body.profile_id,
         "reflection_enabled": body.reflection_enabled,
+        "declined": body.declined,
     }
     run = await run_search(_deps(ctx), user.owner, request)
     remember_items(run.get("candidates") or [])
