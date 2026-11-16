@@ -37,7 +37,6 @@ def _configure_langsmith(settings: Settings) -> None:
 def build_context(settings: Settings) -> AppContext:
     from redis import asyncio as aioredis
 
-    from backend.agent.assess import Assessor
     from backend.agent.llm import FeatureExtractor
     from backend.agent.embeddings import Embedder
     from backend.agent.search_cache import SearchCache
@@ -66,8 +65,10 @@ def build_context(settings: Settings) -> AppContext:
         if settings.openai_api_key
         else None
     )
-    # assess 노드의 도구 호출은 사진 분석과 같은 채팅 모델·연결을 쓴다(키 없으면 판단 생략, 결과는 그대로).
-    assessor = Assessor(photo_llm._client, settings.openai_model) if photo_llm else None
+    # 검색 에이전트의 도구 호출은 사진 분석과 같은 채팅 모델·연결을 쓴다(키 없으면 에이전트 생략, 결과는 그대로).
+    from backend.agent.search_agent import SearchAgent
+
+    search_agent = SearchAgent(photo_llm._client, settings.openai_model) if photo_llm else None
     return AppContext(
         settings=settings,
         store=build_store(settings),
@@ -76,7 +77,7 @@ def build_context(settings: Settings) -> AppContext:
         kakao=KakaoGeocoder(kakao_key, timeout=min(timeout, 15)),
         llm=llm,
         photo_llm=photo_llm,
-        assessor=assessor,
+        search_agent=search_agent,
         embedder=Embedder(settings.openai_api_key.get_secret_value(), timeout=timeout) if settings.openai_api_key else None,
         search_cache=SearchCache(redis),
         # 키가 있을 때만 분실 신고를 게시판에 합친다. 없으면 회원 글만(샘플로 채우지 않음).

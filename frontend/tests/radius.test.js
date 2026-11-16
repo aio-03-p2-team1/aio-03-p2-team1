@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { distanceLabel, kmLabel, radiusText, widenRadiusAction } from '../src/lib/radius.js'
+import { distanceLabel, kmLabel, radiusText, widenedText, widenRadiusAction } from '../src/lib/radius.js'
 
 const applied = { applied: true, auto: false, step: 1, radius_km: 10, inside: 4, unknown: 1, excluded: 7, lost_place: '서울특별시 강서구 화곡동' }
 
@@ -81,3 +81,12 @@ test('guide text explains days and the next widening day', () => {
   assert.match(radiusGuide({ days_since_lost: 20, radius_km: null })[0], /조회 지역 전체/)
 })
 
+
+
+test('auto widened radius explains the widening', () => {
+  const r = { applied: true, step: 2, radius_km: 20, inside: 2, excluded: 1, auto_widened: true, widen_trail: [3, 10, 20] }
+  assert.equal(widenedText(r), '3km 안에 공고가 없어 10km → 20km로 넓혀 찾았어요.')
+  assert.ok(radiusText(r).startsWith('3km 안에 공고가 없어 10km → 20km로 넓혀 찾았어요. 실종 위치에서 직선거리 20km 안'))
+  assert.equal(widenedText({ ...r, auto_widened: false, widen_trail: [3] }), '')
+  assert.equal(widenedText({ auto_widened: true, widen_trail: [3, 10] }), '3km 안에 공고가 없어 10km로 넓혀 찾았어요.')
+})

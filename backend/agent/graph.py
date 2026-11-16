@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import date, datetime, timezone
 from typing import Any
@@ -10,11 +11,14 @@ from langgraph.graph import END, START, StateGraph
 from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
-from backend.agent import assess as assess_mod
+from backend.agent import assess as assess_rules
+from backend.agent import search_agent as agent_mod
 from backend.agent.ranking import TOP_K, confidence_signals, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
 from backend.tools.animal_api import AnimalApiError, short_region_name
 from backend.tools.kakao import KakaoError
+
+log = logging.getLogger("dasimanna.graph")
 
 ROWS_PER_PAGE = 1000
 LOCATE_TOP = 3
@@ -359,7 +363,7 @@ async def validate(state: SearchState, config) -> dict:
                        "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
     elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
-    # 결과가 있으면 확신 신호를 계산한다. 낮으면 assess 노드(LLM 도구 선택)가 추가 정보·사진 요청을 판단한다.
+    # 결과가 있으면 확신 신호를 계산한다. 낮으면 검색 에이전트(agent 노드)가 결과를 읽고 판단·수정한다.
     confidence = confidence_signals(candidates, criteria, state.get("llm_features")) if candidates else None
     return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
@@ -377,8 +381,12 @@ def route_after_validate(state: SearchState, config) -> str:
     if not issues:
         if state.get("error") or state.get("candidates") is None:
             return "finalize"
-        # 결과가 애매하면(확신 낮음) assess 에서 LLM이 추가 요청 여부를 고른다. 아니면 바로 위치 조회.
-        return "assess" if (state.get("confidence") or {}).get("low") else "locate"
+        # 에이전트가 조건을 고쳐 다시 찾은 뒤면 다시 에이전트로(새 결과를 읽고 비교). 이미 끝냈으면 위치 조회.
+        if state.get("agent_done"):
+            return "locate"
+        if state.get("agent_messages") or (state.get("confidence") or {}).get("low"):
+            return "agent"
+        return "locate"
     if not state.get("reflection_enabled", True):
         return "finalize"
     if state.get("reflection_count", 0) >= _deps(config)["settings"].max_reflections:
@@ -465,18 +473,99 @@ async def locate(state: SearchState, config) -> dict:
     return {"candidates": candidates, "tool_calls": calls, "trace": ["locate"]}
 
 
-async def assess_node(state: SearchState, config) -> dict:
-    """결과가 애매할 때 LLM 도구 호출로 다음 행동(사진 요청·정보 요청·그대로 보여 주기)을 고른다.
+def _agent_decision(state: SearchState, source: str, final_tool: str | None, log_: list[dict[str, Any]]) -> dict[str, Any]:
+    conf = state.get("confidence") or {}
+    return {"source": source, "final_tool": final_tool, "steps": state.get("agent_steps", 0),
+            "reruns": state.get("agent_reruns", 0), "log": log_, "prompt_version": agent_mod.AGENT_PROMPT_VERSION,
+            "confidence_version": conf.get("version")}
 
-    결과를 막지 않는다. 고른 요청은 agent_request 로 화면에 전달되고, 후보 목록은 그대로 보여 준다.
+
+async def agent_node(state: SearchState, config) -> dict:
+    """검색 에이전트 한 걸음: 지금까지의 대화(신호·도구 결과)를 보고 LLM이 도구 하나를 고른다.
+
+    처음이면 결과 신호로 대화를 시작하고, 조건을 고쳐 다시 찾은 뒤라면 새 신호와 이전 대비 변화를 덧붙인다.
+    LLM 없음·실패·걸음 한도면 지금 결과를 그대로 보여 주고 끝낸다(검색을 막지 않음).
     """
     deps = _deps(config)
-    outcome = await assess_mod.assess(deps.get("assessor"), state.get("confidence"), state.get("agent_history") or {})
-    record = outcome["record"] or {}
-    calls = [_call("agent_assess", {"reasons": record.get("reasons")}, record.get("tool", "skipped"),
-                   "결과 확신이 낮아 추가 요청 여부 판단", source=record.get("source"))]
-    return {"agent_request": outcome["request"], "agent_decision": outcome["record"], "tool_calls": calls,
-            "trace": ["assess"]}
+    agent = deps.get("search_agent")
+    allowed = assess_rules.allowed_actions(state.get("confidence") or {}, state.get("agent_history") or {})
+    messages = list(state.get("agent_messages") or [])
+    log_ = list(state.get("agent_log") or [])
+    update: dict[str, Any] = {"trace": ["agent"]}
+
+    def done(source: str) -> dict:
+        log_.append({"step": "end", "source": source})
+        return {**update, "agent_done": True, "agent_request": None, "agent_log": log_,
+                "agent_decision": _agent_decision(state, source, None, log_)}
+
+    if agent is None:
+        return done("no_llm")
+    if not messages:
+        messages = agent_mod.start_messages(state, allowed)
+        update["agent_source"] = agent_mod.source_text(state["criteria"])  # 원문 근거(고친 값은 근거가 아님)
+        update["agent_before"] = agent_mod._summary(state)
+        log_.append({"step": "start", **agent_mod._summary(state)})
+    elif state.get("agent_rerun_pending"):
+        messages.append(agent_mod.rerun_message(state, allowed, state.get("agent_before") or {}))
+        log_.append({"step": "rerun_result", **agent_mod._summary(state)})
+        update.update(agent_rerun_pending=False, agent_before=agent_mod._summary(state))
+    if state.get("agent_steps", 0) >= agent_mod.MAX_STEPS:
+        return done("step_limit")
+    try:
+        message = await agent.step(messages)
+    except Exception as exc:  # LLM 실패는 지금 결과를 보여 주는 것으로 대신한다
+        log.warning("search agent llm failed type=%s", type(exc).__name__)
+        return done("llm_error")
+    if not (getattr(message, "tool_calls", None) or []):
+        return done("no_tool_call")
+    messages.append(message)
+    return {**update, "agent_messages": messages, "agent_steps": state.get("agent_steps", 0) + 1, "agent_log": log_}
+
+
+async def agent_tools_node(state: SearchState, config) -> dict:
+    """agent 가 고른 도구를 서버 규칙으로 검증·실행하고 결과를 대화에 붙인다. 조건을 고쳤으면 다시 찾는다."""
+    _, _, ToolMessage = agent_mod._messages()
+    allowed = assess_rules.allowed_actions(state.get("confidence") or {}, state.get("agent_history") or {})
+    message = state["agent_messages"][-1]
+    first, *extra = message.tool_calls
+    name = agent_mod.TOOL_NAMES.get(first.get("name"), first.get("name"))
+    args = dict(first.get("args") or {})
+    result = agent_mod.execute_tool(name, args, state, allowed)
+    replies = [ToolMessage(content=agent_mod._json(result["content"]), tool_call_id=first.get("id") or "call_0")]
+    # 한 번에 하나만 처리한다. 나머지 호출에도 답을 붙여야 다음 LLM 호출이 거절되지 않는다.
+    replies += [ToolMessage(content=agent_mod._json({"ok": False, "error": "한 번에 도구 하나만 호출하세요."}),
+                            tool_call_id=c.get("id") or f"call_{n}") for n, c in enumerate(extra, 1)]
+    content = result["content"]
+    ok = content.get("ok", True) if isinstance(content, dict) else True
+    log_ = [*(state.get("agent_log") or []),
+            {"step": state.get("agent_steps", 0), "tool": name, "args": agent_mod.safe_args(name, args), "ok": ok,
+             **({"rejected": content.get("rejected") or content.get("error")} if isinstance(content, dict)
+                and (content.get("rejected") or content.get("error")) else {})}]
+    update: dict[str, Any] = {
+        **result["update"],
+        "agent_messages": [*state["agent_messages"], *replies],
+        "agent_next": result["next"],
+        "agent_log": log_,
+        "tool_calls": [_call(f"agent_{name}", agent_mod.safe_args(name, args), "ok" if ok else "rejected",
+                             "검색 에이전트 도구 호출")],
+        "trace": ["agent_tools"],
+    }
+    if result["next"]:
+        update["agent_rerun_pending"] = True
+    if result["done"]:
+        update.update(agent_done=True, agent_request=result["request"],
+                      agent_decision=_agent_decision({**state, **update}, "llm", name, log_))
+    return update
+
+
+def route_after_agent(state: SearchState) -> str:
+    return "locate" if state.get("agent_done") else "agent_tools"
+
+
+def route_after_agent_tools(state: SearchState) -> str:
+    if state.get("agent_done"):
+        return "locate"
+    return state.get("agent_next") or "agent"
 
 
 async def finalize(state: SearchState, config) -> dict:
@@ -535,7 +624,8 @@ def build_graph():
     g.add_node("rank", rank_node)
     g.add_node("validate", validate)
     g.add_node("reflect", reflect)
-    g.add_node("assess", assess_node)
+    g.add_node("agent", agent_node)
+    g.add_node("agent_tools", agent_tools_node)
     g.add_node("locate", locate)
     g.add_node("finalize", finalize)
 
@@ -550,14 +640,16 @@ def build_graph():
     g.add_conditional_edges(
         "validate",
         route_after_validate,
-        {"reflect": "reflect", "assess": "assess", "locate": "locate", "finalize": "finalize"},
+        {"reflect": "reflect", "agent": "agent", "locate": "locate", "finalize": "finalize"},
     )
     g.add_conditional_edges(
         "reflect",
         route_after_reflect,
         {"execute": "execute", "rank": "rank", "plan": "plan", "ask": "ask", "finalize": "finalize"},
     )
-    g.add_edge("assess", "locate")
+    g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "locate": "locate"})
+    g.add_conditional_edges("agent_tools", route_after_agent_tools,
+                            {"agent": "agent", "rank": "rank", "radius": "radius", "locate": "locate"})
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()

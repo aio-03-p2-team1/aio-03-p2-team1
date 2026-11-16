@@ -97,7 +97,16 @@ export function radiusText(radius) {
   parts.push(`${radius.inside ?? 0}건`)
   if (radius.unknown) parts.push(`거리 미확인 ${radius.unknown}건 포함`)
   if (radius.excluded) parts.push(`반경 밖 ${radius.excluded}건 제외`)
-  return `${parts.join(' · ')} (구조된 읍·면·동 기준 직선거리, 모르면 관할 시·군·구 기준, 도로 거리 아님)`
+  const text = `${parts.join(' · ')} (구조된 읍·면·동 기준 직선거리, 모르면 관할 시·군·구 기준, 도로 거리 아님)`
+  return radius.auto_widened ? `${widenedText(radius)} ${text}` : text
+}
+
+/** 0건이라 자동으로 넓혔을 때의 안내. 예: '3km 안에 공고가 없어 10km → 20km로 넓혀 찾았어요.' */
+export function widenedText(radius) {
+  const trail = (radius?.widen_trail || []).filter((km) => km != null)
+  if (!radius?.auto_widened || trail.length < 2) return ''
+  const fmt = (km) => `${Number.isInteger(km) ? km : km.toFixed(1)}km`
+  return `${fmt(trail[0])} 안에 공고가 없어 ${trail.slice(1).map(fmt).join(' → ')}로 넓혀 찾았어요.`
 }
 
 /** 공고 카드에 붙일 거리 문구. */
