@@ -13,6 +13,7 @@ from backend.agent import radius as radius_mod
 from backend.agent.radius import haversine_km, recommended_step
 from backend.agent.runner import run_search
 from backend.storage.sqlite import SqliteStore
+from backend.tools.animal_api import Region
 from backend.timeutil import kst_today
 from backend.tools.kakao import KakaoGeocoder
 
@@ -271,7 +272,8 @@ def test_rescue_area_is_used_before_jurisdiction_center():
     pin = (35.7174, 129.3276)
     same_town = api_item(1, orgNm="경상북도 경주시", happenPlace="외동읍 석계평리길 부근")
     no_town = api_item(2, orgNm="경상북도 경주시", happenPlace="시내 공원")
-    animal = FakeAnimal(pages=[[same_town, no_town]])
+    # 가짜 API 지역 목록 기본값은 서울·경기뿐이라 경상북도를 넣어 준다(없으면 지역 매핑 실패로 질문 상태가 됨).
+    animal = FakeAnimal(pages=[[same_town, no_town]], regions=[Region("6470000", "경상북도")])
     criteria = {"species": "dog", "region": "경상북도", "lost_date": lost(2), "lost_place": "경상북도 경주시 외동읍",
                 "lost_lat": pin[0], "lost_lng": pin[1]}
     run = search(deps(animal), criteria)
