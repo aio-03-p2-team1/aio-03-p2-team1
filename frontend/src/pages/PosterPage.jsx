@@ -2,44 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer } from 'react-konva'
 import { API_BASE, api } from '../lib/api.js'
+import { createPosterFromTemplate, POSTER_FIELDS, switchPosterTemplate } from '../lib/posterDocument.js'
+import { textOverflows } from '../lib/posterText.js'
 import { usePosterStore } from '../lib/posterStore.js'
 
-const FIELDS = [
-  ['title', '전단지 제목', '강아지를 찾습니다'],
-  ['pet_name', '동물 이름', '이름을 입력해 주세요'],
-  ['species_breed', '동물 종류 및 품종', '예: 강아지 · 말티즈'],
-  ['lost_datetime', '실종 날짜 및 시간', '예: 2026년 11월 17일 오후 3시'],
-  ['lost_place', '실종 장소', '실종 장소를 입력해 주세요'],
-  ['features', '신체적 특징', '털색, 크기, 목줄 등 특징'],
-  ['contact', '발견 시 연락처', '연락처를 입력해 주세요'],
-  ['extra_description', '추가 설명', '사례금 등 추가 내용을 적어 주세요']
-]
-const fieldMap = Object.fromEntries(FIELDS.map(([key, label]) => [key, label]))
 const makeId = () => crypto.randomUUID().replaceAll('-', '')
-
-function templateDocument(template) {
-  const components = structuredClone(template.components).map((item) => ({ ...item, id: item.id || makeId() }))
-  const layouts = {
-    basic: { title: [42, 74], pet_name: [625, 58], species_breed: [690, 38], lost_datetime: [735, 38], lost_place: [780, 42], features: [828, 42], extra_description: [876, 42], contact: [970, 76] },
-    info: { title: [42, 70], pet_name: [590, 50], species_breed: [645, 38], lost_datetime: [688, 38], lost_place: [731, 38], features: [774, 90], extra_description: [870, 42], contact: [962, 70] },
-    urgent: { title: [38, 88], pet_name: [665, 56], species_breed: [722, 38], lost_datetime: [765, 38], lost_place: [808, 38], features: [851, 38], extra_description: [894, 38], contact: [968, 90] }
-  }
-  const layout = layouts[template.id] || layouts.basic
-  components.forEach((item) => {
-    if (item.type === 'text' && layout[item.fieldKey]) {
-      const [y, height] = layout[item.fieldKey]
-      item.y = y; item.height = height; item.x = 58; item.width = 678
-      item.label = fieldMap[item.fieldKey] || item.label
-    }
-  })
-  const existing = new Set(components.map((item) => item.fieldKey).filter(Boolean))
-  const defaults = FIELDS.filter(([key]) => !existing.has(key)).map(([key, label, placeholder], index) => ({
-    id: makeId(), type: 'text', label, fieldKey: key, content: placeholder,
-    x: 58, y: layout[key]?.[0] ?? 670 + index * 43, width: 678, height: layout[key]?.[1] ?? 36, fontSize: 17,
-    color: '#51493f', zIndex: components.length + index + 1
-  }))
-  return { templateId: template.id, width: template.width, height: template.height, components: [...components, ...defaults] }
-}
 
 function useAssetImage(assetId) {
   const [image, setImage] = useState(null)
@@ -113,7 +80,9 @@ function ComponentCanvas({ poster, selectedId, zoom, select, update, stageRef })
     } else if (transformRef.current) transformRef.current.nodes([])
   }, [selectedId, poster.components])
   return <div className="poster-stage-wrap">
-    <Stage ref={stageRef} width={poster.width * zoom} height={poster.height * zoom} scaleX={zoom} scaleY={zoom}
+    <div className="poster-stage-viewport" style={{ width: poster.width * zoom, height: poster.height * zoom }}>
+    <div className="poster-stage-scale" style={{ width: poster.width, height: poster.height, transform: `scale(${zoom})` }}>
+    <Stage ref={stageRef} width={poster.width} height={poster.height}
       onMouseDown={(event) => { if (event.target === event.target.getStage()) select(null) }}
       onTouchStart={(event) => { if (event.target === event.target.getStage()) select(null) }}>
       <Layer>
@@ -122,6 +91,8 @@ function ComponentCanvas({ poster, selectedId, zoom, select, update, stageRef })
         <Transformer ref={transformRef} rotateEnabled anchorSize={9} borderStroke="#4c7757" anchorStroke="#4c7757" anchorFill="#fff" />
       </Layer>
     </Stage>
+    </div>
+    </div>
   </div>
 }
 
@@ -159,7 +130,7 @@ export default function PosterPage() {
         if (!live) return
         setTemplates(list.items)
         if (existing) setPoster(existing)
-        else return api(`/poster/templates/${list.items[0]?.id || 'basic'}`).then((template) => live && setPoster(templateDocument(template)))
+        else return api(`/poster/templates/${list.items[0]?.id || 'basic'}`).then((template) => live && setPoster(createPosterFromTemplate(template)))
       })
       .catch((error) => live && setNotice(error.message || '전단지 편집기를 불러오지 못했습니다.'))
       .finally(() => live && setLoading(false))
@@ -171,12 +142,7 @@ export default function PosterPage() {
     if (!window.confirm('템플릿을 바꾸면 자유 배치와 디자인이 새 템플릿으로 바뀝니다. 입력한 문구와 사진은 유지할까요?')) return
     try {
       const [template] = await Promise.all([api(`/poster/templates/${id}`)])
-      const previousFields = Object.fromEntries(poster.components.filter((item) => item.fieldKey).map((item) => [item.fieldKey, item.content]))
-      const next = templateDocument(template)
-      next.components = next.components.map((item) => item.fieldKey && previousFields[item.fieldKey] !== undefined ? { ...item, content: previousFields[item.fieldKey] } : item)
-      const oldPhotos = poster.components.filter((item) => item.type === 'image' && item.assetId)
-      const nextPhotos = next.components.filter((item) => item.type === 'image')
-      oldPhotos.forEach((photo, index) => { if (nextPhotos[index]) Object.assign(nextPhotos[index], { assetId: photo.assetId, opacity: photo.opacity }) })
+      const next = switchPosterTemplate(poster, template)
       setPoster(next); setSaved(false); setNotice('템플릿을 바꿨어요. 입력한 문구와 사진은 유지했습니다.')
     } catch (error) { setNotice(error.message) }
   }
@@ -234,7 +200,7 @@ export default function PosterPage() {
     link.download = '실종동물-전단지.png'
     const transformer = stageInstance.findOne('Transformer')
     transformer?.hide()
-    link.href = stageInstance.toDataURL({ pixelRatio: 2 / zoom, mimeType: 'image/png' })
+    link.href = stageInstance.toDataURL({ pixelRatio: 2, mimeType: 'image/png' })
     transformer?.show()
     link.click()
   }
@@ -246,7 +212,7 @@ export default function PosterPage() {
     if (!printWindow) { setNotice('새 창이 차단됐어요. 팝업을 허용한 뒤 다시 시도해 주세요.'); return }
     const transformer = stageInstance.findOne('Transformer')
     transformer?.hide()
-    const imageUrl = stageInstance.toDataURL({ pixelRatio: 2 / zoom, mimeType: 'image/png' })
+    const imageUrl = stageInstance.toDataURL({ pixelRatio: 2, mimeType: 'image/png' })
     transformer?.show()
     printWindow.document.open()
     printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>실종동물 전단지</title><style>@page{size:A4 portrait;margin:0}html,body{margin:0;width:210mm;height:297mm}img{display:block;width:210mm;height:297mm}</style></head><body><img alt="실종동물 전단지" src="${imageUrl}"></body></html>`)
@@ -290,7 +256,7 @@ export default function PosterPage() {
         <div className="panel-title"><span>1</span><h2>전단지 내용</h2></div>
         <p className="poster-help">입력한 문구는 미리보기에 바로 반영됩니다. 캔버스 안에서는 위치와 크기를 조절할 수 있어요.</p>
         <input ref={fileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadFile(event.target.files?.[0]); event.target.value = '' }} />
-        <div className="poster-fields">{textComponents.map((item) => <label className="poster-field" key={item.id}><span>{item.label || fieldMap[item.fieldKey] || '텍스트'}</span><textarea rows={item.content?.length > 45 ? 3 : 2} value={item.content || ''} onChange={(event) => { update(item.id, { content: event.target.value }); setSaved(false) }} placeholder={FIELDS.find(([key]) => key === item.fieldKey)?.[2] || '문구를 입력해 주세요'} />{item.id === selectedId && item.height < 45 && item.content?.length > 30 && <small className="poster-overflow-warning">텍스트가 영역 높이를 넘을 수 있어요. 캔버스에서 크기를 조절해 주세요.</small>}</label>)}</div>
+        <div className="poster-fields">{textComponents.map((item) => <label className="poster-field" key={item.id}><span>{item.label || POSTER_FIELDS.find(([key]) => key === item.fieldKey)?.[1] || '텍스트'}</span><textarea rows={item.content?.length > 45 ? 3 : 2} value={item.content || ''} onChange={(event) => { update(item.id, { content: event.target.value }); setSaved(false) }} placeholder={POSTER_FIELDS.find(([key]) => key === item.fieldKey)?.[2] || '문구를 입력해 주세요'} />{textOverflows(item) && <small className="poster-overflow-warning">텍스트가 영역을 넘을 수 있어요. 캔버스에서 크기나 글자 크기를 조절해 주세요.</small>}</label>)}</div>
         {selected && <div className="poster-properties">
           <div className="panel-title"><span>2</span><h2>선택한 요소</h2></div>
           <div className="poster-selected-head"><strong>{selected.label || (selected.type === 'shape' ? '도형' : selected.type === 'image' ? '사진' : '텍스트')}</strong><button type="button" className="text-action danger-text" onClick={() => { removeComponent(selected.id); setSaved(false) }}>삭제</button></div>

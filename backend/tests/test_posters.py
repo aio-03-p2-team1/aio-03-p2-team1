@@ -103,6 +103,7 @@ def test_upload_reorients_and_optimizes_image_and_scopes_asset(client):
     assert result.status_code == 200 and result.headers["content-type"] == "image/webp"
     optimized = Image.open(BytesIO(result.content))
     assert optimized.format == "WEBP" and optimized.size == (20, 10)
+    assert not optimized.getexif()
 
     client.post("/api/v1/auth/logout")
     signup(client, "asset-b@example.com")
