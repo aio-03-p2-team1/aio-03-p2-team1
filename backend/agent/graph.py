@@ -246,6 +246,7 @@ async def execute(state: SearchState, config) -> dict:
         "start": criteria["start_date"],
         "end": criteria["end_date"],
         "species": criteria["species"],
+        "kind": criteria.get("breed_code"),
     }
     while page <= 1:
         attempt = 0
@@ -260,6 +261,7 @@ async def execute(state: SearchState, config) -> dict:
                     start=date.fromisoformat(args["start"]),
                     end=date.fromisoformat(args["end"]),
                     species=args["species"],
+                    kind=args["kind"],
                     page=page,
                     rows=ROWS_PER_PAGE,
                 )

@@ -58,7 +58,8 @@ def test_breed_code_filters_candidates_before_ranking():
     assert run["status"] == "completed"
     assert run["criteria"]["breed_code"] == "poodle-code"
     assert [candidate["breed"] for candidate in run["candidates"]] == ["푸들"]
-    assert animal.calls[0]["rows"] == 1000  # 품종 API 필터가 아닌 조회 후 후보 필터
+    assert animal.calls[0]["kind"] == "poodle-code"
+    assert animal.calls[0]["rows"] == 1000
 
 
 def test_invalid_dates_detected():

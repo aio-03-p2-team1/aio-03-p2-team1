@@ -72,7 +72,7 @@ def test_thousand_embeddings_top_300_cache_hit_ttl_and_expiry():
         assert len(first["candidates"]) == 300
         assert first["scope"]["fetched_rows"] == 1000
         assert not first["scope"]["complete"]
-        assert animal.calls == [{"region_code": None, "page": 1, "species": "dog", "rows": 1000}]
+        assert animal.calls == [{"region_code": None, "page": 1, "species": "dog", "kind": None, "rows": 1000}]
         assert len(d["embedder"].calls[0]) == 1001
         assert 598 <= await redis.ttl(first["cache_key"]) <= 600
         snapshot = await d["search_cache"].get(first["cache_key"])
