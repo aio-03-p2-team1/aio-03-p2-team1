@@ -28,7 +28,7 @@ RUN_FIELDS = (
     "reflection_enabled", "reflection_count", "reflections", "retry_count", "scope", "error", "trace",
     "data_source",
     "ranking_method", "cache_key", "cache_hit", "snapshot_id", "radius",
-    "confidence", "agent_request", "agent_decision",
+    "confidence", "agent_request", "agent_decision", "photo_features",
 )
 # 에이전트 요청은 대화(thread)마다 다르므로(이미 물은 것, '모르겠어요') 캐시에 넣지 않는다.
 AGENT_FIELDS = ("agent_request", "agent_decision")
@@ -80,6 +80,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "reflections": [],
         "trace": [],
         "agent_history": history,
+        "photo_features": request.get("photo"),  # 서버가 보관한 사진 분석 결과(없으면 None)
     }
     # 에이전트 루프(걸음 최대 6, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
     config = {"configurable": deps, "recursion_limit": 80}
@@ -88,7 +89,9 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
                                "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION,
                                # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
-                               "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off"},
+                               "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off",
+                               # 사진 특징이 다르면 결과가 달라지므로 캐시 키에 넣는다.
+                               "photo": request.get("photo")},
                         reflection=request.get("reflection_enabled", True))
     cache_hit = False
 

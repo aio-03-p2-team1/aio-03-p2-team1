@@ -136,9 +136,17 @@ def _messages():
     return HumanMessage, SystemMessage, ToolMessage
 
 
-def source_text(criteria: dict[str, Any]) -> str:
-    """사용자가 직접 쓴 말(설명·품종·털색 입력). 에이전트가 고친 값은 근거가 될 수 없으므로 처음 값을 고정해 쓴다."""
-    return " ".join(str(criteria.get(k) or "") for k in ("description", "breed", "color")).strip()
+def source_text(criteria: dict[str, Any], photo: dict[str, Any] | None = None) -> str:
+    """수정 값의 근거가 되는 말: 사용자가 직접 쓴 말(설명·품종·털색 입력) + 쓸 만한 사진에서 서버가 확인한 특징.
+
+    에이전트가 고친 값은 근거가 될 수 없으므로 처음 값을 고정해 쓴다.
+    """
+    text = " ".join(str(criteria.get(k) or "") for k in ("description", "breed", "color")).strip()
+    if photo and photo.get("suitable"):
+        traits = [*(photo.get("colors") or []), photo.get("breed") or "", *(photo.get("marks") or [])]
+        sex = {"M": "수컷", "F": "암컷"}.get(photo.get("sex") or "")
+        text = " ".join([text, *[t for t in traits if t], sex or ""]).strip()
+    return text
 
 
 def signals_text(confidence: dict[str, Any] | None, radius: dict[str, Any] | None, reruns: int,
@@ -164,11 +172,20 @@ def read_criteria(state: dict[str, Any]) -> dict[str, Any]:
     c = state["criteria"]
     radius = state.get("radius") or {}
     return {
-        "사용자_원문": state.get("agent_source") or source_text(c),
+        "사용자_원문": state.get("agent_source") or source_text(c, state.get("photo_features")),
         "조건": {k: c.get(k) for k in ("species", "breed", "color", "sex", "size") if c.get(k)},
         "추가_특징": (state.get("llm_features") or {}).get("marks") or [],
+        "사진": _photo_summary(state.get("photo_features")),
         "반경_km": radius.get("radius_km") if radius.get("applied") else None,
     }
+
+
+def _photo_summary(photo: dict[str, Any] | None) -> dict[str, Any] | str:
+    if not photo:
+        return "받지 않음"
+    if not photo.get("suitable"):
+        return "받았지만 쓸 수 없는 사진(동물이 잘 보이지 않음)"
+    return {k: photo.get(k) for k in ("species", "breed", "colors", "sex", "marks") if photo.get(k)}
 
 
 def read_results(state: dict[str, Any], top: int) -> list[dict[str, Any]]:
@@ -264,7 +281,7 @@ def execute_tool(name: str, args: dict[str, Any], state: dict[str, Any], allowed
     if name in ("update_features", "relax_condition", "widen_radius") and reruns >= MAX_RERUNS:
         out["content"] = {"ok": False, "error": "다시 찾기 횟수를 다 썼습니다. finish 또는 요청으로 끝내세요."}
     elif name == "update_features":
-        accepted, rejected = validate_features(args, state.get("agent_source") or source_text(criteria))
+        accepted, rejected = validate_features(args, state.get("agent_source") or source_text(criteria, state.get("photo_features")))
         if not accepted:
             out["content"] = {"ok": False, "rejected": rejected or ["바꿀 값이 없음"]}
         else:

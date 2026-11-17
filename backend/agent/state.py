@@ -40,6 +40,7 @@ class SearchState(TypedDict, total=False):
 
     memory_used: dict[str, Any]
     llm_features: dict[str, Any]
+    photo_features: dict[str, Any] | None  # 서버가 보관한 사진 분석 결과(photo_store). 사진을 받았는지 판단은 이 값으로만
     semantic_scores: dict[str, float] | None
     ranking_method: str
     context_summary: dict[str, Any]

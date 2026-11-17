@@ -12,6 +12,7 @@ from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
 from backend.agent import assess as assess_rules
+from backend.agent import photo_store
 from backend.agent import search_agent as agent_mod
 from backend.agent.ranking import TOP_K, confidence_signals, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
@@ -130,6 +131,9 @@ async def context(state: SearchState, config) -> dict:
         },
         "trace": ["context"],
     }
+    # 사진 특징은 설명 글 LLM 추출과 별개로 넣는다(로컬 모드처럼 LLM 추출이 꺼져 있어도 반영).
+    if state.get("photo_features"):
+        update["llm_features"] = photo_store.merge_features(state.get("llm_features"), state.get("photo_features"))
     llm = deps.get("llm")
     if llm and criteria.get("description"):
         started = time.perf_counter()
@@ -139,7 +143,7 @@ async def context(state: SearchState, config) -> dict:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("llm_feature_extract", {"model": llm.model}, exc.code, "자유 서술에서 특징 추출")]
             return update
-        update["llm_features"] = features.model_dump()
+        update["llm_features"] = photo_store.merge_features(features.model_dump(), state.get("photo_features"))
         update["tool_calls"] = [
             _call(
                 "llm_feature_extract",
@@ -389,7 +393,8 @@ async def validate(state: SearchState, config) -> dict:
     elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
     # 결과가 있으면 확신 신호를 계산한다. 낮으면 검색 에이전트(agent 노드)가 결과를 읽고 판단·수정한다.
-    confidence = confidence_signals(candidates, criteria, state.get("llm_features")) if candidates else None
+    confidence = (confidence_signals(candidates, criteria, state.get("llm_features"), state.get("photo_features"))
+                  if candidates else None)
     return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
 FIXES = {
@@ -527,7 +532,7 @@ async def agent_node(state: SearchState, config) -> dict:
         return done("no_llm")
     if not messages:
         messages = agent_mod.start_messages(state, allowed)
-        update["agent_source"] = agent_mod.source_text(state["criteria"])  # 원문 근거(고친 값은 근거가 아님)
+        update["agent_source"] = agent_mod.source_text(state["criteria"], state.get("photo_features"))  # 원문 근거(고친 값은 근거가 아님)
         update["agent_before"] = agent_mod._summary(state)
         log_.append({"step": "start", **agent_mod._summary(state)})
     elif state.get("agent_rerun_pending"):

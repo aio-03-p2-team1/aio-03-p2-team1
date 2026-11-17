@@ -214,3 +214,22 @@ def test_remote_photo_only_allows_public_data_host_and_no_redirect():
     with pytest.raises(InvalidPhoto) as info:
         asyncio.run(remote_photo.fetch_photo("https://openapi.animal.go.kr/redirect.jpg", transport=transport))
     assert info.value.code == "photo_fetch_failed"
+
+
+def test_photo_analysis_returns_id_and_search_uses_stored_result():
+    from backend.agent import photo_store as store
+
+    with photo_client(FakePhotoAnalyzer()) as client:
+        signup(client)
+        response = client.post("/api/v1/photo-analysis", json={"image_base64": encoded_image(image_bytes())})
+        analysis_id = response.json()["analysis_id"]
+        assert analysis_id and len(analysis_id) == 32
+        ctx = client.app.state.ctx
+        assert asyncio.run(store.load(ctx.sessions._redis, next(iter(_owners(ctx))), analysis_id)) is not None
+        bad = client.post("/api/v1/searches", json={"criteria": {}, "photo_analysis_id": "not-an-id"})
+    assert bad.status_code == 422  # 번호 형식이 틀리면 거절
+
+
+def _owners(ctx):
+    keys = asyncio.run(ctx.sessions._redis.keys("photo-analysis:*"))
+    return {k.decode().split(":")[1] for k in keys}

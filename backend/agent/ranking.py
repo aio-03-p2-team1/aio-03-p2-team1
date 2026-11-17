@@ -113,8 +113,10 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
 
     wanted = tokenize_color_words(criteria.get("color"))
     described = tokenize_color_words(criteria.get("description"))
-    wanted_colors = wanted["colors"] | described["colors"]
-    wanted_patterns = wanted["patterns"] | described["patterns"]
+    # 추출 특징의 털색(사진 분석 포함)도 원하는 색으로 본다.
+    extracted = tokenize_color_words(" ".join(c for c in (features.get("colors") or []) if isinstance(c, str)))
+    wanted_colors = wanted["colors"] | described["colors"] | extracted["colors"]
+    wanted_patterns = wanted["patterns"] | described["patterns"] | extracted["patterns"]
     wanted_color_words = wanted_colors | wanted_patterns
     if wanted_color_words:
         have_color = tokenize_color_words(item.get("color"))
@@ -189,11 +191,15 @@ CONFIDENCE_VERSION = "conf-v1(임시 기준)"
 WEAK_SIMILARITY = 0.45  # 1등 후보 벡터 유사도가 이보다 낮으면 애매
 FLAT_GAP = 0.01  # 1·2등 유사도 차이가 이보다 작으면 두드러진 후보가 없음
 MIXED_WORDS = ("믹스", "잡종", "혼종", "mix")
-PHOTO_PREFIX = "사진에서 확인한 특징"  # 화면이 사진 분석 결과를 설명 글 앞에 붙일 때 쓰는 말
 
 
-def input_signals(criteria: dict[str, Any], features: dict[str, Any] | None = None) -> dict[str, Any]:
-    """사용자가 준 특징이 얼마나 구체적인지. 모두 입력·추출 결과에서 계산한다(추측 없음)."""
+def input_signals(criteria: dict[str, Any], features: dict[str, Any] | None = None,
+                  photo: dict[str, Any] | None = None) -> dict[str, Any]:
+    """사용자가 준 특징이 얼마나 구체적인지. 모두 입력·추출 결과에서 계산한다(추측 없음).
+
+    사진을 받았는지는 설명 글 문장이 아니라 서버가 보관한 사진 분석 결과(photo)로만 판단한다.
+    쓸 수 없는 사진(동물이 안 보이는 등)이면 받지 않은 것으로 본다(더 나은 사진을 요청할 수 있게).
+    """
     features = features or {}
     text = " ".join(str(criteria.get(k) or "") for k in ("breed", "color", "description"))
     colors = tokenize_color_words(f"{criteria.get('color') or ''} {criteria.get('description') or ''}")
@@ -205,14 +211,14 @@ def input_signals(criteria: dict[str, Any], features: dict[str, Any] | None = No
         "sex_given": bool(criteria.get("sex") or features.get("sex")),
         "size_given": bool(criteria.get("size")),
         "marks_given": bool(marks or features.get("marks")),
-        "photo_given": PHOTO_PREFIX in str(criteria.get("description") or ""),
+        "photo_given": bool(photo and photo.get("suitable")),
     }
 
 
 def confidence_signals(candidates: list[dict[str, Any]], criteria: dict[str, Any],
-                       features: dict[str, Any] | None = None) -> dict[str, Any]:
+                       features: dict[str, Any] | None = None, photo: dict[str, Any] | None = None) -> dict[str, Any]:
     """정렬된 후보에서 확신 신호를 계산한다. low=True 면 에이전트가 추가 정보·사진 요청을 판단한다."""
-    given = input_signals(criteria, features)
+    given = input_signals(criteria, features, photo)
     feature_count = sum(given[k] for k in ("breed_given", "color_given", "sex_given", "size_given", "marks_given"))
     sims = sorted((c["semantic_score"] for c in candidates[:20] if isinstance(c.get("semantic_score"), (int, float))),
                   reverse=True)
