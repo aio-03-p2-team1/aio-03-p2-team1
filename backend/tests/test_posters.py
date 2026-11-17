@@ -78,6 +78,32 @@ def test_poster_crud_is_scoped_to_logged_in_owner(client):
     assert client.get(f"/api/v1/posters/{poster_id}").status_code == 404
 
 
+def test_poster_list_limit_update_and_delete(client):
+    assert client.get('/api/v1/posters').status_code == 401
+    signup(client, 'poster-limit@example.com')
+    poster_ids = []
+    for index in range(5):
+        created = client.post('/api/v1/posters', json=poster_body())
+        assert created.status_code == 201
+        poster_ids.append(created.json()['id'])
+    listed = client.get('/api/v1/posters').json()
+    assert listed['limit'] == 5
+    assert {item['id'] for item in listed['items']} == set(poster_ids)
+    assert all(item['title'] == '보리' and item['updated_at'] for item in listed['items'])
+    assert all('components' not in item for item in listed['items'])
+    rejected = client.post('/api/v1/posters', json=poster_body())
+    assert rejected.status_code == 422
+    assert rejected.json()['detail']['code'] == 'poster_limit'
+    assert client.put(f'/api/v1/posters/{poster_ids[0]}', json=poster_body()).status_code == 200
+    assert client.delete(f'/api/v1/posters/{poster_ids[0]}').status_code == 204
+    assert client.post('/api/v1/posters', json=poster_body()).status_code == 201
+    client.post('/api/v1/auth/logout')
+    signup(client, 'poster-other@example.com')
+    assert client.get('/api/v1/posters').json()['items'] == []
+    assert client.delete(f'/api/v1/posters/{poster_ids[1]}').status_code == 404
+    assert client.post('/api/v1/posters', json=poster_body()).status_code == 201
+
+
 def test_poster_rejects_duplicate_ids_and_invalid_dimensions(client):
     signup(client)
     duplicate = poster_body(components=[poster_body()["components"][0]] * 2)

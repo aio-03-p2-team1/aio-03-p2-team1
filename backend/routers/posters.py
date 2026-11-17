@@ -22,6 +22,7 @@ router = APIRouter(tags=["posters"])
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_PIXELS = 25_000_000
 MAX_SIDE = 2000
+MAX_POSTERS_PER_USER = 5
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
 ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,80}$")
 
@@ -213,9 +214,23 @@ async def get_asset(asset_id: str, user=Depends(current_user), ctx: AppContext =
     return Response(base64.b64decode(asset["content"]), media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/posters")
+async def list_posters(user=Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    rows = await ctx.store.list(user.owner, "poster")
+    items = []
+    for row in rows:
+        doc = row["data"]
+        title = next((item.get("content") for item in doc.get("components", []) if item.get("fieldKey") == "pet_name" and item.get("content")), "실종 전단지")
+        items.append({"id": row["id"], "title": title, "templateId": doc.get("templateId"), "updated_at": row["updated_at"]})
+    return {"items": items, "limit": MAX_POSTERS_PER_USER}
+
+
 @router.post("/posters", status_code=201)
 async def create_poster(body: PosterBody, user=Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     doc = _validate_document(body)
+    rows = await ctx.store.list(user.owner, "poster", limit=MAX_POSTERS_PER_USER)
+    if len(rows) >= MAX_POSTERS_PER_USER:
+        raise ApiError(422, "poster_limit", "전단지는 사용자당 5개까지 저장할 수 있어요. 마이페이지에서 기존 전단지를 삭제해 주세요.")
     await _check_asset_ownership(doc, user.owner, ctx)
     poster_id = uuid.uuid4().hex
     await ctx.store.put(user.owner, "poster", poster_id, doc)

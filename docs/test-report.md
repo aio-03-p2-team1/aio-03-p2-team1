@@ -38,6 +38,10 @@
 
 ## 4. 수정 이력
 
+전단지 목록·한도 수정(poster-library-v1): 마이페이지에서 내 전단지 목록을 조회하고 편집기로 불러오기·확인 후 삭제를 지원한다. 신규 저장 시 백엔드가 로그인 사용자의 DB 전단지 목록을 조회해 5개 이상이면 `poster_limit`으로 거부하며 기존 문서 수정은 허용한다. 삭제 후 신규 저장과 타 사용자 격리를 회귀 시험에 포함한다.
+
+로컬 검증: `uv run --no-sync pytest backend/tests/test_posters.py` 7개 통과(SQLite 테스트 DB 사용), 프론트 `npm test` 48개 통과, `npm run build` 성공. 실제 Supabase 연동 및 브라우저 확인 팝업 조작은 미검증.
+
 | 날짜 | 버전 | 변경 | 이유 |
 | --- | --- | --- | --- |
 | 2026-11-17 | breed-v2.1 / api-kind-v1 | `breed_code`를 구조동물 API의 `kind` 쿼리 파라미터로 전달하고 모의 transport에서 전송값 검증 | API 명세에 `kind` 품종 코드 파라미터가 확인되어 기존 후처리 필터에 앞서 서버 측 조회 필터도 적용 |

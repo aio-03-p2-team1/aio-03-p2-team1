@@ -28,6 +28,8 @@ export default function MyPage() {
   const toast = useToast()
   const runs = useList(`/runs?limit=${HISTORY_LIMIT}`, (b) => b.runs)
   const posts = useList('/posts/mine', (b) => b.items)
+  const posters = useList('/posters', (b) => b.items)
+  const [deletingPoster, setDeletingPoster] = useState(null)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
@@ -38,6 +40,20 @@ export default function MyPage() {
     await logout()
     toast('로그아웃했어요.')
     navigate('/')
+  }
+
+  async function deletePoster(poster) {
+    if (!window.confirm(`“${poster.title}” 전단지를 삭제할까요? 삭제하면 복구할 수 없어요.`)) return
+    setDeletingPoster(poster.id)
+    try {
+      await api(`/posters/${encodeURIComponent(poster.id)}`, { method: 'DELETE' })
+      toast('전단지를 삭제했어요.')
+      posters.reload()
+    } catch (error) {
+      toast(errorMessage(error))
+    } finally {
+      setDeletingPoster(null)
+    }
   }
 
   const latest = runs.items[0]
@@ -52,7 +68,7 @@ export default function MyPage() {
       <div className="page-heading">
         <span className="eyebrow">나의 다시 만나</span>
         <h1>마이페이지</h1>
-        <p>내 정보와 검색 기록, 내가 쓴 실종 정보 게시글을 볼 수 있어요. 검색 기록은 내 계정에만 저장돼요.</p>
+        <p>내 정보와 검색 기록, 내가 쓴 게시글과 저장한 전단지를 볼 수 있어요.</p>
       </div>
 
       <section className="panel my-dashboard" aria-labelledby="dashboard-title">
@@ -84,6 +100,26 @@ export default function MyPage() {
         </section>
 
         <div className="my-content">
+          <section className="panel my-posters-panel" aria-labelledby="my-posters-title">
+            <div className="my-section-head">
+              <div><span className="eyebrow">다시 편집하기</span><h2 id="my-posters-title">내 전단지 {posters.status === 'ready' ? `(${posters.items.length}/5)` : ''}</h2></div>
+              <Link className="text-link" to="/poster">새 전단지 ↗</Link>
+            </div>
+            <ListState list={posters} empty="저장한 전단지가 없어요. 전단지는 최대 5개까지 저장할 수 있어요." loading="전단지를 불러오고 있어요…" />
+            {posters.status === 'ready' && posters.items.length > 0 && (
+              <ul className="my-list my-run-list">
+                {posters.items.map((poster) => (
+                  <li className="my-poster-item" key={poster.id}>
+                    <div><strong>{poster.title}</strong><p className="fineprint">수정 {formatDateTime(poster.updated_at)}</p></div>
+                    <div className="my-poster-actions">
+                      <Link className="secondary-button" to={`/poster?edit=${encodeURIComponent(poster.id)}`}>불러오기</Link>
+                      <button type="button" className="text-action danger-text" disabled={deletingPoster !== null} onClick={() => deletePoster(poster)}>{deletingPoster === poster.id ? '삭제 중…' : '삭제'}</button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
           <section className="panel my-history-panel" aria-labelledby="my-history-title">
             <div className="my-section-head">
               <div><span className="eyebrow">다시 찾아보기</span><h2 id="my-history-title">검색 기록</h2></div>
