@@ -1,5 +1,5 @@
 // 실종 정보 게시판 글(회원 글·공공데이터 분실 신고)로 '우리 아이 찾기' 검색 화면을 미리 채운다.
-// 바로 검색하지 않고 화면을 채우기만 한다. 사용자가 확인·수정한 뒤 [후보 찾아보기]를 누른다.
+// 검색 화면은 채운 뒤 바로 찾는다(사진이 있으면 서버 사진 분석을 마친 뒤). 사용자는 결과를 보고 입력을 고쳐 다시 찾을 수 있다.
 // 로그인 화면을 거쳐도 남도록 sessionStorage 에 잠깐 넣었다가 검색 화면이 한 번 읽고 지운다.
 // 개인정보(신고자·연락처·칩 번호)는 서버가 이미 빼고 보내며, 여기서도 쓰지 않는다.
 import { sexLabel } from './post.js'
@@ -12,7 +12,8 @@ function clean(value) {
 }
 
 // 게시글 → 검색 화면 값. today 는 'YYYY-MM-DD'(미래 날짜·잘못된 날짜면 오늘로).
-export function postToSearch(post, today) {
+// photoUrl: 게시글 사진 주소(회원 글은 우리 서버, 분실 신고는 공공데이터 주소). 사진이 없으면 비움.
+export function postToSearch(post, today, photoUrl = '') {
   const lostDate = /^\d{4}-\d{2}-\d{2}$/.test(post?.lost_date || '') && post.lost_date <= today ? post.lost_date : today
   // 검색 지역은 시·도 이름이다. 분실 신고의 지역은 '경기도 수원시'처럼 시·군·구까지 있어 첫 낱말만 쓴다.
   const sido = clean(post?.region).split(' ')[0] || ''
@@ -37,6 +38,7 @@ export function postToSearch(post, today) {
     },
     location: sido ? { region: sido, address } : null,
     source: { id: post?.id || '', title: clean(post?.pet_name) || clean(post?.breed) || '실종 정보' },
+    photo: post?.has_photo && photoUrl ? photoUrl : '',
   }
 }
 

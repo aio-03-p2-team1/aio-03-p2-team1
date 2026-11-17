@@ -72,8 +72,8 @@ export default function SearchPage() {
     loadHistory()
   }, [])
 
-  // 실종 정보 게시판의 [이 정보로 구조 공고 찾기]로 들어오면 그 글의 정보로 입력을 채운다.
-  // 이전 검색 결과·답한 값·사진은 비우고, 검색은 사용자가 확인한 뒤 직접 누른다.
+  // 실종 정보 게시판의 [이 정보로 구조 공고 찾기]로 들어오면 그 글의 정보로 입력을 채우고 바로 찾는다.
+  // 이전 검색 결과·답한 값·사진은 비운다. 글에 사진이 있으면 사진 분석이 끝난 뒤(특징을 채운 뒤) 찾는다.
   useEffect(() => {
     const prefill = takePostSearch()
     if (!prefill) return
@@ -87,7 +87,13 @@ export default function SearchPage() {
     setPhotoFeatureText('')
     setPhotoSpecies('')
     setParams({}, { replace: true })
-    toast(`'${prefill.source?.title || '게시글'}' 정보로 채웠어요. 확인하고 [후보 찾아보기]를 눌러 주세요.`)
+    toast(`'${prefill.source?.title || '게시글'}' 정보로 찾고 있어요. 입력을 고쳐 다시 찾을 수도 있어요.`)
+    const auto = { baseForm: prefill.form, location: prefill.location }
+    if (prefill.photo && prefill.source?.id) {
+      analyzePhoto({ postId: prefill.source.id }, prefill.photo, { fresh: true, autoSearch: auto })
+    } else {
+      submit(buildCriteria(prefill.form, {}, prefill.location))
+    }
   }, [])
 
   useEffect(() => {
@@ -124,16 +130,27 @@ export default function SearchPage() {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    await analyzePhoto({ file }, URL.createObjectURL(file))
+  }
+
+  // 사진 한 장을 보여 주고 특징을 분석해 입력에 채운다. 직접 올린 사진과 게시글 사진이 같은 흐름을 쓴다.
+  // source: { file } 직접 올린 사진 | { postId } 게시글 사진(서버가 게시글에서 사진을 꺼내 분석. 분실 신고 사진은
+  //         공공데이터 서버 주소라 브라우저가 읽지 못해서 서버가 대신 받는다).
+  // previewUrl: 화면에 보여 줄 주소. fresh: 게시글로 새로 채운 직후라 이전 사진 특징을 지울 필요가 없음.
+  // autoSearch: { baseForm, location } 이면 분석이 끝난 뒤(실패해도) 그 입력에 사진 특징을 더해 바로 찾는다.
+  async function analyzePhoto(source, previewUrl, { fresh = false, autoSearch = null } = {}) {
+    const { file, postId } = source
     const requestId = ++photoRequestId.current
-    const selectionError = photoSelectionError(file)
+    let searchForm = autoSearch?.baseForm || null
+    const selectionError = file ? photoSelectionError(file) : null
     if (selectionError) {
       setPhotoFeedbackOpen(false)
       setPhotoAnalyzing(false)
       return setPhotoMessage(photoErrorMessage(selectionError))
     }
-    const oldAuto = photoFeatureText
+    const oldAuto = fresh ? '' : photoFeatureText
     const photoAsked = visibleRequest(run, answers, declined)?.type === 'photo'
-    const oldSpecies = photoSpecies
+    const oldSpecies = fresh ? '' : photoSpecies
     if (oldAuto || oldSpecies) {
       setForm((current) => ({
         ...current,
@@ -145,14 +162,14 @@ export default function SearchPage() {
     }
     setPhotoFeatureText('')
     setPhotoSpecies('')
-    setPhoto(URL.createObjectURL(file))
+    setPhoto(previewUrl)
     setPhotoMessage('')
     setPhotoFeedbackOpen(false)
     setPhotoFeedback('')
     setPhotoAnalyzing(true)
     try {
-      const encoded = await readAsBase64(file)
-      const result = await api('/photo-analysis', { method: 'POST', body: { image_base64: encoded } })
+      const body = file ? { image_base64: await readAsBase64(file) } : { post_id: postId }
+      const result = await api('/photo-analysis', { method: 'POST', body })
       if (requestId !== photoRequestId.current) return
       const unsuitableMessage = unsuitablePhotoMessage(result)
       if (unsuitableMessage) {
@@ -175,6 +192,13 @@ export default function SearchPage() {
         ...withPhotoBreed(current, result),
         ...(extracted ? { description: [extracted, current.description].filter(Boolean).join('\n') } : {}),
       }))
+      if (searchForm) {
+        searchForm = {
+          ...searchForm,
+          ...withPhotoBreed(searchForm, result),
+          ...(extracted ? { description: [extracted, searchForm.description].filter(Boolean).join('\n') } : {}),
+        }
+      }
       setPhotoFeatureText(extracted)
       setPhotoSpecies(result.species || '')
       setPhotoFeedbackOpen(true)
@@ -191,7 +215,11 @@ export default function SearchPage() {
     } catch (err) {
       if (requestId === photoRequestId.current) setPhotoMessage(photoErrorMessage(photoAnalysisError(err)))
     } finally {
-      if (requestId === photoRequestId.current) setPhotoAnalyzing(false)
+      if (requestId === photoRequestId.current) {
+        setPhotoAnalyzing(false)
+        // 게시글로 들어온 경우: 사진 분석이 실패해도 글 정보만으로 찾는다.
+        if (searchForm) submit(buildCriteria(searchForm, {}, autoSearch.location))
+      }
     }
   }
 
@@ -249,15 +277,16 @@ export default function SearchPage() {
     }
   }
 
-  function buildCriteria(values, answerValues) {
+  // loc: 실종 위치. 기본은 지금 화면의 위치, 게시글로 막 채운 직후처럼 상태가 아직 반영되지 않았으면 직접 넘긴다.
+  function buildCriteria(values, answerValues, loc = location) {
     const criteria = breedRequest(values)
     for (const [k, v] of Object.entries(values)) if (k !== 'breed' && v.trim()) criteria[k] = v.trim()
-    if (location?.region) criteria.region = location.region
-    if (location?.address) criteria.lost_place = location.address
+    if (loc?.region) criteria.region = loc.region
+    if (loc?.address) criteria.lost_place = loc.address
     // 지도에서 찍은 점을 반경 중심으로 보낸다(서버가 한국 범위 검사). 미리 보기와 실제 검색 범위가 같아진다.
-    if (location?.address && Number.isFinite(location?.lat) && Number.isFinite(location?.lng)) {
-      criteria.lost_lat = Number(location.lat.toFixed(6))
-      criteria.lost_lng = Number(location.lng.toFixed(6))
+    if (loc?.address && Number.isFinite(loc?.lat) && Number.isFinite(loc?.lng)) {
+      criteria.lost_lat = Number(loc.lat.toFixed(6))
+      criteria.lost_lng = Number(loc.lng.toFixed(6))
     }
     return applyAnswers(criteria, answerValues)
   }
@@ -313,7 +342,7 @@ export default function SearchPage() {
               사진 올리기
               <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhoto} />
             <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '찾을 동물이 중심에 선명하게 보이는 사진 (JPG, PNG 또는 WEBP · 최대 8MB)'}</span>
-              {photo && <img src={photo} alt="올린 반려동물 사진" />}
+              {photo && <img src={photo} alt="올린 반려동물 사진" referrerPolicy="no-referrer" />}
               {photoAnalyzing && <span className="photo-analyzing">사진 특징을 살펴보고 있어요…</span>}
             </label>
             {photoMessage && <p className="photo-analysis-message" role="status">{photoMessage}</p>}
@@ -397,7 +426,7 @@ export default function SearchPage() {
             사진을 살펴보고 확인된 특징을 입력란에 적어드려요. 사진은 저장하지 않으며, 입력된 특징은 직접 고칠 수 있어요.
             빈 칸이 있으면 검색 전에 먼저 물어볼게요.
           </p>
-          <button className="primary-button" type="submit" disabled={busy}>{busy ? '찾는 중…' : '후보 찾아보기 ↗'}</button>
+          <button className="primary-button" type="submit" disabled={busy}>{busy ? '찾는 중…' : '후보 찾아보기'}</button>
         </div>
       </form>
       <RegionPicker

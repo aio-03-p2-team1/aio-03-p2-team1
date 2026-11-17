@@ -103,7 +103,7 @@ export default function MyPage() {
           <section className="panel my-posters-panel" aria-labelledby="my-posters-title">
             <div className="my-section-head">
               <div><span className="eyebrow">다시 편집하기</span><h2 id="my-posters-title">내 전단지 {posters.status === 'ready' ? `(${posters.items.length}/5)` : ''}</h2></div>
-              <Link className="text-link" to="/poster">새 전단지 ↗</Link>
+              <Link className="text-link" to="/poster">새 전단지</Link>
             </div>
             <ListState list={posters} empty="저장한 전단지가 없어요. 전단지는 최대 5개까지 저장할 수 있어요." loading="전단지를 불러오고 있어요…" />
             {posters.status === 'ready' && posters.items.length > 0 && (
@@ -123,7 +123,7 @@ export default function MyPage() {
           <section className="panel my-history-panel" aria-labelledby="my-history-title">
             <div className="my-section-head">
               <div><span className="eyebrow">다시 찾아보기</span><h2 id="my-history-title">검색 기록</h2></div>
-              <Link className="text-link" to="/search">새 검색 ↗</Link>
+              <Link className="text-link" to="/search">새 검색</Link>
             </div>
             <ListState list={runs} empty="아직 검색 기록이 없어요. 우리 아이 찾기에서 검색해 보세요." loading="검색 기록을 불러오고 있어요…" />
             {runs.status === 'ready' && runs.items.length > 0 && (
@@ -149,7 +149,7 @@ export default function MyPage() {
           <section className="panel my-posts-panel" aria-labelledby="my-posts-title">
             <div className="my-section-head">
               <div><span className="eyebrow">실종 정보 게시판</span><h2 id="my-posts-title">내가 쓴 게시글</h2></div>
-              <Link className="text-link" to="/board">게시판 가기 ↗</Link>
+              <Link className="text-link" to="/board">게시판 가기</Link>
             </div>
             <ListState list={posts} empty="아직 쓴 게시글이 없어요. 실종 정보 게시판에서 우리 아이를 알려 보세요." loading="게시글을 불러오고 있어요…" />
             {posts.status === 'ready' && posts.items.length > 0 && (

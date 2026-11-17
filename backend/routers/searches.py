@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import time
 from typing import Any
 
@@ -7,6 +8,7 @@ from fastapi import APIRouter, Depends, Query
 
 from backend.agent.llm import LlmError
 from backend.agent.photo import InvalidPhoto, decode_and_validate
+from backend.tools import remote_photo
 from backend.agent.runner import run_search
 from backend.schemas.api import PhotoAnalysisBody, PhotoAnalysisResponse, SearchBody
 from backend.auth.sessions import AuthUnavailable, SessionUser
@@ -65,7 +67,8 @@ async def analyze_photo(
     if limited:
         raise ApiError(429, "photo_analysis_rate_limited", "사진 분석 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.")
     try:
-        image_data, mime_type = decode_and_validate(body.image_base64)
+        encoded = body.image_base64 if body.image_base64 is not None else await _post_photo_base64(ctx, body.post_id)
+        image_data, mime_type = decode_and_validate(encoded)
     except InvalidPhoto as exc:
         raise ApiError(422, exc.code, exc.message)
     started = time.perf_counter()
@@ -77,6 +80,28 @@ async def analyze_photo(
         **result.model_dump(),
         analysis_ms=round((time.perf_counter() - started) * 1000),
     )
+
+
+async def _post_photo_base64(ctx: AppContext, post_id: str) -> str:
+    """실종 정보 게시판 글의 사진을 base64 로 꺼낸다. 회원 글은 저장된 사진, 분실 신고는 공공데이터 사진을 서버가 받는다.
+
+    사진 주소는 사용자가 보낸 값이 아니라 공공 API 응답에서 꺼낸 값만 쓴다(remote_photo 의 SSRF 방지 설명 참고).
+    """
+    from backend.routers.posts import BOARD_OWNER, KIND as POST_KIND, _LOST_ID
+
+    if _LOST_ID.match(post_id):
+        if ctx.lost is None:
+            raise ApiError(503, "lost_board_unavailable", "분실 신고 정보를 불러올 수 없어요.")
+        item = await ctx.lost.get(post_id)
+        if not item or not item.get("photo_url"):
+            raise ApiError(404, "photo_not_found", "사진이 없는 게시글입니다.")
+        raw = await remote_photo.fetch_photo(item["photo_url"])
+        return base64.b64encode(raw).decode()
+    data = await ctx.store.get(BOARD_OWNER, POST_KIND, post_id)
+    photo = (data or {}).get("photo")
+    if not photo or not photo.get("data"):
+        raise ApiError(404, "photo_not_found", "사진이 없는 게시글입니다.")
+    return photo["data"]
 
 
 @router.get("/runs")
