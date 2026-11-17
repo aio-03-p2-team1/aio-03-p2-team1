@@ -313,7 +313,8 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-select-label{display:flex;align-items:center;gap:8px;color:#756d61;font-size:12px;font-weight:700}
 .poster-select-label select{min-height:40px;padding:7px 30px 7px 10px;border:1px solid #e2dacd;border-radius:9px;background:#fff;color:#403a32;font:inherit;font-size:13px}
 .poster-top-actions .primary-button,.poster-top-actions .secondary-button{min-height:40px;padding:9px 14px;font-size:13px}
-.poster-workspace{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(330px,1fr);gap:16px;align-items:start}
+/* 캔버스 | 전단지 내용(이전 2열 배치 때와 같은 폭) | 선택한 요소(220px). 선택한 요소 폭만큼 캔버스가 줄어든다. */
+.poster-workspace{display:grid;grid-template-columns:minmax(0,1fr) max(300px,calc((100% - 16px) * .28)) 220px;gap:16px;align-items:start}
 .poster-canvas-panel,.poster-inspector{padding:17px;min-width:0}
 .poster-canvas-panel{background:#f5f2ec;overflow:hidden}
 .poster-canvas-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
@@ -323,12 +324,12 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-canvas-toolbar>label{display:flex;align-items:center;gap:8px;color:#746c60;font-size:11px;white-space:nowrap}
 .poster-canvas-toolbar input{width:100px;accent-color:#638062}
 .poster-canvas-toolbar span{min-width:32px;color:#51493f;font-weight:700}
-.poster-stage-wrap{display:grid;place-items:start center;max-height:calc(100vh - 210px);min-height:390px;overflow:auto;padding:7px 4px 18px}
+.poster-stage-wrap{display:grid;place-items:start center;height:calc(130vh - 248px);min-height:532px;overflow:auto;padding:7px 4px 18px}
 .poster-stage-viewport{position:relative;flex:none}
 .poster-stage-scale{position:absolute;top:0;left:0;transform-origin:top left}
 .poster-stage-wrap canvas{display:block;max-width:none!important}
-.poster-inspector{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
-.poster-inspector>.panel-title,.poster-properties>.panel-title{margin-bottom:10px}
+.poster-inspector{position:static;overflow:visible}
+.poster-inspector>.panel-title{margin-bottom:10px}
 .poster-inspector .panel-title h2{margin:0;font-size:16px}
 .poster-help{margin:0 0 16px;color:#82796d;font-size:12px;line-height:1.6}
 .poster-fields{display:grid;gap:11px}
@@ -336,7 +337,12 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-field textarea,.poster-property input:not([type=color]):not([type=range]),.poster-property select{width:100%;min-height:39px;padding:9px 10px;border:1px solid #e3ddd3;border-radius:8px;background:#fff;color:#38332d;font:inherit;font-size:13px;font-weight:400;resize:vertical}
 .poster-field textarea{line-height:1.5}
 .poster-overflow-warning{color:#ad6b21;font-size:11px;font-weight:500}
-.poster-properties{margin-top:20px;padding-top:16px;border-top:1px solid #eee8df}
+.poster-properties{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;padding:17px;min-width:0}
+.poster-properties>.panel-title{margin-bottom:10px}
+.poster-properties .panel-title h2{margin:0;font-size:16px}
+.poster-properties-empty{margin:0}
+.poster-properties-body .poster-selected-head{margin:0 0 10px}
+.poster-properties .poster-property{grid-template-columns:1fr;gap:5px}
 .poster-selected-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 10px;color:#3f3931;font-size:13px}
 .danger-text{color:#a34a39!important}
 .poster-property{display:grid;grid-template-columns:minmax(90px,1fr) minmax(110px,1.5fr);align-items:center;gap:10px;margin:9px 0;color:#675e51;font-size:12px;font-weight:700}
@@ -348,8 +354,8 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-layer-actions{display:flex;gap:7px;margin-top:12px}
 .poster-notice{margin:14px 0 0;padding:10px 11px;border:1px solid #d5e3d0;border-radius:8px;background:#f2f7ef;color:#3d5c37;font-size:12px;line-height:1.5}
 .poster-notice.error{border-color:#ecc7bd;background:#fff7f4;color:#a34a39}
-@media(max-width:1050px){.poster-topbar{align-items:flex-start;flex-direction:column}.poster-top-actions{justify-content:flex-start}.poster-workspace{grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr)}}
-@media(max-width:760px){.poster-page{padding:18px 14px 50px}.poster-workspace{grid-template-columns:1fr}.poster-inspector{position:static;max-height:none;order:-1}.poster-stage-wrap{max-height:65vh;min-height:330px}.poster-canvas-panel{padding:11px}.poster-canvas-toolbar{align-items:flex-start;flex-direction:column}.poster-top-actions{width:100%}.poster-select-label{width:100%;justify-content:space-between}.poster-select-label select{flex:1}}
+@media(max-width:1050px){.poster-topbar{align-items:flex-start;flex-direction:column}.poster-top-actions{justify-content:flex-start}.poster-workspace{grid-template-columns:minmax(0,1fr) minmax(260px,.6fr)}.poster-canvas-panel{grid-row:span 2}}
+@media(max-width:760px){.poster-page{padding:18px 14px 50px}.poster-workspace{grid-template-columns:1fr}.poster-inspector{position:static;max-height:none;order:-1}.poster-canvas-panel{grid-row:auto}.poster-properties{position:static;max-height:none}.poster-stage-wrap{height:auto;max-height:85vh;min-height:430px}.poster-canvas-panel{padding:11px}.poster-canvas-toolbar{align-items:flex-start;flex-direction:column}.poster-top-actions{width:100%}.poster-select-label{width:100%;justify-content:space-between}.poster-select-label select{flex:1}}
 
 /* 마이페이지: 내가 만든 전단지 */
 .my-posters-panel{margin-top:18px}

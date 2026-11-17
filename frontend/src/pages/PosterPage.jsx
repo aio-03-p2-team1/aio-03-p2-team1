@@ -210,8 +210,13 @@ export default function PosterPage() {
         <p className="poster-help">입력한 문구는 미리보기에 바로 반영됩니다. 캔버스 안에서는 위치와 크기를 조절할 수 있어요.</p>
         <input ref={fileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { uploadFile(event.target.files?.[0]); event.target.value = '' }} />
         <div className="poster-fields">{textComponents.map((item) => <label className="poster-field" key={item.id}><span>{item.label || POSTER_FIELDS.find(([key]) => key === item.fieldKey)?.[1] || '텍스트'}</span><textarea rows={item.content?.length > 45 ? 3 : 2} value={item.content || ''} onChange={(event) => { update(item.id, { content: event.target.value }); setSaved(false) }} placeholder={POSTER_FIELDS.find(([key]) => key === item.fieldKey)?.[2] || '문구를 입력해 주세요'} />{textOverflows(item) && <small className="poster-overflow-warning">텍스트가 영역을 넘을 수 있어요. 캔버스에서 크기나 글자 크기를 조절해 주세요.</small>}</label>)}</div>
-        {selected && <div className="poster-properties">
-          <div className="panel-title"><span>2</span><h2>선택한 요소</h2></div>
+        {notice && <p className={`poster-notice${notice.includes('못') || notice.includes('실패') ? ' error' : ''}`} role="status">{notice}</p>}
+      </aside>
+      {/* 선택한 요소 설정은 '전단지 내용' 오른쪽 열에 두고, 이 패널만 스크롤을 따라 내려온다(sticky). */}
+      <section className="poster-properties panel" aria-label="선택한 요소">
+        <div className="panel-title"><span>2</span><h2>선택한 요소</h2></div>
+        {!selected && <p className="poster-help poster-properties-empty">캔버스에서 텍스트·사진·도형을 누르면 여기서 글자 크기, 색상, 자르기 등을 바꿀 수 있어요.</p>}
+        {selected && <div className="poster-properties-body">
           <div className="poster-selected-head"><strong>{selected.label || (selected.type === 'shape' ? '도형' : selected.type === 'image' ? '사진' : '텍스트')}</strong><button type="button" className="text-action danger-text" onClick={() => { removeComponent(selected.id); setSaved(false) }}>삭제</button></div>
           {selected.type === 'text' && <>
             <label className="poster-property">글자 크기<input type="number" min="8" max="120" value={selected.fontSize || 24} onChange={(e) => { update(selected.id, { fontSize: Number(e.target.value) }); setSaved(false) }} /></label>
@@ -235,8 +240,7 @@ export default function PosterPage() {
           </>}
           <div className="poster-layer-actions"><button type="button" onClick={() => reorder(selected.id, -1)}>뒤로</button><button type="button" onClick={() => reorder(selected.id, 1)}>앞으로</button></div>
         </div>}
-        {notice && <p className={`poster-notice${notice.includes('못') || notice.includes('실패') ? ' error' : ''}`} role="status">{notice}</p>}
-      </aside>
+      </section>
     </div>
   </main>
 }
