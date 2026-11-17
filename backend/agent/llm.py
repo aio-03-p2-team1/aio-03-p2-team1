@@ -21,7 +21,7 @@ from backend.schemas.llm import (
 
 log = logging.getLogger("dasimanna.llm")
 
-PROMPT_VERSION = "feature-extract-v5"
+PROMPT_VERSION = "feature-extract-v6"
 PHOTO_CONFIDENCE_THRESHOLD = 0.8
 COLOR_VALUES = get_args(Color)
 COLOR_VALUES_TEXT = ", ".join(COLOR_VALUES)
@@ -38,6 +38,7 @@ SYSTEM_PROMPT_TEMPLATE = (
     "세 가지 색이 언급되어도 삼색으로 합치지 않는다. 삼색·고등어는 해당 표현이 직접 언급된 경우에만 반환한다. "
     "명확한 동의어는 허용값으로 정규화하고, 색조가 애매하거나 목록에 없는 색상은 제외한다. "
     "marks에는 목줄·하네스·무늬·흉터·귀나 꼬리 모양 등 식별에 도움 되는 짧은 외형 단서만 넣는다. "
+    "품종명·품종코드는 별도 선택 조건이다. 설명 속 품종을 추출하거나 marks에 넣지 않는다. "
     "나이·성격·건강 상태·이름·장소·날짜는 외형 특징에 포함하지 않는다. "
     "같은 의미의 색이나 표식은 한 번만 반환하고, 설명에 없는 값은 목록에서 생략하거나 문자열 필드에서 빈 문자열로 둔다. "
     "주어진 구조화 응답 스키마의 모든 필드를 채우고, 값 외 설명이나 마크다운을 덧붙이지 않는다."
@@ -93,7 +94,7 @@ class FeatureExtractor:
         self._http_client = httpx.AsyncClient(timeout=timeout, transport=transport) if client is None else None
         self._client = client or ChatOpenAI(
             model=model, api_key=api_key, timeout=timeout, max_retries=0, http_async_client=self._http_client,
-            model_kwargs={"prompt_cache_key": "dasimanna-features-photo-v5"}
+            model_kwargs={"prompt_cache_key": "dasimanna-features-photo-v6"}
         )
 
     async def aclose(self) -> None:

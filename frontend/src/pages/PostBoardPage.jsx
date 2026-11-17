@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { loadKinds, withSpecies } from '../lib/kinds.js'
 import { api, API_BASE } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate } from '../lib/format.js'
@@ -12,7 +13,7 @@ import RegionPicker from '../components/RegionPicker.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
 
-const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed: '', description: '' }
+const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed_code: '', description: '' }
 
 export default function PostBoardPage() {
   const { user } = useAuth()
@@ -195,6 +196,20 @@ export function PostPhoto({ post, main = false }) {
 function PostForm({ regions, onCancel, onCreated }) {
   const toast = useToast()
   const [form, setForm] = useState(EMPTY)
+  const [kinds, setKinds] = useState([])
+  const [kindsLoading, setKindsLoading] = useState(false)
+  const [kindsError, setKindsError] = useState('')
+  useEffect(() => {
+    let active = true
+    setKinds([]); setKindsError('')
+    setKindsLoading(Boolean(form.species))
+    if (form.species) {
+      loadKinds(form.species).then((rows) => { if (active) setKinds(rows) })
+        .catch(() => { if (active) setKindsError('품종 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.') })
+        .finally(() => { if (active) setKindsLoading(false) })
+    }
+    return () => { active = false }
+  }, [form.species])
   const [location, setLocation] = useState(null)
   const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useState(null)
@@ -269,7 +284,7 @@ function PostForm({ regions, onCancel, onCreated }) {
         </label>
         <label>
           동물 종류
-          <select value={form.species} onChange={update('species')} aria-invalid={!!errors.species}>
+          <select value={form.species} onChange={(event) => setForm((prev) => withSpecies(prev, event.target.value))} aria-invalid={!!errors.species}>
             <option value="">선택</option>
             {POST_SPECIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -297,8 +312,11 @@ function PostForm({ regions, onCancel, onCreated }) {
         </label>
         <label>
           품종 (선택)
-          <input value={form.breed} onChange={update('breed')} placeholder="예: 푸들, 코리안 숏헤어" maxLength={30} />
-          <FieldError text={errors.breed} />
+          <select value={form.breed_code} onChange={update('breed_code')} disabled={!form.species || kindsLoading || !kinds.length}>
+            <option value="">{kindsLoading ? '품종 불러오는 중…' : '품종을 선택해 주세요'}</option>
+            {kinds.map((kind) => <option key={kind.kind_code} value={kind.kind_code}>{kind.name}</option>)}
+          </select>
+          <FieldError text={kindsError || errors.breed_code} />
         </label>
         <label>
           사진 (선택)

@@ -27,6 +27,7 @@ from backend.errors import ApiError
 from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody
 from backend.timeutil import kst_today  # noqa: F401  (tests 에서 posts.kst_today 로도 import)
 from backend.tools.lost_animal_api import LostAnimalApiError
+from backend.tools.kinds import normalize
 
 router = APIRouter(tags=["posts"])
 
@@ -76,6 +77,7 @@ def _public(post_id: str, data: dict, viewer: str | None, *, detail: bool) -> di
         "lost_place": data.get("lost_place", ""),
         "lost_date": data["lost_date"],
         "breed": data.get("breed", ""),
+        "breed_code": data.get("breed_code", ""),
         "has_photo": bool(data.get("photo")),
         "created_at": data["created_at"],
         "mine": viewer is not None and data.get("author") == viewer,
@@ -86,6 +88,29 @@ def _public(post_id: str, data: dict, viewer: str | None, *, detail: bool) -> di
         text = data["description"]
         out["summary"] = text if len(text) <= 80 else text[:80] + "…"
     return out
+
+
+async def _with_breed_codes(items: list[dict], ctx: AppContext) -> list[dict]:
+    """기존 회원 글·분실 신고도 축종별 공식명/별칭으로만 매핑한다. LLM 추측은 사용하지 않는다."""
+    catalogs = {}
+    result = []
+    for item in items:
+        saved_code = item.get("breed_code", "")
+        item = {**item, "breed_code": ""}
+        species = item.get("species")
+        if ctx.kinds is not None and species in {"dog", "cat", "etc"} and (saved_code or item.get("breed")):
+            if species not in catalogs:
+                catalogs[species] = await ctx.kinds.rows(species)
+            query = normalize(item.get("breed", ""))
+            if saved_code:
+                matches = {row["kind_code"] for row in catalogs[species] if row["kind_code"] == saved_code}
+            else:
+                matches = {row["kind_code"] for row in catalogs[species]
+                           if normalize(row["name"]) == query or normalize(row.get("alias") or "") == query}
+            if len(matches) == 1:
+                item["breed_code"] = matches.pop()
+        result.append(item)
+    return result
 
 
 async def _viewer(request: Request, ctx: AppContext) -> str | None:
@@ -149,7 +174,7 @@ async def list_posts(
     page = min(page, pages)
     chunk = merged[(page - 1) * PAGE_ROWS: page * PAGE_ROWS]
     return {
-        "items": [_list_view(i) for i in chunk],
+        "items": await _with_breed_codes([_list_view(i) for i in chunk], ctx),
         "count": len(merged),  # 조건에 맞는 전체 글 수
         "member_count": sum(1 for i in merged if i["source"] == "member"),
         "lost_count": sum(1 for i in merged if i["source"] == "lost_api"),
@@ -203,7 +228,7 @@ async def get_lost_report(lost_id: str, ctx: AppContext = Depends(get_ctx)):
         raise ApiError(502, exc.code, "공공데이터 분실 신고를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.")
     if not item:
         raise ApiError(404, "post_not_found", "게시글을 찾을 수 없습니다.")
-    return item
+    return (await _with_breed_codes([item], ctx))[0]
 
 
 @router.get("/posts/mine")
@@ -211,13 +236,13 @@ async def list_my_posts(user: SessionUser = Depends(current_user), ctx: AppConte
 
     rows = await ctx.store.list(BOARD_OWNER, KIND, LIST_SCAN)
     items = [_public(r["id"], r["data"], user.owner, detail=False) for r in rows if r["data"].get("author") == user.owner]
-    return {"items": items, "count": len(items), "limit": MAX_POSTS_PER_USER}
+    return {"items": await _with_breed_codes(items, ctx), "count": len(items), "limit": MAX_POSTS_PER_USER}
 
 
 @router.get("/posts/{post_id}")
 async def get_post(post_id: str, request: Request, ctx: AppContext = Depends(get_ctx)):
     data = await _get(ctx, post_id)
-    return _public(post_id, data, await _viewer(request, ctx), detail=True)
+    return (await _with_breed_codes([_public(post_id, data, await _viewer(request, ctx), detail=True)], ctx))[0]
 
 
 @router.get("/posts/{post_id}/photo")
@@ -242,6 +267,19 @@ async def create_post(body: PostBody, user: SessionUser = Depends(current_user),
         raise ApiError(422, "invalid_request", "입력값을 확인해 주세요.")
     if body.region in ("전체", "all"):
         raise ApiError(422, "region_required", "실종 위치를 지도에서 선택해 주세요.")
+    breed = body.breed
+    breed_code = ""
+    if body.breed_code:
+        if ctx.kinds is None:
+            raise ApiError(503, "kinds_unavailable", "품종 목록을 불러오지 못했어요.")
+        rows = await ctx.kinds.rows(body.species)
+        row = next((r for r in rows if r["kind_code"] == body.breed_code), None)
+        if row is None:
+            raise ApiError(422, "invalid_breed_code", "선택한 축종의 품종 코드를 확인해 주세요.")
+        breed, breed_code = row["name"], row["kind_code"]
+    elif breed:
+        resolved = (await _with_breed_codes([{"species": body.species, "breed": breed}], ctx))[0]
+        breed_code = resolved["breed_code"]
     photo = None
     if body.photo:
         media_type, raw = _decode_photo(body.photo)
@@ -258,7 +296,8 @@ async def create_post(body: PostBody, user: SessionUser = Depends(current_user),
         "region": body.region,
         "lost_place": body.lost_place,
         "lost_date": body.lost_date.isoformat(),
-        "breed": body.breed,
+        "breed": breed,
+        "breed_code": breed_code,
         "description": body.description,
         "photo": photo,
         "author": user.owner,

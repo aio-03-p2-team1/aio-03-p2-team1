@@ -238,6 +238,14 @@ def test_prompt_cache_key_reaches_openai_request_transport():
             await model.aclose()
 
     asyncio.run(invoke())
-    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v5'
+    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v6'
     properties = requests[0]['response_format']['json_schema']['schema']['properties']
     assert 'breed' not in properties
+
+
+def test_feature_prompt_keeps_breeds_out_of_marks():
+    from backend.agent.llm import PROMPT_VERSION, SYSTEM_PROMPT
+
+    assert PROMPT_VERSION == 'feature-extract-v6'
+    assert '품종명·품종코드는 별도 선택 조건' in SYSTEM_PROMPT
+    assert 'marks에 넣지 않는다' in SYSTEM_PROMPT

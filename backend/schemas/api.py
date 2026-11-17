@@ -80,10 +80,11 @@ class PostBody(BaseModel):
     lost_place: str = Field(default="", max_length=100)
     lost_date: date
     breed: str = Field(default="", max_length=30)
+    breed_code: str = Field(default="", max_length=20)
     description: str = Field(min_length=5, max_length=1000)
     photo: str | None = Field(default=None, max_length=MAX_POST_PHOTO_BYTES * 2)
 
-    @field_validator("pet_name", "region", "lost_place", "breed", "description")
+    @field_validator("pet_name", "region", "lost_place", "breed", "breed_code", "description")
     @classmethod
     def _strip(cls, value: str) -> str:
         return value.strip()
