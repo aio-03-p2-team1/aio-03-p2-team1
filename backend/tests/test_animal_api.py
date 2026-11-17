@@ -122,3 +122,10 @@ def test_sample_source_is_labelled_and_filtered():
     assert page.source == "sample"
     assert page.items and all(i["species"] == "cat" and i["source"] == "sample" for i in page.items)
     assert all(i["id"].startswith("SAMPLE-") and i["care"]["tel"] is None for i in page.items)
+
+
+def test_folder_only_photo_url_is_dropped():
+    from backend.tools.animal_api import _https
+
+    assert _https("http://openapi.animal.go.kr/openapi/service/rest/fileDownloadSrvc/") is None
+    assert _https("http://openapi.animal.go.kr/files/a.jpg") == "https://openapi.animal.go.kr/files/a.jpg"

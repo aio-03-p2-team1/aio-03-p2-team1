@@ -8,7 +8,6 @@ import NoticePhoto from '../components/NoticePhoto.jsx'
 import Pagination from '../components/Pagination.jsx'
 import { useSearchScroll, useSearchViewState } from '../lib/searchView.jsx'
 import { cachedPage, pageNumber, rememberPage } from '../lib/pagination.js'
-import PhotoFeedbackPopup from '../components/PhotoFeedbackPopup.jsx'
 import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
@@ -46,8 +45,6 @@ export default function SearchPage() {
   const [photo, setPhoto] = useSearchViewState('photo', '')
   const [photoAnalyzing, setPhotoAnalyzing] = useState(false)
   const [photoMessage, setPhotoMessage] = useState('')
-  const [photoFeedbackOpen, setPhotoFeedbackOpen] = useState(false)
-  const [photoFeedback, setPhotoFeedback] = useState('')
   const photoRequestId = useRef(0)
   const [photoFeatureText, setPhotoFeatureText] = useSearchViewState('photoFeatureText', '')
   const [photoSpecies, setPhotoSpecies] = useSearchViewState('photoSpecies', '')
@@ -148,7 +145,6 @@ export default function SearchPage() {
     let searchForm = autoSearch?.baseForm || null
     const selectionError = file ? photoSelectionError(file) : null
     if (selectionError) {
-      setPhotoFeedbackOpen(false)
       setPhotoAnalyzing(false)
       return setPhotoMessage(photoErrorMessage(selectionError))
     }
@@ -170,8 +166,6 @@ export default function SearchPage() {
     let analysisId = ''
     setPhoto(previewUrl)
     setPhotoMessage('')
-    setPhotoFeedbackOpen(false)
-    setPhotoFeedback('')
     setPhotoAnalyzing(true)
     try {
       const body = file ? { image_base64: await readAsBase64(file) } : { post_id: postId }
@@ -213,7 +207,6 @@ export default function SearchPage() {
       }
       setPhotoFeatureText(extracted)
       setPhotoSpecies(result.species || '')
-      setPhotoFeedbackOpen(true)
       // 에이전트가 사진을 요청한 상태였다면, 사진 특징을 넣어 같은 대화로 바로 다시 찾는다(다시 임베딩·정렬).
       if (photoAsked && extracted) {
         const base = oldAuto && form.description.startsWith(oldAuto) ? form.description.slice(oldAuto.length).trimStart() : form.description
@@ -462,13 +455,6 @@ export default function SearchPage() {
           setRegionOpen(false)
         }}
       />
-      {photoFeedbackOpen && (
-        <PhotoFeedbackPopup
-          feedback={photoFeedback}
-          onFeedback={setPhotoFeedback}
-          onClose={() => setPhotoFeedbackOpen(false)}
-        />
-      )}
 
       <section className="search-results-section" aria-labelledby="results-title">
         <div className="section-head">

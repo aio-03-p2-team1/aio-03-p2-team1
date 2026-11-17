@@ -233,3 +233,42 @@ def test_photo_analysis_returns_id_and_search_uses_stored_result():
 def _owners(ctx):
     keys = asyncio.run(ctx.sessions._redis.keys("photo-analysis:*"))
     return {k.decode().split(":")[1] for k in keys}
+
+
+# ── 분석 전 사진 줄이기 ──
+def test_shrink_for_analysis_reduces_large_photo_to_1024_jpeg():
+    from io import BytesIO
+
+    from PIL import Image
+
+    from backend.agent.photo import shrink_for_analysis
+
+    big = image_bytes("PNG", size=(3000, 2000))
+    data, mime = shrink_for_analysis(big, "image/png")
+    with Image.open(BytesIO(data)) as image:
+        assert mime == "image/jpeg" and image.format == "JPEG" and max(image.size) == 1024
+        assert image.size == (1024, 683)  # 비율 유지
+    small = image_bytes("PNG", size=(800, 600))
+    assert shrink_for_analysis(small, "image/png") == (small, "image/png")  # 작은 사진은 그대로
+
+
+def test_shrink_for_analysis_applies_exif_rotation_and_white_background():
+    from io import BytesIO
+
+    from PIL import Image
+
+    from backend.agent.photo import shrink_for_analysis
+
+    rotated = BytesIO()
+    exif = Image.Exif()
+    exif[0x0112] = 6  # 휴대폰 사진: 90도 돌려서 보라는 표시
+    Image.new("RGB", (2000, 1000), (200, 50, 50)).save(rotated, format="JPEG", exif=exif)
+    data, _ = shrink_for_analysis(rotated.getvalue(), "image/jpeg")
+    with Image.open(BytesIO(data)) as image:
+        assert image.size == (512, 1024)  # 세로로 돌린 뒤 줄임
+
+    clear = BytesIO()
+    Image.new("RGBA", (2000, 2000), (0, 0, 0, 0)).save(clear, format="PNG")
+    data, _ = shrink_for_analysis(clear.getvalue(), "image/png")
+    with Image.open(BytesIO(data)) as image:
+        assert image.getpixel((10, 10)) == (255, 255, 255)  # 투명 부분은 흰색

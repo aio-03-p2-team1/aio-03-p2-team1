@@ -73,6 +73,10 @@ def _https(url: str | None) -> str | None:
     if not url:
         return None
     url = url.strip()
+    # 파일 이름 없는 폴더 주소(…/files/)는 사진이 없는 것으로 본다(분실 신고에서 실제로 확인된 형태).
+    last = url.split("?", 1)[0].rsplit("/", 1)[-1]
+    if not last:  # 주소가 / 로 끝나면 파일이 없다
+        return None
     if url.startswith("http://"):
         url = "https://" + url[7:]
     return url or None

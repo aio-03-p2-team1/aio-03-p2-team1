@@ -108,6 +108,14 @@ def test_id_is_stable_and_starts_with_date():
     assert normalize_lost(raw(1, happenDt="날짜 아님"), "dog") is None  # 날짜를 못 읽으면 만들지 않는다
 
 
+def test_folder_only_photo_url_means_no_photo():
+    # 실제 응답에서 확인된 형태: 사진이 없는 신고는 파일 이름 없이 폴더 주소만 온다.
+    item = normalize_lost(raw(1, popfile="http://openapi.animal.go.kr/openapi/service/rest/fileDownloadSrvc/"), "dog")
+    assert item["photo_url"] is None and item["has_photo"] is False
+    with_photo = normalize_lost(raw(1), "dog")
+    assert with_photo["photo_url"].startswith("https://") and with_photo["has_photo"] is True
+
+
 def test_id_hash_uses_redacted_special_mark():
     with_phone = raw(1, specialMark="꼬리가 짧아요. 연락 010-1234-5678")
     already_redacted = raw(1, specialMark="꼬리가 짧아요. 연락 (연락처 생략)")
