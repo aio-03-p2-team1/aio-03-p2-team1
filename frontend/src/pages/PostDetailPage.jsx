@@ -167,9 +167,12 @@ export default function PostDetailPage() {
           </div>
           <div className="detail-page-actions">
             <button type="button" className="primary-button" onClick={searchWithPost}>이 정보로 구조 공고 찾기</button>
-            <button type="button" className="secondary-button" onClick={makePoster} disabled={makingPoster}>
-              {makingPoster ? '전단지 만드는 중…' : '전단지 만들기'}
-            </button>
+            {post.mine && (
+              // 내가 쓴 글에만 보인다(분실 신고는 mine 이 항상 false).
+              <button type="button" className="secondary-button" onClick={makePoster} disabled={makingPoster}>
+                {makingPoster ? '전단지 만드는 중…' : '전단지 만들기'}
+              </button>
+            )}
           </div>
           <p className="fineprint">
             {lost
