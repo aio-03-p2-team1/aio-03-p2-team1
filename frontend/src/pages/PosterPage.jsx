@@ -55,6 +55,21 @@ function useAssetImage(assetId) {
   return image
 }
 
+function imageCrop(image, item) {
+  if (!image) return undefined
+  const boxRatio = item.width / item.height
+  const sourceRatio = image.width / image.height
+  let width = image.width
+  let height = image.height
+  if (sourceRatio > boxRatio) width = image.height * boxRatio
+  else height = image.width / boxRatio
+  const zoom = Math.max(1, Math.min(3, Number(item.cropZoom) || 1))
+  width /= zoom; height /= zoom
+  const x = (image.width - width) * Math.max(0, Math.min(1, Number(item.cropX ?? 0.5)))
+  const y = (image.height - height) * Math.max(0, Math.min(1, Number(item.cropY ?? 0.5)))
+  return { x, y, width, height }
+}
+
 function CanvasItem({ item, selected, onSelect, onChange, registerNode }) {
   const image = useAssetImage(item.assetId)
   const common = {
@@ -73,7 +88,7 @@ function CanvasItem({ item, selected, onSelect, onChange, registerNode }) {
   if (item.type === 'image') {
     return <>
       <Rect {...common} fill="#eee9df" stroke={selected ? '#4c7757' : '#d8d0c4'} strokeWidth={selected ? 2 : 1} />
-      {image && <KonvaImage {...common} image={image} />}
+      {image && <KonvaImage {...common} image={image} crop={imageCrop(image, item)} />}
       {!image && <Text {...common} text="사진을 추가해 주세요" align="center" verticalAlign="middle" fill="#8b8275" fontSize={18} listening={false} />}
     </>
   }
@@ -224,6 +239,30 @@ export default function PosterPage() {
     link.click()
   }
 
+  function printPdf() {
+    const stageInstance = stageRef.current
+    if (!stageInstance) { setNotice('인쇄용 이미지를 만들지 못했습니다.'); return }
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) { setNotice('새 창이 차단됐어요. 팝업을 허용한 뒤 다시 시도해 주세요.'); return }
+    const transformer = stageInstance.findOne('Transformer')
+    transformer?.hide()
+    const imageUrl = stageInstance.toDataURL({ pixelRatio: 2 / zoom, mimeType: 'image/png' })
+    transformer?.show()
+    printWindow.document.open()
+    printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>실종동물 전단지</title><style>@page{size:A4 portrait;margin:0}html,body{margin:0;width:210mm;height:297mm}img{display:block;width:210mm;height:297mm}</style></head><body><img alt="실종동물 전단지" src="${imageUrl}"></body></html>`)
+    printWindow.document.close()
+    const image = printWindow.document.querySelector('img')
+    let printed = false
+    const printWhenReady = () => {
+      if (printed) return
+      printed = true
+      printWindow.focus(); printWindow.print(); printWindow.close()
+    }
+    image.addEventListener('load', printWhenReady, { once: true })
+    image.addEventListener('error', () => { printWindow.close(); setNotice('인쇄용 전단지를 준비하지 못했습니다.') }, { once: true })
+    if (image.complete && image.naturalWidth) printWhenReady()
+  }
+
   if (loading) return <main className="page-main"><p className="state-box">전단지 편집기를 준비하고 있어요…</p></main>
   if (!poster) return <main className="page-main"><p className="state-box state-error">{notice || '전단지를 불러오지 못했습니다.'}</p></main>
   const textComponents = poster.components.filter((item) => item.type === 'text').sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
@@ -235,6 +274,7 @@ export default function PosterPage() {
         <button className="secondary-button" type="button" onClick={undo} disabled={!past.length}>실행 취소</button>
         <button className="secondary-button" type="button" onClick={redo} disabled={!future.length}>다시 실행</button>
         <button className="secondary-button" type="button" onClick={downloadPng}>PNG 다운로드</button>
+        <button className="secondary-button" type="button" onClick={printPdf}>PDF / 인쇄</button>
         <button className="primary-button" type="button" onClick={save} disabled={saving}>{saving ? '저장 중…' : saved ? '저장 완료' : '저장'}</button>
       </div>
     </div>
@@ -263,6 +303,10 @@ export default function PosterPage() {
           </>}
           {selected.type === 'image' && <>
             <button type="button" className="secondary-button poster-replace" onClick={() => fileRef.current?.click()}>{selected.assetId ? '사진 교체' : '사진 업로드'}</button>
+            <label className="poster-property">자르기 확대<input type="range" min="1" max="3" step="0.05" value={selected.cropZoom || 1} onChange={(e) => { update(selected.id, { cropZoom: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">자르기 가로 위치<input type="range" min="0" max="1" step="0.01" value={selected.cropX ?? 0.5} onChange={(e) => { update(selected.id, { cropX: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">자르기 세로 위치<input type="range" min="0" max="1" step="0.01" value={selected.cropY ?? 0.5} onChange={(e) => { update(selected.id, { cropY: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">회전<input type="number" min="-180" max="180" value={selected.rotation || 0} onChange={(e) => { update(selected.id, { rotation: Number(e.target.value) }); setSaved(false) }} /></label>
             <label className="poster-property">투명도<input type="range" min="0.1" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => { update(selected.id, { opacity: Number(e.target.value) }); setSaved(false) }} /></label>
           </>}
           {selected.type === 'shape' && <>

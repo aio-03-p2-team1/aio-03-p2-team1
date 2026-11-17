@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Header from './components/Header.jsx'
 import Footer from './components/Footer.jsx'
@@ -12,7 +13,8 @@ import MyPage from './pages/MyPage.jsx'
 import PostBoardPage from './pages/PostBoardPage.jsx'
 import PostDetailPage from './pages/PostDetailPage.jsx'
 import NotFoundPage from './pages/NotFoundPage.jsx'
-import PosterPage from './pages/PosterPage.jsx'
+
+const PosterPage = lazy(() => import('./pages/PosterPage.jsx'))
 
 function RequireLogin({ children }) {
   const { user, ready } = useAuth()
@@ -48,7 +50,7 @@ export default function App() {
             </RequireLogin>
           }
         />
-        <Route path="/poster" element={<RequireLogin><PosterPage /></RequireLogin>} />
+        <Route path="/poster" element={<RequireLogin><Suspense fallback={<main className="page-main"><p className="state-box">전단지 편집기를 불러오고 있어요…</p></main>}><PosterPage /></Suspense></RequireLogin>} />
         {/* 실종 정보 게시판: 읽기는 공개, 등록은 화면 안에서 로그인 확인 */}
         <Route path="/board" element={<PostBoardPage />} />
         {/* 공공데이터 분실 신고 상세(회원 글과 같은 화면, 주소만 구분) */}

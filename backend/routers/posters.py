@@ -81,7 +81,7 @@ def _validate_document(body: PosterBody) -> dict[str, Any]:
         if not ID_RE.fullmatch(component_id) or component_id in ids:
             raise ApiError(422, "poster_component_invalid", "전단지 구성 요소 ID를 확인해 주세요.")
         ids.add(component_id)
-        if kind not in {"text", "image", "shape"}:
+        if not isinstance(kind, str) or kind not in {"text", "image", "shape"}:
             raise ApiError(422, "poster_component_invalid", "지원하지 않는 전단지 구성 요소입니다.")
         for key in ("x", "y", "width", "height"):
             value = component.get(key)
@@ -89,9 +89,39 @@ def _validate_document(body: PosterBody) -> dict[str, Any]:
                 raise ApiError(422, "poster_component_invalid", "구성 요소의 위치와 크기를 확인해 주세요.")
         if component["width"] <= 0 or component["height"] <= 0:
             raise ApiError(422, "poster_component_invalid", "구성 요소의 크기는 0보다 커야 합니다.")
-        if kind == "text" and len(str(component.get("content", ""))) > 2000:
-            raise ApiError(422, "poster_component_invalid", "텍스트는 2,000자 이하로 입력해 주세요.")
+        if kind == "text":
+            content = component.get("content", "")
+            if not isinstance(content, str) or len(content) > 2000:
+                raise ApiError(422, "poster_component_invalid", "텍스트는 2,000자 이하로 입력해 주세요.")
+        for key in ("label", "fieldKey"):
+            if key in component and (not isinstance(component[key], str) or len(component[key]) > 100):
+                raise ApiError(422, "poster_component_invalid", "구성 요소 이름을 확인해 주세요.")
+        for key, minimum, maximum in (
+            ("rotation", -360, 360), ("opacity", 0, 1), ("fontSize", 6, 200),
+            ("strokeWidth", 0, 50), ("cropX", 0, 1), ("cropY", 0, 1),
+            ("cropZoom", 1, 3), ("zIndex", 0, 1000),
+        ):
+            value = component.get(key)
+            if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not minimum <= value <= maximum):
+                raise ApiError(422, "poster_component_invalid", "구성 요소의 디자인 값을 확인해 주세요.")
+        for key in ("color", "fill", "stroke"):
+            value = component.get(key)
+            if value is not None and (not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value)):
+                raise ApiError(422, "poster_component_invalid", "색상 값을 확인해 주세요.")
+        font_style = component.get("fontStyle", "normal")
+        align = component.get("align", "left")
+        if not isinstance(font_style, str) or font_style not in {"normal", "bold"} or not isinstance(align, str) or align not in {"left", "center", "right"}:
+            raise ApiError(422, "poster_component_invalid", "텍스트 스타일을 확인해 주세요.")
+        if kind == "image" and component.get("assetId") is not None and not re.fullmatch(r"[0-9a-f]{32}", str(component["assetId"])):
+            raise ApiError(422, "poster_component_invalid", "이미지 자산 ID를 확인해 주세요.")
     return {"templateId": body.template_id, "width": body.width, "height": body.height, "components": body.components}
+
+
+async def _check_asset_ownership(doc: dict[str, Any], owner: str, ctx: AppContext) -> None:
+    for component in doc["components"]:
+        asset_id = component.get("assetId") if component.get("type") == "image" else None
+        if asset_id and not await ctx.store.get(owner, "asset", asset_id):
+            raise ApiError(422, "poster_asset_unavailable", "사용할 수 없는 사진입니다. 다시 업로드해 주세요.")
 
 
 @router.get("/poster/templates")
@@ -155,6 +185,7 @@ async def get_asset(asset_id: str, user=Depends(current_user), ctx: AppContext =
 @router.post("/posters", status_code=201)
 async def create_poster(body: PosterBody, user=Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     doc = _validate_document(body)
+    await _check_asset_ownership(doc, user.owner, ctx)
     poster_id = uuid.uuid4().hex
     await ctx.store.put(user.owner, "poster", poster_id, doc)
     return {"id": poster_id, **doc}
@@ -177,6 +208,7 @@ async def update_poster(poster_id: str, body: PosterBody, user=Depends(current_u
     if not await ctx.store.get(user.owner, "poster", poster_id):
         raise ApiError(404, "poster_not_found", "전단지를 찾을 수 없습니다.")
     doc = _validate_document(body)
+    await _check_asset_ownership(doc, user.owner, ctx)
     await ctx.store.put(user.owner, "poster", poster_id, doc)
     return {"id": poster_id, **doc}
 

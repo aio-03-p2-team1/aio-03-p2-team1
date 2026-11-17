@@ -223,7 +223,7 @@ flowchart LR
 | `POST /posts/{id}/comments` · `DELETE /posts/{id}/comments/{comment_id}` | 필요(삭제는 작성자만) | `not_authenticated`, `invalid_request`(422, 빈 글·500자 초과), `post_not_found`(대상 글 없음), `lost_*`(502, 분실 신고 확인 실패), `comment_rate_limited`(429, 1분 5개), `comment_limit`(429, 글당 200개), `comment_not_found`, `comment_forbidden`(403) |
 | `GET /poster/templates` · `GET /poster/templates/{id}` | 없음 | `poster_template_not_found` |
 | `POST /poster/assets` · `GET /poster/assets/{asset_id}` | 필요(소유자) | `poster_asset_too_large`(413, 15MB), `poster_asset_pixels`(413, 2,500만 화소), `poster_asset_format`(415), `poster_asset_invalid`(422), `poster_asset_not_found` |
-| `POST /posters` · `GET/PUT/DELETE /posters/{id}` | 필요(소유자) | `poster_not_found`, `poster_component_invalid` |
+| `POST /posters` · `GET/PUT/DELETE /posters/{id}` | 필요(소유자) | `poster_not_found`, `poster_component_invalid`, `poster_asset_unavailable` |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 
 실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다. 상세 화면의 [이 정보로 구조 공고 찾기]는 글의 종류·시·도·실종 주소·날짜와 품종·털색·성별·나이·특징(설명 글 앞에 붙임)으로 검색 화면을 미리 채운다(`frontend/src/lib/postSearch.js`). 바로 검색하지 않고 사용자가 확인 후 누르며, 로그인 화면을 거쳐도 이어지도록 sessionStorage 로 한 번만 전달한다. 분실 신고의 지역(`orgNm`)은 첫 낱말(시·도)만 쓴다.
@@ -241,9 +241,9 @@ flowchart LR
 
 **실종 전단지 에디터** (`backend/routers/posters.py`, `frontend/src/pages/PosterPage.jsx`, `frontend/src/lib/posterStore.js`): 페이지·컴포넌트 좌표는 원본 A4 캔버스(794×1123) 기준이며 Zustand가 문구·도형·사진·선택·Undo/Redo 상태를 관리한다. 기본형·정보형·긴급형 프리셋은 서버 JSON으로 제공한다. 텍스트 컴포넌트마다 우측 입력란이 연결되고, 템플릿을 바꾸면 `fieldKey`가 같은 텍스트와 업로드 사진은 새 배치에 유지한다. PNG는 브라우저 캔버스에서 내보내며 Transformer 선택 핸들은 숨겨 원본 캔버스 좌표로 2배 해상도 출력한다.
 
-전단지 JSON은 `owner=<로그인 사용자 키>`, `kind=poster` 로 기존 문서 저장소에 저장한다. 업로드는 multipart 파일 15MB 이하, JPEG/PNG/WebP 실제 디코딩 형식, 최대 2,500만 화소로 검증한다. Pillow의 EXIF transpose 후 긴 변을 2,000px로 줄이고 WebP 품질 85로 다시 인코딩해 위치정보 등 원본 메타데이터를 제거한다. 결과 바이트는 `owner=<로그인 사용자 키>`, `kind=asset` 문서에 보관하며 전단지는 URL 대신 `assetId`를 참조한다. 이미지 읽기도 로그인과 소유자 검사를 거친다. 원본은 보관하지 않는다.
+전단지 JSON은 `owner=<로그인 사용자 키>`, `kind=poster` 로 기존 문서 저장소에 저장한다. 업로드는 multipart 파일 15MB 이하, JPEG/PNG/WebP 실제 디코딩 형식, 최대 2,500만 화소로 검증한다. Pillow의 EXIF transpose 후 긴 변을 2,000px로 줄이고 WebP 품질 85로 다시 인코딩해 위치정보 등 원본 메타데이터를 제거한다. 결과 바이트는 `owner=<로그인 사용자 키>`, `kind=asset` 문서에 보관하며 전단지는 URL 대신 `assetId`를 참조한다. 이미지 읽기와 전단지 저장 시에도 자산 소유자를 확인한다. 원본은 보관하지 않는다.
 
-Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해야 한다. 새 DB는 `scripts/bootstrap_schema.sql`을 사용하고, 기존 DB는 그 파일 끝의 2026-11-17 ALTER 주석을 적용한다. 에디터의 PDF·자르기·회전 속성 패널은 미구현이며, 브라우저 PNG와 이동·크기 조절이 MVP 범위다.
+Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해야 한다. 새 DB는 `scripts/bootstrap_schema.sql`을 사용하고, 기존 DB는 그 파일 끝의 2026-11-17 ALTER 주석을 적용한다. 이미지 자르기는 종횡비를 유지하는 프레임 채우기와 확대·가로/세로 위치 조절로 제공하며, 회전·투명도도 속성 패널에서 바꾼다. PDF/인쇄는 A4 크기의 인쇄 전용 창을 열어 브라우저 인쇄 대화상자를 사용한다(사용자가 PDF로 저장 가능).
 
 ## 9. 미구현·미확정
 
