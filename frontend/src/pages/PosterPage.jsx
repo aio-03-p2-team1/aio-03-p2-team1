@@ -4,6 +4,7 @@ import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import { CanvasItem } from '../components/PosterCanvasItem.jsx'
 import { API_BASE, api } from '../lib/api.js'
 import { createPosterFromTemplate, POSTER_FIELDS, posterPayload, switchPosterTemplate } from '../lib/posterDocument.js'
+import { applyPosterDraft, clearPosterDraft, peekPosterDraft } from '../lib/postPoster.js'
 import { textOverflows } from '../lib/posterText.js'
 import { usePosterStore } from '../lib/posterStore.js'
 
@@ -70,8 +71,23 @@ export default function PosterPage() {
       .then(([list, existing]) => {
         if (!live) return
         setTemplates(list.items)
-        if (existing) setPoster(existing)
-        else return api(`/poster/templates/${list.items[0]?.id || 'basic'}`).then((template) => live && setPoster(createPosterFromTemplate(template)))
+        // 저장된 전단지(?edit=)는 저장된 내용을 그대로 이어서 편집한다. 새 템플릿으로 덮지 않는다.
+        if (existing) {
+          setPoster(existing)
+          return
+        }
+        // 게시판 상세의 [전단지 만들기]로 왔으면 기본 템플릿에 게시글 문구·사진을 채운다(저장은 사용자가 한다).
+        const draft = peekPosterDraft()
+        const templateId = draft ? 'basic' : list.items[0]?.id || 'basic'
+        return api(`/poster/templates/${templateId}`).then((template) => {
+          if (!live) return
+          const fresh = createPosterFromTemplate(template)
+          setPoster(draft ? applyPosterDraft(fresh, draft) : fresh)
+          if (draft) {
+            clearPosterDraft()
+            setNotice('게시글 정보로 전단지를 채웠어요. 연락처를 넣고 저장해 주세요.')
+          }
+        })
       })
       .catch((error) => live && setNotice(error.message || '전단지 편집기를 불러오지 못했습니다.'))
       .finally(() => live && setLoading(false))
@@ -90,11 +106,6 @@ export default function PosterPage() {
 
   function addText() {
     const component = { id: makeId(), type: 'text', label: '새 텍스트', fieldKey: `custom_${makeId()}`, content: '텍스트를 입력하세요', x: 120, y: 280, width: 500, height: 70, fontSize: 30, color: '#34302b', zIndex: Math.max(0, ...poster.components.map((item) => item.zIndex || 0)) + 1 }
-    addComponent(component); setSaved(false)
-  }
-
-  function addShape() {
-    const component = { id: makeId(), type: 'shape', label: '도형', x: 150, y: 350, width: 320, height: 120, fill: '#e8d8b5', stroke: '#9c8250', opacity: 1, zIndex: Math.max(0, ...poster.components.map((item) => item.zIndex || 0)) + 1 }
     addComponent(component); setSaved(false)
   }
 
@@ -129,10 +140,9 @@ export default function PosterPage() {
       const data = posterId
         ? await api(`/posters/${posterId}`, { method: 'PUT', body: posterPayload(poster) })
         : await api('/posters', { method: 'POST', body: posterPayload(poster) })
-      setSaved(true); setNotice('전단지를 저장했어요.')
-      // 상세에서 수정하러 온 전단지는 저장 후 상세로 돌아간다. 새 전단지는 편집을 이어갈 수 있게 주소만 바꾼다.
-      if (posterId) navigate(`/posters/${posterId}`, { replace: true })
-      else navigate(`/poster?edit=${data.id}`, { replace: true })
+      setSaved(true); setNotice('저장되었습니다.')
+      // 저장 후에도 편집기에 머문다. 새 전단지는 다음 저장이 수정(PUT)이 되도록 주소만 바꾼다.
+      if (!posterId) navigate(`/poster?edit=${data.id}`, { replace: true })
     } catch (error) { setNotice(error.message) } finally { setSaving(false) }
   }
 
@@ -190,7 +200,7 @@ export default function PosterPage() {
     <div className="poster-workspace">
       <section className="poster-canvas-panel panel" aria-label="전단지 캔버스">
         <div className="poster-canvas-toolbar">
-          <div className="poster-add-actions"><button type="button" onClick={addText}>＋ 텍스트</button><button type="button" onClick={addPhotoSlot}>＋ 사진</button><button type="button" onClick={addShape}>＋ 도형</button></div>
+          <div className="poster-add-actions"><button type="button" onClick={addText}>＋ 텍스트</button><button type="button" onClick={addPhotoSlot}>＋ 사진</button></div>
           <label>확대 <input type="range" min="0.35" max="0.95" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /> <span>{Math.round(zoom * 100)}%</span></label>
         </div>
         <ComponentCanvas poster={poster} selectedId={selectedId} zoom={zoom} select={select} update={(id, patch) => { update(id, patch); setSaved(false) }} stageRef={stageRef} />
