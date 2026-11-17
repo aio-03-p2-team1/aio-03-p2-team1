@@ -282,7 +282,7 @@ export default function SearchPage() {
       if (result.status === 'awaiting_input') toast(result.questions?.[0]?.message || '추가 정보가 필요해요.')
       // 결과는 보여 주되, 에이전트가 사진·정보를 요청했으면 알림으로도 알려 준다(카드는 입력란 위에 있음).
       else if (result.agent_request) toast(`${result.agent_request.reason} 입력란 위에서 골라 주세요.`)
-      document.getElementById('results-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      scrollToResults()
     } catch (err) {
       setError(err)
     } finally {
@@ -334,6 +334,12 @@ export default function SearchPage() {
 
   function openHistory(runId) {
     setParams({ run: runId, page: '1' })
+    scrollToResults()
+  }
+
+  function openPage(page) {
+    setParams({ run: run.run_id, page: String(page) })
+    scrollToResults()
   }
 
   return (
@@ -467,7 +473,7 @@ export default function SearchPage() {
         <Results run={run} busy={busy} error={error} onWiden={widenRegion} onWidenRadius={widenRadius} />
         {!error && run?.pagination && (
           <Pagination page={run.pagination.page} pages={run.pagination.pages} disabled={busy}
-            onChange={(page) => setParams({ run: run.run_id, page: String(page) })} />
+            onChange={openPage} />
         )}
       </section>
 
@@ -572,4 +578,8 @@ function Results({ run, busy, error, onWiden, onWidenRadius }) {
       )}
     </>
   )
+}
+
+function scrollToResults() {
+  document.getElementById('results-title')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
