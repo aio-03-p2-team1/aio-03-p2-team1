@@ -14,17 +14,20 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import html
+import io
 import re
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
+from mutagen import File as MutagenFile
 
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import COOKIE_NAME, AppContext, current_user, get_ctx
 from backend.errors import ApiError
-from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody
+from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody, PostUpdateBody
 from backend.timeutil import kst_today  # noqa: F401  (tests 에서 posts.kst_today 로도 import)
 from backend.tools.lost_animal_api import LostAnimalApiError
 from backend.tools.kinds import normalize
@@ -44,6 +47,16 @@ _POST_ID = re.compile(r"^[0-9a-f]{32}$")
 _LOST_ID = re.compile(r"^lost-\d{8}-[0-9a-f]{12}$")  # lost_animal_api.lost_id() 형식
 PAGE_ROWS = 20  # 목록 한 페이지 글 수
 LOST_WAIT_SECONDS = 8  # 분실 신고 첫 조회를 기다리는 최대 시간. 넘으면 회원 글 먼저 보여 주고 조회는 계속한다
+MAX_POST_VOICES = 3
+MAX_VOICE_BYTES = 10 * 1024 * 1024
+MAX_VOICE_SECONDS = 60
+VOICE_TYPES = {
+    "MP3": ("audio/mpeg", "mp3"),
+    "MP4": ("audio/mp4", "m4a"),
+    "WAVE": ("audio/wav", "wav"),
+    "OggVorbis": ("audio/ogg", "ogg"),
+    "OggOpus": ("audio/ogg", "ogg"),
+}
 
 
 
@@ -84,10 +97,47 @@ def _public(post_id: str, data: dict, viewer: str | None, *, detail: bool) -> di
     }
     if detail:
         out["description"] = data["description"]
+        out["voices"] = [_public_voice(voice) for voice in data.get("voices", [])]
     else:
         text = data["description"]
         out["summary"] = text if len(text) <= 80 else text[:80] + "…"
     return out
+
+
+def _public_voice(voice: dict) -> dict:
+    return {
+        "id": voice["id"],
+        "description": html.unescape(voice["description"]),
+        "content_type": voice["content_type"],
+        "size": voice["size"],
+        "duration": voice["duration"],
+    }
+
+
+def _validated_voice(raw: bytes) -> tuple[str, str, float]:
+    try:
+        parsed = MutagenFile(io.BytesIO(raw))
+    except Exception as exc:
+        raise ApiError(422, "voice_invalid", "음성 파일을 읽을 수 없어요.") from exc
+    if parsed is None or type(parsed).__name__ not in VOICE_TYPES or not getattr(parsed, "info", None):
+        raise ApiError(422, "voice_invalid", "MP3·M4A·WAV·OGG 음성 파일만 올릴 수 있어요.")
+    duration = float(getattr(parsed.info, "length", 0) or 0)
+    channels = getattr(parsed.info, "channels", None)
+    if duration <= 0 or not channels:
+        raise ApiError(422, "voice_invalid", "음성 파일 정보를 확인할 수 없어요.")
+    if duration > MAX_VOICE_SECONDS:
+        raise ApiError(422, "voice_too_long", "음성은 1분 이내만 올릴 수 있어요.")
+    content_type, extension = VOICE_TYPES[type(parsed).__name__]
+    return content_type, extension, duration
+
+
+async def _read_voice(upload: UploadFile) -> bytes:
+    raw = await upload.read(MAX_VOICE_BYTES + 1)
+    if not raw:
+        raise ApiError(422, "voice_invalid", "음성 파일을 선택해 주세요.")
+    if len(raw) > MAX_VOICE_BYTES:
+        raise ApiError(413, "voice_too_large", "음성 파일은 하나당 10 MiB까지 올릴 수 있어요.")
+    return raw
 
 
 async def _with_breed_codes(items: list[dict], ctx: AppContext) -> list[dict]:
@@ -245,6 +295,102 @@ async def get_post(post_id: str, request: Request, ctx: AppContext = Depends(get
     return (await _with_breed_codes([_public(post_id, data, await _viewer(request, ctx), detail=True)], ctx))[0]
 
 
+@router.patch("/posts/{post_id}")
+async def update_post(post_id: str, body: PostUpdateBody, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    data = await _get(ctx, post_id)
+    if data.get("author") != user.owner:
+        raise ApiError(403, "post_forbidden", "내가 쓴 글만 수정할 수 있어요.")
+    today = kst_today()
+    if body.lost_date > today:
+        raise ApiError(422, "lost_date_future", "실종 날짜가 오늘 이후일 수 없어요.")
+    if body.lost_date < today - timedelta(days=MAX_LOST_DAYS):
+        raise ApiError(422, "lost_date_too_old", "실종 날짜는 최근 1년 이내만 등록할 수 있어요.")
+    if body.region in ("전체", "all"):
+        raise ApiError(422, "region_required", "실종 위치를 지도에서 선택해 주세요.")
+    if not body.pet_name or not body.region or len(body.description) < 5:
+        raise ApiError(422, "invalid_request", "입력값을 확인해 주세요.")
+    breed, breed_code = body.breed, ""
+    if body.breed_code:
+        if ctx.kinds is None:
+            raise ApiError(503, "kinds_unavailable", "품종 목록을 불러오지 못했어요.")
+        rows = await ctx.kinds.rows(body.species)
+        row = next((r for r in rows if r["kind_code"] == body.breed_code), None)
+        if row is None:
+            raise ApiError(422, "invalid_breed_code", "선택한 축종의 품종 코드를 확인해 주세요.")
+        breed, breed_code = row["name"], row["kind_code"]
+    data.update(body.model_dump(exclude={"breed", "breed_code"}))
+    data["lost_date"] = body.lost_date.isoformat()
+    data["breed"], data["breed_code"] = breed, breed_code
+    await ctx.store.put(BOARD_OWNER, KIND, post_id, data)
+    return _public(post_id, data, user.owner, detail=True)
+
+
+@router.post("/posts/{post_id}/voices", status_code=201)
+async def add_post_voice(
+    post_id: str,
+    description: str = Form(...),
+    audio: UploadFile = File(...),
+    user: SessionUser = Depends(current_user),
+    ctx: AppContext = Depends(get_ctx),
+):
+    data = await _get(ctx, post_id)
+    if data.get("author") != user.owner:
+        raise ApiError(403, "post_forbidden", "내가 쓴 글에만 음성을 추가할 수 있어요.")
+    voices = list(data.get("voices", []))
+    if len(voices) >= MAX_POST_VOICES:
+        raise ApiError(422, "voice_limit", "게시글에는 음성을 최대 3개까지 올릴 수 있어요.")
+    description = description.strip()
+    if not description or len(description) > 200:
+        raise ApiError(422, "voice_description_invalid", "음성 설명을 1~200자로 입력해 주세요.")
+    raw = await _read_voice(audio)
+    content_type, extension, duration = _validated_voice(raw)
+    voice_id = uuid.uuid4().hex
+    key = f"{post_id}/{uuid.uuid4().hex}.{extension}"
+    await ctx.post_audio.put(key, raw, content_type)
+    voice = {
+        "id": voice_id,
+        "key": key,
+        "description": html.escape(description, quote=True),
+        "content_type": content_type,
+        "size": len(raw),
+        "duration": duration,
+    }
+    voices.append(voice)
+    data["voices"] = voices
+    try:
+        await ctx.store.put(BOARD_OWNER, KIND, post_id, data)
+    except Exception:
+        await ctx.post_audio.delete(key)
+        raise
+    return _public_voice(voice)
+
+
+@router.get("/posts/{post_id}/voices/{voice_id}/audio")
+async def get_post_voice(post_id: str, voice_id: str, ctx: AppContext = Depends(get_ctx)):
+    data = await _get(ctx, post_id)
+    voice = next((v for v in data.get("voices", []) if v["id"] == voice_id), None)
+    if not voice:
+        raise ApiError(404, "voice_not_found", "음성 파일을 찾을 수 없습니다.")
+    raw = await ctx.post_audio.get(voice["key"])
+    if raw is None:
+        raise ApiError(404, "voice_not_found", "음성 파일을 찾을 수 없습니다.")
+    return Response(content=raw, media_type=voice["content_type"], headers={"X-Content-Type-Options": "nosniff", "Accept-Ranges": "none"})
+
+
+@router.delete("/posts/{post_id}/voices/{voice_id}", status_code=204)
+async def delete_post_voice(post_id: str, voice_id: str, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    data = await _get(ctx, post_id)
+    if data.get("author") != user.owner:
+        raise ApiError(403, "post_forbidden", "내가 쓴 글의 음성만 삭제할 수 있어요.")
+    voices = list(data.get("voices", []))
+    voice = next((v for v in voices if v["id"] == voice_id), None)
+    if not voice:
+        raise ApiError(404, "voice_not_found", "음성 파일을 찾을 수 없습니다.")
+    data["voices"] = [v for v in voices if v["id"] != voice_id]
+    await ctx.store.put(BOARD_OWNER, KIND, post_id, data)
+    await ctx.post_audio.delete(voice["key"])
+
+
 @router.get("/posts/{post_id}/photo")
 async def get_post_photo(post_id: str, ctx: AppContext = Depends(get_ctx)):
     data = await _get(ctx, post_id)
@@ -314,6 +460,8 @@ async def delete_post(post_id: str, user: SessionUser = Depends(current_user), c
         # 남의 글은 존재 여부와 관계없이 지울 수 없다.
         raise ApiError(403, "post_forbidden", "내가 쓴 글만 지울 수 있어요.")
     await ctx.store.delete(BOARD_OWNER, KIND, post_id)
+    for voice in data.get("voices", []):
+        await ctx.post_audio.delete(voice["key"])
     # 글을 지우면 그 글의 댓글도 지운다(순환 import 를 피하려고 함수 안에서 불러온다).
     from backend.routers.comments import delete_all_comments
 

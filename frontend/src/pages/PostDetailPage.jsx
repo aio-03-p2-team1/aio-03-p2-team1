@@ -6,6 +6,7 @@ import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
 import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
 import PostComments from '../components/PostComments.jsx'
+import PostVoices from '../components/PostVoices.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { PostPhoto } from './PostBoardPage.jsx'
 
@@ -21,6 +22,8 @@ export default function PostDetailPage() {
   const [error, setError] = useState(null)
   const [deleting, setDeleting] = useState(false)
   const [confirming, setConfirming] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [reload, setReload] = useState(0)
 
   useEffect(() => {
     setStatus('loading')
@@ -34,7 +37,7 @@ export default function PostDetailPage() {
         setError(err)
         setStatus('error')
       })
-  }, [apiPath, user])
+  }, [apiPath, user, reload])
 
   // 이 글의 종류·위치·날짜·특징으로 검색 화면을 채운다(바로 검색하지 않음, 로그인이 필요하면 로그인 후 이어짐).
   function searchWithPost() {
@@ -84,7 +87,22 @@ export default function PostDetailPage() {
           <h1>{postTitle(post)}</h1>
           <p>{lost ? '공공데이터 분실 신고' : '실종 정보 게시판'} · {post.region}</p>
         </div>
-        <Link className="text-link" to="/board">← 게시판으로</Link>
+        <div className="post-detail-heading-actions">
+          {post.mine && (
+            <div className="post-owner-actions">
+              {!editing && !confirming && <button type="button" className="secondary-button" onClick={() => setEditing(true)}>게시글 수정</button>}
+              {editing && <button type="button" className="secondary-button" onClick={() => setEditing(false)}>수정 취소</button>}
+              {!confirming && <button type="button" className="secondary-button danger-button" onClick={() => { setEditing(false); setConfirming(true) }}>게시글 삭제</button>}
+              {confirming && (
+                <>
+                  <button type="button" className="primary-button danger-button" onClick={remove} disabled={deleting}>{deleting ? '삭제 중…' : '삭제 확인'}</button>
+                  <button type="button" className="secondary-button" onClick={() => setConfirming(false)} disabled={deleting}>취소</button>
+                </>
+              )}
+            </div>
+          )}
+          <Link className="text-link" to="/board">← 게시판으로</Link>
+        </div>
       </div>
       <div className="post-detail-layout">
         <div className="post-detail-media">
@@ -125,18 +143,6 @@ export default function PostDetailPage() {
           </div>
           <div className="detail-page-actions">
             <button type="button" className="primary-button" onClick={searchWithPost}>이 정보로 구조 공고 찾기</button>
-            <Link className="secondary-button" to="/board">게시판 목록</Link>
-            {post.mine && !confirming && (
-              <button type="button" className="secondary-button danger-button" onClick={() => setConfirming(true)}>게시글 삭제</button>
-            )}
-            {post.mine && confirming && (
-              <>
-                <button type="button" className="primary-button danger-button" onClick={remove} disabled={deleting}>
-                  {deleting ? '지우는 중…' : '정말 지울게요'}
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setConfirming(false)} disabled={deleting}>취소</button>
-              </>
-            )}
           </div>
           <p className="fineprint">
             {lost
@@ -145,8 +151,49 @@ export default function PostDetailPage() {
           </p>
         </section>
       </div>
+      {editing && post.mine && <PostEditForm post={post} onSaved={() => { setEditing(false); setReload((n) => n + 1) }} />}
+      {!lost && <PostVoices post={post} editable={editing} onChanged={() => setReload((n) => n + 1)} />}
       <PostComments key={post.id} targetId={post.id} lostReport={lost} />
     </main>
+  )
+}
+
+function PostEditForm({ post, onSaved }) {
+  const [form, setForm] = useState({
+    pet_name: post.pet_name, species: post.species, region: post.region, lost_place: post.lost_place || '',
+    lost_date: post.lost_date, breed: post.breed || '', description: post.description
+  })
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  function change(key) { return (event) => setForm((prev) => ({ ...prev, [key]: event.target.value })) }
+  async function submit(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api(`/posts/${encodeURIComponent(post.id)}`, { method: 'PATCH', body: form })
+      onSaved()
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <form className="panel post-edit-form" onSubmit={submit}>
+      <h2>게시글 수정</h2>
+      <div className="post-edit-grid">
+        <label>반려동물 이름<input value={form.pet_name} maxLength={20} onChange={change('pet_name')} required /></label>
+        <label>동물 종류<select value={form.species} onChange={change('species')}><option value="dog">개</option><option value="cat">고양이</option><option value="etc">기타</option></select></label>
+        <label>시·도<input value={form.region} maxLength={20} onChange={change('region')} required /></label>
+        <label>실종 위치<input value={form.lost_place} maxLength={100} onChange={change('lost_place')} /></label>
+        <label>실종 날짜<input type="date" value={form.lost_date} max={localDate()} onChange={change('lost_date')} required /></label>
+        <label>품종<input value={form.breed} maxLength={30} onChange={change('breed')} /></label>
+        <label className="wide">특징<textarea value={form.description} minLength={5} maxLength={1000} onChange={change('description')} required /></label>
+      </div>
+      {error && <p className="field-error" role="alert">{error}</p>}
+      <div className="form-bottom"><span className="fineprint">현재 사진과 음성은 유지됩니다.</span><div><button type="submit" className="primary-button" disabled={busy}>{busy ? '저장 중…' : '수정 저장'}</button></div></div>
+    </form>
   )
 }
 

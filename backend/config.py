@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     supabase_url: str = "https://yaywavgjaquftvekuvsb.supabase.co"
     supabase_schema: str = "aio-03-p2-team1-demo"
     supabase_service_role_key: SecretStr | None = None
+    supabase_post_audio_bucket: str = "post-audio"
+    post_audio_local_dir: str = ".data/post-audio"
 
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-6-luna"
@@ -103,6 +105,8 @@ class Settings(BaseSettings):
             raise ConfigError("AUTH_COOKIE_SAMESITE=none 이면 AUTH_COOKIE_SECURE=true 가 필요합니다")
         if self.storage_backend == "supabase" and self.supabase_service_role_key is None:
             raise ConfigError("설정 누락: SUPABASE_SERVICE_ROLE_KEY")
+        if self.storage_backend == "supabase" and not self.supabase_post_audio_bucket.strip():
+            raise ConfigError("설정 누락: SUPABASE_POST_AUDIO_BUCKET")
         if self.app_mode == "live":
             missing = []
             if self.storage_backend != "supabase":

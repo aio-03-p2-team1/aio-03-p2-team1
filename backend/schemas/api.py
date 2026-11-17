@@ -90,6 +90,22 @@ class PostBody(BaseModel):
         return value.strip()
 
 
+class PostUpdateBody(BaseModel):
+    pet_name: str = Field(min_length=1, max_length=20)
+    species: Literal["dog", "cat", "etc"]
+    region: str = Field(min_length=1, max_length=20)
+    lost_place: str = Field(default="", max_length=100)
+    lost_date: date
+    breed: str = Field(default="", max_length=30)
+    breed_code: str = Field(default="", max_length=20)
+    description: str = Field(min_length=5, max_length=1000)
+
+    @field_validator("pet_name", "region", "lost_place", "breed", "description", "breed_code")
+    @classmethod
+    def _strip(cls, value: str) -> str:
+        return value.strip()
+
+
 class CommentBody(BaseModel):
     body: str = Field(min_length=1, max_length=500)
 
