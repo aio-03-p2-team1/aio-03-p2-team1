@@ -197,35 +197,6 @@ export default function PosterPage() {
         <button className="primary-button" type="button" onClick={save} disabled={saving}>{saving ? '저장 중…' : saved ? '저장 완료' : '저장'}</button>
       </div>
     </div>
-    {/* 선택한 요소 설정은 캔버스·내용 패널 위 한 줄에 둔다. 선택이 없어도 자리를 지켜 캔버스가 위아래로 움직이지 않게 한다. */}
-    <section className="poster-properties panel" aria-label="선택한 요소">
-      <div className="panel-title"><span>2</span><h2>선택한 요소</h2></div>
-      {!selected && <p className="poster-help poster-properties-empty">캔버스에서 텍스트·사진·도형을 누르면 여기서 글자 크기, 색상, 자르기 등을 바꿀 수 있어요.</p>}
-      {selected && <div className="poster-properties-body">
-        <div className="poster-selected-head"><strong>{selected.label || (selected.type === 'shape' ? '도형' : selected.type === 'image' ? '사진' : '텍스트')}</strong><button type="button" className="text-action danger-text" onClick={() => { removeComponent(selected.id); setSaved(false) }}>삭제</button></div>
-        {selected.type === 'text' && <>
-          <label className="poster-property">글자 크기<input type="number" min="8" max="120" value={selected.fontSize || 24} onChange={(e) => { update(selected.id, { fontSize: Number(e.target.value) }); setSaved(false) }} /></label>
-          <label className="poster-property">글자 색상<input type="color" value={selected.color || '#34302b'} onChange={(e) => { update(selected.id, { color: e.target.value }); setSaved(false) }} /></label>
-          <label className="poster-property">배경색<input type="color" value={selected.fill || '#fffdf8'} onChange={(e) => { update(selected.id, { fill: e.target.value }); setSaved(false) }} /></label>
-          <label className="poster-property">정렬<select value={selected.align || 'left'} onChange={(e) => { update(selected.id, { align: e.target.value }); setSaved(false) }}><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label>
-          <label className="poster-check"><input type="checkbox" checked={selected.fontStyle === 'bold'} onChange={(e) => { update(selected.id, { fontStyle: e.target.checked ? 'bold' : 'normal' }); setSaved(false) }} /> 굵게</label>
-        </>}
-        {selected.type === 'image' && <>
-          <button type="button" className="secondary-button poster-replace" onClick={() => fileRef.current?.click()}>{selected.assetId ? '사진 교체' : '사진 업로드'}</button>
-          <label className="poster-property">자르기 확대<input type="range" min="1" max="3" step="0.05" value={selected.cropZoom || 1} onChange={(e) => { update(selected.id, { cropZoom: Number(e.target.value) }); setSaved(false) }} /></label>
-          <label className="poster-property">자르기 가로 위치<input type="range" min="0" max="1" step="0.01" value={selected.cropX ?? 0.5} onChange={(e) => { update(selected.id, { cropX: Number(e.target.value) }); setSaved(false) }} /></label>
-          <label className="poster-property">자르기 세로 위치<input type="range" min="0" max="1" step="0.01" value={selected.cropY ?? 0.5} onChange={(e) => { update(selected.id, { cropY: Number(e.target.value) }); setSaved(false) }} /></label>
-          <label className="poster-property">회전<input type="number" min="-180" max="180" value={selected.rotation || 0} onChange={(e) => { update(selected.id, { rotation: Number(e.target.value) }); setSaved(false) }} /></label>
-          <label className="poster-property">투명도<input type="range" min="0.1" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => { update(selected.id, { opacity: Number(e.target.value) }); setSaved(false) }} /></label>
-        </>}
-        {selected.type === 'shape' && <>
-          <label className="poster-property">배경색<input type="color" value={selected.fill || '#e8d8b5'} onChange={(e) => { update(selected.id, { fill: e.target.value }); setSaved(false) }} /></label>
-          <label className="poster-property">테두리색<input type="color" value={selected.stroke || '#9c8250'} onChange={(e) => { update(selected.id, { stroke: e.target.value }); setSaved(false) }} /></label>
-          <label className="poster-property">투명도<input type="range" min="0.1" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => { update(selected.id, { opacity: Number(e.target.value) }); setSaved(false) }} /></label>
-        </>}
-        <div className="poster-layer-actions"><button type="button" onClick={() => reorder(selected.id, -1)}>뒤로</button><button type="button" onClick={() => reorder(selected.id, 1)}>앞으로</button></div>
-      </div>}
-    </section>
     <div className="poster-workspace">
       <section className="poster-canvas-panel panel" aria-label="전단지 캔버스">
         <div className="poster-canvas-toolbar">
@@ -241,6 +212,35 @@ export default function PosterPage() {
         <div className="poster-fields">{textComponents.map((item) => <label className="poster-field" key={item.id}><span>{item.label || POSTER_FIELDS.find(([key]) => key === item.fieldKey)?.[1] || '텍스트'}</span><textarea rows={item.content?.length > 45 ? 3 : 2} value={item.content || ''} onChange={(event) => { update(item.id, { content: event.target.value }); setSaved(false) }} placeholder={POSTER_FIELDS.find(([key]) => key === item.fieldKey)?.[2] || '문구를 입력해 주세요'} />{textOverflows(item) && <small className="poster-overflow-warning">텍스트가 영역을 넘을 수 있어요. 캔버스에서 크기나 글자 크기를 조절해 주세요.</small>}</label>)}</div>
         {notice && <p className={`poster-notice${notice.includes('못') || notice.includes('실패') ? ' error' : ''}`} role="status">{notice}</p>}
       </aside>
+      {/* 선택한 요소 설정은 '전단지 내용' 오른쪽 열에 두고, 이 패널만 스크롤을 따라 내려온다(sticky). */}
+      <section className="poster-properties panel" aria-label="선택한 요소">
+        <div className="panel-title"><span>2</span><h2>선택한 요소</h2></div>
+        {!selected && <p className="poster-help poster-properties-empty">캔버스에서 텍스트·사진·도형을 누르면 여기서 글자 크기, 색상, 자르기 등을 바꿀 수 있어요.</p>}
+        {selected && <div className="poster-properties-body">
+          <div className="poster-selected-head"><strong>{selected.label || (selected.type === 'shape' ? '도형' : selected.type === 'image' ? '사진' : '텍스트')}</strong><button type="button" className="text-action danger-text" onClick={() => { removeComponent(selected.id); setSaved(false) }}>삭제</button></div>
+          {selected.type === 'text' && <>
+            <label className="poster-property">글자 크기<input type="number" min="8" max="120" value={selected.fontSize || 24} onChange={(e) => { update(selected.id, { fontSize: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">글자 색상<input type="color" value={selected.color || '#34302b'} onChange={(e) => { update(selected.id, { color: e.target.value }); setSaved(false) }} /></label>
+            <label className="poster-property">배경색<input type="color" value={selected.fill || '#fffdf8'} onChange={(e) => { update(selected.id, { fill: e.target.value }); setSaved(false) }} /></label>
+            <label className="poster-property">정렬<select value={selected.align || 'left'} onChange={(e) => { update(selected.id, { align: e.target.value }); setSaved(false) }}><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label>
+            <label className="poster-check"><input type="checkbox" checked={selected.fontStyle === 'bold'} onChange={(e) => { update(selected.id, { fontStyle: e.target.checked ? 'bold' : 'normal' }); setSaved(false) }} /> 굵게</label>
+          </>}
+          {selected.type === 'image' && <>
+            <button type="button" className="secondary-button poster-replace" onClick={() => fileRef.current?.click()}>{selected.assetId ? '사진 교체' : '사진 업로드'}</button>
+            <label className="poster-property">자르기 확대<input type="range" min="1" max="3" step="0.05" value={selected.cropZoom || 1} onChange={(e) => { update(selected.id, { cropZoom: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">자르기 가로 위치<input type="range" min="0" max="1" step="0.01" value={selected.cropX ?? 0.5} onChange={(e) => { update(selected.id, { cropX: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">자르기 세로 위치<input type="range" min="0" max="1" step="0.01" value={selected.cropY ?? 0.5} onChange={(e) => { update(selected.id, { cropY: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">회전<input type="number" min="-180" max="180" value={selected.rotation || 0} onChange={(e) => { update(selected.id, { rotation: Number(e.target.value) }); setSaved(false) }} /></label>
+            <label className="poster-property">투명도<input type="range" min="0.1" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => { update(selected.id, { opacity: Number(e.target.value) }); setSaved(false) }} /></label>
+          </>}
+          {selected.type === 'shape' && <>
+            <label className="poster-property">배경색<input type="color" value={selected.fill || '#e8d8b5'} onChange={(e) => { update(selected.id, { fill: e.target.value }); setSaved(false) }} /></label>
+            <label className="poster-property">테두리색<input type="color" value={selected.stroke || '#9c8250'} onChange={(e) => { update(selected.id, { stroke: e.target.value }); setSaved(false) }} /></label>
+            <label className="poster-property">투명도<input type="range" min="0.1" max="1" step="0.05" value={selected.opacity ?? 1} onChange={(e) => { update(selected.id, { opacity: Number(e.target.value) }); setSaved(false) }} /></label>
+          </>}
+          <div className="poster-layer-actions"><button type="button" onClick={() => reorder(selected.id, -1)}>뒤로</button><button type="button" onClick={() => reorder(selected.id, 1)}>앞으로</button></div>
+        </div>}
+      </section>
     </div>
   </main>
 }
