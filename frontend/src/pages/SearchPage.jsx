@@ -13,7 +13,7 @@ import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 import { useToast } from '../components/Toast.jsx'
-import { photoAnalysisError, photoErrorMessage, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
+import { photoAnalysisError, photoErrorMessage, photoSelectionError, photoTraitLine, unsuitablePhotoMessage } from '../lib/photo.js'
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 import { takePostSearch } from '../lib/postSearch.js'
@@ -181,7 +181,10 @@ export default function SearchPage() {
         result.sex === 'M' ? '수컷' : result.sex === 'F' ? '암컷' : '',
         ...result.marks,
       ].filter(Boolean)
-      const extracted = traits.length ? `사진에서 확인한 특징: ${traits.join(', ')}` : ''
+      // 설명 글에 이미 있는 특징(예: 털색: 흰색, 빨간 목줄)은 빼고 새로 확인한 것만 붙인다.
+      // 비교할 글에서는 이전 사진 줄(oldAuto)을 빼고 본다(사진을 바꿔 올렸을 때 이전 사진 특징과 비교하지 않게).
+      const written = (searchForm || form).description || ''
+      const extracted = photoTraitLine(traits, oldAuto && written.startsWith(oldAuto) ? written.slice(oldAuto.length) : written)
       const hasAutoValues = Boolean(result.species || extracted)
       if (!hasAutoValues) {
         setPhotoMessage('사진은 확인했지만 신뢰도 높은 특징을 찾지 못했어요. 아래 입력란에 직접 적어 주세요.')
