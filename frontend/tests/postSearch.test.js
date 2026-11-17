@@ -23,6 +23,12 @@ test('lost report uses first word of region, facts and last seen place; bad date
   assert.equal(postToSearch({}, TODAY).location, null)
 })
 
+test('photo url passes only when the post has a photo', () => {
+  assert.equal(postToSearch({ has_photo: true }, TODAY, '/api/v1/posts/p1/photo').photo, '/api/v1/posts/p1/photo')
+  assert.equal(postToSearch({ has_photo: false }, TODAY, '/api/v1/posts/p1/photo').photo, '')
+  assert.equal(postToSearch({ has_photo: true }, TODAY).photo, '')
+})
+
 test('handoff is read once', () => {
   const store = new Map()
   const storage = { setItem: (k, v) => store.set(k, v), getItem: (k) => store.get(k) ?? null, removeItem: (k) => store.delete(k) }

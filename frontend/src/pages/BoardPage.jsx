@@ -58,7 +58,7 @@ export default function BoardPage() {
       <StoryBanner />
       <div className="page-heading board-heading">
         <h1>보호 중인 동물 공고</h1>
-        <Link to="/search" className="primary-button">우리 아이 찾기 ↗</Link>
+        <Link to="/search" className="primary-button">우리 아이 찾기</Link>
         <div className="filters">
           <label>
             동물 종류

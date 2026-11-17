@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.schemas.common import Color, MAX_IMAGE_BYTES, PhotoAnalysisReason, Sex, Species, StrictSchema
 
@@ -43,7 +43,15 @@ class SearchBody(BaseModel):
 
 
 class PhotoAnalysisBody(BaseModel):
-    image_base64: str = Field(min_length=1, max_length=((MAX_IMAGE_BYTES + 2) // 3) * 4)
+    # 둘 중 하나만: 직접 올린 사진(base64) 또는 실종 정보 게시판 글 ID(회원 글·분실 신고). 글 ID 면 서버가 그 글의 사진을 꺼낸다.
+    image_base64: str | None = Field(None, min_length=1, max_length=((MAX_IMAGE_BYTES + 2) // 3) * 4)
+    post_id: str | None = Field(None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _one_source(self):
+        if (self.image_base64 is None) == (self.post_id is None):
+            raise ValueError("image_base64 와 post_id 중 하나만 보내야 합니다")
+        return self
 
 
 class RegisterBody(BaseModel):

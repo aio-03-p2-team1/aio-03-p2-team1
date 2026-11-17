@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../lib/api.js'
+import { api, API_BASE } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
-import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { isLostReport, localDate, postPhotoPath, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
 import { postToPosterFields, savePosterDraft } from '../lib/postPoster.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
 import PostComments from '../components/PostComments.jsx'
@@ -43,7 +43,8 @@ export default function PostDetailPage() {
 
   // 이 글의 종류·위치·날짜·특징으로 검색 화면을 채운다(바로 검색하지 않음, 로그인이 필요하면 로그인 후 이어짐).
   function searchWithPost() {
-    savePostSearch(postToSearch(post, localDate()))
+    // 사진도 함께 넘긴다(PostPhoto 와 같은 주소: 분실 신고는 공공데이터 사진, 회원 글은 우리 서버 사진).
+    savePostSearch(postToSearch(post, localDate(), post.photo_url || API_BASE + postPhotoPath(post.id)))
     navigate('/search')
   }
 
@@ -116,7 +117,7 @@ export default function PostDetailPage() {
               )}
             </div>
           )}
-          <Link className="text-link" to="/board">← 게시판으로</Link>
+          <Link className="text-link" to="/board">게시판으로</Link>
         </div>
       </div>
       <div className="post-detail-layout">
