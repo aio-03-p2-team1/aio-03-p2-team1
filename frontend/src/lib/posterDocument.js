@@ -62,3 +62,11 @@ export function switchPosterTemplate(previous, template, makeId = defaultId) {
   }
   return next
 }
+
+/**
+ * 저장 API(POST/PUT /posters)로 보낼 본문. 서버는 정해진 4개 필드 외의 키를 거부한다(extra=forbid).
+ * 불러온 전단지에는 id 가 붙어 있으므로 그대로 보내면 422 '입력값을 확인해 주세요'가 난다.
+ */
+export function posterPayload(poster) {
+  return { templateId: poster.templateId, width: poster.width, height: poster.height, components: poster.components }
+}

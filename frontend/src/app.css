@@ -162,6 +162,9 @@ button[disabled]{opacity:.65;cursor:progress}
 .profile-facts dt{color:#8a837a}
 .profile-facts dd{margin:0;color:#3d3832;overflow-wrap:anywhere}
 .my-run-list{margin:0;padding:0;list-style:none}
+.my-poster-item{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 15px;border:1px solid #eee8df;border-radius:10px;flex-wrap:wrap}
+.my-poster-item>div:first-child{min-width:0;overflow-wrap:anywhere;flex:1}
+.my-poster-actions{display:flex;align-items:center;gap:12px}
 .my-run-list a{display:grid;gap:5px;padding:13px 15px;border:1px solid #eee8df;border-radius:10px;background:#fff;color:inherit;text-decoration:none;transition:border-color .15s}
 .my-run-list a:hover{border-color:#e5c879}
 .my-run-list strong{color:#3d3832;font-size:14px}
@@ -347,3 +350,25 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-notice.error{border-color:#ecc7bd;background:#fff7f4;color:#a34a39}
 @media(max-width:1050px){.poster-topbar{align-items:flex-start;flex-direction:column}.poster-top-actions{justify-content:flex-start}.poster-workspace{grid-template-columns:minmax(0,1.2fr) minmax(300px,.8fr)}}
 @media(max-width:760px){.poster-page{padding:18px 14px 50px}.poster-workspace{grid-template-columns:1fr}.poster-inspector{position:static;max-height:none;order:-1}.poster-stage-wrap{max-height:65vh;min-height:330px}.poster-canvas-panel{padding:11px}.poster-canvas-toolbar{align-items:flex-start;flex-direction:column}.poster-top-actions{width:100%}.poster-select-label{width:100%;justify-content:space-between}.poster-select-label select{flex:1}}
+
+/* 마이페이지: 내가 만든 전단지 */
+.my-posters-panel{margin-top:18px}
+.my-poster-list{margin:0;padding:0;list-style:none}
+.my-poster-list a{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid #eee8df;border-radius:10px;background:#fff;color:inherit;text-decoration:none;transition:border-color .15s}
+.my-poster-list a:hover{border-color:#e5c879}
+.my-poster-thumb{display:grid;flex:none;place-items:center;width:46px;height:62px;overflow:hidden;border-radius:6px;background:#f3eee5;font-size:22px}
+.my-poster-thumb img{width:100%;height:100%;object-fit:cover}
+.my-poster-text{display:grid;gap:4px;min-width:0}
+.my-poster-text strong{color:#3d3832;font-size:14px}
+.my-poster-text span{color:#8a837a;font-size:12px;line-height:1.5}
+
+/* 전단지 상세 */
+.poster-detail-page{max-width:980px}
+.poster-detail-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:8px 0 18px}
+.poster-detail-head h1{margin:6px 0 4px;font-size:clamp(24px,3vw,32px)}
+.poster-detail-head p{margin:0;color:#6e665b}
+.poster-detail-head .primary-button{flex:none;min-width:96px}
+.poster-detail-canvas{padding:clamp(14px,3vw,28px);background:#f7f3ec}
+.poster-detail-fit{width:100%;max-width:794px;margin:0 auto}
+.poster-detail-scale{margin:0 auto;box-shadow:0 10px 30px rgba(52,46,35,.16)}
+.poster-detail-note{margin-top:12px;text-align:center}
