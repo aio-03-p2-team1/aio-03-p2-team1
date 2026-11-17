@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { API_BASE, api } from '../lib/api.js'
+import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
-import { isLostReport, localDate, postPhotoPath, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
 import { createPosterFromTemplate, posterPayload } from '../lib/posterDocument.js'
 import { fillPoster, postToPosterFields, setPosterPhoto } from '../lib/postPoster.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
@@ -185,17 +185,11 @@ export default function PostDetailPage() {
   )
 }
 
-// 게시글 사진을 받아 전단지 자산으로 올린다. 외부 사진(분실 신고)은 브라우저가 막을 수 있어 실패하면 사진 없이 만든다.
+// 게시글 사진을 서버가 전단지 자산으로 복사한다. 분실 신고 사진은 외부 주소라 브라우저가 직접 읽지 못해(CORS) 서버를 거친다.
+// 실패하면 사진 없이 전단지를 만들고 사용자에게 알린다.
 async function uploadPostPhoto(post) {
   try {
-    const url = post.photo_url || API_BASE + postPhotoPath(post.id)
-    const res = await fetch(url, post.photo_url ? undefined : { credentials: 'include' })
-    if (!res.ok) return null
-    const blob = await res.blob()
-    if (!blob.type.startsWith('image/')) return null
-    const form = new FormData()
-    form.append('file', blob, 'post-photo')
-    const { assetId } = await api('/poster/assets', { method: 'POST', body: form })
+    const { assetId } = await api('/poster/assets/from-post', { method: 'POST', body: { postId: post.id } })
     return assetId
   } catch {
     return null
