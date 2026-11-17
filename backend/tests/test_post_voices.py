@@ -46,6 +46,8 @@ def test_voice_limit_owner_and_duration_validation():
         signup(client, "owner@example.com")
         post = client.post("/api/v1/posts", json=body()).json()
         url = f"/api/v1/posts/{post['id']}/voices"
+        too_long = client.post(url, data={"description": "긴 음성"}, files={"audio": ("voice.wav", wav(61), "audio/wav")})
+        assert too_long.status_code == 422 and too_long.json()["detail"]["code"] == "voice_too_long"
         voices = []
         for n in range(3):
             response = client.post(url, data={"description": f"녹음 {n}"}, files={"audio": ("voice.wav", wav(), "audio/wav")})
@@ -53,8 +55,6 @@ def test_voice_limit_owner_and_duration_validation():
             voices.append(response.json())
         limited = client.post(url, data={"description": "네 번째"}, files={"audio": ("voice.wav", wav(), "audio/wav")})
         assert limited.status_code == 422 and limited.json()["detail"]["code"] == "voice_limit"
-        too_long = client.post(url, data={"description": "긴 음성"}, files={"audio": ("voice.wav", wav(61), "audio/wav")})
-        assert too_long.status_code == 422 and too_long.json()["detail"]["code"] == "voice_too_long"
         client.post("/api/v1/auth/logout")
         signup(client, "other@example.com")
         assert client.delete(f"{url}/{voices[0]['id']}").status_code == 403
