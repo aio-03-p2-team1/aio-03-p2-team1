@@ -4,8 +4,7 @@ import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
 import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
-import { createPosterFromTemplate, posterPayload } from '../lib/posterDocument.js'
-import { fillPoster, postToPosterFields, setPosterPhoto } from '../lib/postPoster.js'
+import { postToPosterFields, savePosterDraft } from '../lib/postPoster.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
 import PostComments from '../components/PostComments.jsx'
 import PostVoices from '../components/PostVoices.jsx'
@@ -48,25 +47,17 @@ export default function PostDetailPage() {
     navigate('/search')
   }
 
-  // 게시글 정보로 기본 템플릿 전단지를 만들어 저장한 뒤 전단지 상세로 간다. 연락처는 사용자가 수정 화면에서 넣는다.
+  // 게시글 정보(문구·사진)를 전단지 편집기로 넘긴다. 저장은 편집기에서 사용자가 직접 한다. 연락처는 사용자가 넣는다.
   async function makePoster() {
     if (!user) {
       navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)
       return
     }
     setMakingPoster(true)
-    try {
-      const template = await api('/poster/templates/basic')
-      let poster = fillPoster(createPosterFromTemplate(template), postToPosterFields(post))
-      const assetId = post.has_photo ? await uploadPostPhoto(post) : null
-      if (assetId) poster = setPosterPhoto(poster, assetId)
-      const created = await api('/posters', { method: 'POST', body: posterPayload(poster) })
-      toast(post.has_photo && !assetId ? '전단지를 만들었어요. 사진은 가져오지 못해 직접 넣어 주세요.' : '전단지를 만들었어요. 연락처를 넣어 완성해 주세요.')
-      navigate(`/posters/${encodeURIComponent(created.id)}`)
-    } catch (err) {
-      toast(err?.code === 'poster_limit' ? '전단지는 5개까지 저장할 수 있어요. 마이페이지에서 기존 전단지를 지운 뒤 다시 만들어 주세요.' : errorMessage(err))
-      setMakingPoster(false)
-    }
+    const assetId = post.has_photo ? await uploadPostPhoto(post) : null
+    if (post.has_photo && !assetId) toast('사진은 가져오지 못했어요. 편집기에서 직접 넣어 주세요.')
+    savePosterDraft({ fields: postToPosterFields(post), assetId })
+    navigate('/poster')
   }
 
   async function remove() {
@@ -170,7 +161,7 @@ export default function PostDetailPage() {
             {post.mine && (
               // 내가 쓴 글에만 보인다(분실 신고는 mine 이 항상 false).
               <button type="button" className="secondary-button" onClick={makePoster} disabled={makingPoster}>
-                {makingPoster ? '전단지 만드는 중…' : '전단지 만들기'}
+                {makingPoster ? '전단지 준비 중…' : '전단지 만들기'}
               </button>
             )}
           </div>

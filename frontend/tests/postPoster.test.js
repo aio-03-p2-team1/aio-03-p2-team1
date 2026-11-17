@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { fillPoster, koreanDate, postToPosterFields, setPosterPhoto } from '../src/lib/postPoster.js'
+import { applyPosterDraft, clearPosterDraft, fillPoster, koreanDate, peekPosterDraft, postToPosterFields, savePosterDraft, setPosterPhoto } from '../src/lib/postPoster.js'
 
 test('member post fills poster fields and keeps contact for the user', () => {
   const fields = postToPosterFields({
@@ -47,4 +47,22 @@ test('fillPoster replaces only matching text fields and setPosterPhoto fills the
   assert.equal(filled.components[2].assetId, 'a'.repeat(32))
   assert.equal(filled.components[3].assetId, null)
   assert.equal(poster.components[0].content, '강아지를 찾습니다') // 원본은 그대로
+})
+
+test('poster draft hands fields and photo to the editor once', () => {
+  const data = new Map()
+  const storage = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => data.set(k, v), removeItem: (k) => data.delete(k) }
+  assert.equal(peekPosterDraft(storage), null)
+  savePosterDraft({ fields: { title: '초코를 찾습니다' }, assetId: 'b'.repeat(32) }, storage)
+  const draft = peekPosterDraft(storage)
+  assert.deepEqual(peekPosterDraft(storage), draft) // 읽기만 해서 두 번 읽어도 같다
+  const poster = { components: [{ id: 't', type: 'text', fieldKey: 'title', content: '강아지를 찾습니다' }, { id: 'p', type: 'image', assetId: null }] }
+  const filled = applyPosterDraft(poster, draft)
+  assert.equal(filled.components[0].content, '초코를 찾습니다')
+  assert.equal(filled.components[1].assetId, 'b'.repeat(32))
+  assert.equal(applyPosterDraft(poster, { fields: {}, assetId: 'not-an-id' }).components[1].assetId, null)
+  clearPosterDraft(storage)
+  assert.equal(peekPosterDraft(storage), null)
+  data.set('dasimanna:post-poster', '{broken')
+  assert.equal(peekPosterDraft(storage), null)
 })
