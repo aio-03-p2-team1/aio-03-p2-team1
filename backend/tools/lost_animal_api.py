@@ -230,6 +230,11 @@ def _https(url: str | None) -> str | None:
     if not url or not str(url).strip():
         return None
     url = str(url).strip()
+    # 사진이 없는 신고는 파일 이름 없이 폴더 주소만 온다(예: …/fileDownloadSrvc/). 사진 없음으로 본다.
+    # (사진 있음으로 두면 화면에 깨진 사진이 나오고, 사진 분석이 이미지가 아닌 응답을 받아 422 가 났다.)
+    last = url.split("?", 1)[0].rstrip().rsplit("/", 1)[-1]
+    if not last:  # 주소가 / 로 끝나면 파일이 없다
+        return None
     return "https://" + url[len("http://"):] if url.startswith("http://") else url
 
 
