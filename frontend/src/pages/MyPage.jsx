@@ -100,26 +100,6 @@ export default function MyPage() {
         </section>
 
         <div className="my-content">
-          <section className="panel my-posters-panel" aria-labelledby="my-posters-title">
-            <div className="my-section-head">
-              <div><span className="eyebrow">다시 편집하기</span><h2 id="my-posters-title">내 전단지 {posters.status === 'ready' ? `(${posters.items.length}/5)` : ''}</h2></div>
-              <Link className="text-link" to="/poster">새 전단지 ↗</Link>
-            </div>
-            <ListState list={posters} empty="저장한 전단지가 없어요. 전단지는 최대 5개까지 저장할 수 있어요." loading="전단지를 불러오고 있어요…" />
-            {posters.status === 'ready' && posters.items.length > 0 && (
-              <ul className="my-list my-run-list">
-                {posters.items.map((poster) => (
-                  <li className="my-poster-item" key={poster.id}>
-                    <div><strong>{poster.title || poster.pet_name || '실종 전단지'}</strong><p className="fineprint">수정 {formatDateTime(poster.updated_at)}</p></div>
-                    <div className="my-poster-actions">
-                      <Link className="secondary-button" to={`/poster?edit=${encodeURIComponent(poster.id)}`}>불러오기</Link>
-                      <button type="button" className="text-action danger-text" disabled={deletingPoster !== null} onClick={() => deletePoster(poster)}>{deletingPoster === poster.id ? '삭제 중…' : '삭제'}</button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
           <section className="panel my-history-panel" aria-labelledby="my-history-title">
             <div className="my-section-head">
               <div><span className="eyebrow">다시 찾아보기</span><h2 id="my-history-title">검색 기록</h2></div>
@@ -162,6 +142,27 @@ export default function MyPage() {
                         {postSpeciesLabel(p.species)}{p.breed ? ` · ${p.breed}` : ''} · {p.region} · 실종 {formatDate(p.lost_date)} · 등록 {formatDateTime(p.created_at)}
                       </span>
                     </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="panel my-posters-panel" aria-labelledby="my-posters-title">
+            <div className="my-section-head">
+              <div><span className="eyebrow">다시 편집하기</span><h2 id="my-posters-title">내 전단지 {posters.status === 'ready' ? `(${posters.items.length}/5)` : ''}</h2></div>
+              <Link className="text-link" to="/poster">새 전단지 ↗</Link>
+            </div>
+            <ListState list={posters} empty="저장한 전단지가 없어요. 전단지는 최대 5개까지 저장할 수 있어요." loading="전단지를 불러오고 있어요…" />
+            {posters.status === 'ready' && posters.items.length > 0 && (
+              <ul className="my-list my-run-list">
+                {posters.items.map((poster) => (
+                  <li className="my-poster-item" key={poster.id}>
+                    <div><strong>{poster.title || poster.pet_name || '실종 전단지'}</strong><p className="fineprint">수정 {formatDateTime(poster.updated_at)}</p></div>
+                    <div className="my-poster-actions">
+                      <Link className="secondary-button" to={`/poster?edit=${encodeURIComponent(poster.id)}`}>불러오기</Link>
+                      <button type="button" className="text-action danger-text" disabled={deletingPoster !== null} onClick={() => deletePoster(poster)}>{deletingPoster === poster.id ? '삭제 중…' : '삭제'}</button>
+                    </div>
                   </li>
                 ))}
               </ul>
