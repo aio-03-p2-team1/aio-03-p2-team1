@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { api } from '../lib/api.js'
+import { API_BASE, api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
-import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { isLostReport, localDate, postPhotoPath, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { createPosterFromTemplate, posterPayload } from '../lib/posterDocument.js'
+import { fillPoster, postToPosterFields, setPosterPhoto } from '../lib/postPoster.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
 import PostComments from '../components/PostComments.jsx'
 import PostVoices from '../components/PostVoices.jsx'
@@ -24,6 +26,7 @@ export default function PostDetailPage() {
   const [confirming, setConfirming] = useState(false)
   const [editing, setEditing] = useState(false)
   const [reload, setReload] = useState(0)
+  const [makingPoster, setMakingPoster] = useState(false)
 
   useEffect(() => {
     setStatus('loading')
@@ -43,6 +46,27 @@ export default function PostDetailPage() {
   function searchWithPost() {
     savePostSearch(postToSearch(post, localDate()))
     navigate('/search')
+  }
+
+  // 게시글 정보로 기본 템플릿 전단지를 만들어 저장한 뒤 전단지 상세로 간다. 연락처는 사용자가 수정 화면에서 넣는다.
+  async function makePoster() {
+    if (!user) {
+      navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)
+      return
+    }
+    setMakingPoster(true)
+    try {
+      const template = await api('/poster/templates/basic')
+      let poster = fillPoster(createPosterFromTemplate(template), postToPosterFields(post))
+      const assetId = post.has_photo ? await uploadPostPhoto(post) : null
+      if (assetId) poster = setPosterPhoto(poster, assetId)
+      const created = await api('/posters', { method: 'POST', body: posterPayload(poster) })
+      toast(post.has_photo && !assetId ? '전단지를 만들었어요. 사진은 가져오지 못해 직접 넣어 주세요.' : '전단지를 만들었어요. 연락처를 넣어 완성해 주세요.')
+      navigate(`/posters/${encodeURIComponent(created.id)}`)
+    } catch (err) {
+      toast(err?.code === 'poster_limit' ? '전단지는 5개까지 저장할 수 있어요. 마이페이지에서 기존 전단지를 지운 뒤 다시 만들어 주세요.' : errorMessage(err))
+      setMakingPoster(false)
+    }
   }
 
   async function remove() {
@@ -143,6 +167,9 @@ export default function PostDetailPage() {
           </div>
           <div className="detail-page-actions">
             <button type="button" className="primary-button" onClick={searchWithPost}>이 정보로 구조 공고 찾기</button>
+            <button type="button" className="secondary-button" onClick={makePoster} disabled={makingPoster}>
+              {makingPoster ? '전단지 만드는 중…' : '전단지 만들기'}
+            </button>
           </div>
           <p className="fineprint">
             {lost
@@ -156,6 +183,23 @@ export default function PostDetailPage() {
       <PostComments key={post.id} targetId={post.id} lostReport={lost} />
     </main>
   )
+}
+
+// 게시글 사진을 받아 전단지 자산으로 올린다. 외부 사진(분실 신고)은 브라우저가 막을 수 있어 실패하면 사진 없이 만든다.
+async function uploadPostPhoto(post) {
+  try {
+    const url = post.photo_url || API_BASE + postPhotoPath(post.id)
+    const res = await fetch(url, post.photo_url ? undefined : { credentials: 'include' })
+    if (!res.ok) return null
+    const blob = await res.blob()
+    if (!blob.type.startsWith('image/')) return null
+    const form = new FormData()
+    form.append('file', blob, 'post-photo')
+    const { assetId } = await api('/poster/assets', { method: 'POST', body: form })
+    return assetId
+  } catch {
+    return null
+  }
 }
 
 function PostEditForm({ post, onSaved }) {
