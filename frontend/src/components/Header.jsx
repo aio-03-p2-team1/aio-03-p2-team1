@@ -16,7 +16,8 @@ export default function Header() {
   return (
     <header className="site-header">
       <Link className="brand" to="/">
-        <img className="brand-icon" src="/brand-icon.png" alt="" width="40" height="40" /> 다시 만나
+        <img className="brand-icon" src="/brand-icon.png" alt="" width="40" height="40" />
+        <span className="brand-wordmark">다시 만나</span>
       </Link>
       <nav aria-label="주요 메뉴">
         <NavLink to="/" end>전체 공고</NavLink>

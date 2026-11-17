@@ -1,3 +1,4 @@
+@font-face{font-family:'Jua Logo';src:url('./assets/fonts/Jua-logo.woff2') format('woff2');font-style:normal;font-weight:400;font-display:swap}
 :root{--cards-reference:url('./assets/sample-cards.jpg')}
 :root{--ink:#292827;--muted:#6f6b66;--line:#e5e1da;--yellow:#f4d98a;--yellow-deep:#e8c16c;--paper:#fffdfa;--warm:#f8f6f2;--shadow:0 12px 36px rgba(63,53,38,.08)}
 *{box-sizing:border-box}
@@ -12,7 +13,8 @@ img{max-width:100%}
 :is(a,button,input,select,textarea):focus-visible{outline:3px solid #b9913b;outline-offset:3px}
 
 .site-header{height:66px;display:flex;align-items:center;gap:clamp(18px,3vw,54px);padding:0 clamp(24px,4vw,76px);background:#fffdfb;border-bottom:1px solid #ece8e1}
-.brand{display:flex;align-items:center;gap:10px;white-space:nowrap;font-weight:800;font-size:27px;letter-spacing:-.075em}
+.brand{display:flex;align-items:center;gap:0;white-space:nowrap}
+.brand-wordmark{font-family:'Jua Logo','Apple SD Gothic Neo',system-ui,sans-serif;font-size:25px;font-weight:400;letter-spacing:-.035em;line-height:1;transform:translateY(3px)}
 .brand-period{color:#d7ae56}
 .brand-paw{position:relative;display:inline-block;color:#f6ca68;font-size:21px;line-height:1;margin-top:10px;transform:rotate(-15deg)}
 .brand-paw i{position:absolute;top:-15px;left:0;display:block;width:38px;color:#f6ca68;font-size:9px;letter-spacing:3px;font-style:normal;white-space:nowrap}
