@@ -71,7 +71,11 @@ export default function PosterPage() {
       .then(([list, existing]) => {
         if (!live) return
         setTemplates(list.items)
-        if (existing) setPoster(existing)
+        // 저장된 전단지(?edit=)는 저장된 내용을 그대로 이어서 편집한다. 새 템플릿으로 덮지 않는다.
+        if (existing) {
+          setPoster(existing)
+          return
+        }
         // 게시판 상세의 [전단지 만들기]로 왔으면 기본 템플릿에 게시글 문구·사진을 채운다(저장은 사용자가 한다).
         const draft = peekPosterDraft()
         const templateId = draft ? 'basic' : list.items[0]?.id || 'basic'
