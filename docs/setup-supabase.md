@@ -12,7 +12,6 @@ STORAGE_BACKEND=supabase
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SCHEMA=aio-03-p2-team1-demo
 SUPABASE_SERVICE_ROLE_KEY=<server-only-key>
-SUPABASE_POST_AUDIO_BUCKET=post-audio
 ```
 
 `SUPABASE_SERVICE_ROLE_KEY`는 FastAPI 서버에만 둔다. 프런트엔드의 `VITE_` 변수로 만들거나 브라우저에 전달하지 않는다. Supabase Dashboard에서 API Exposed schemas에 `SUPABASE_SCHEMA`를 추가하고 2절의 SQL을 실행한다. 로컬 개발을 SQLite로 유지하려면 `STORAGE_BACKEND=sqlite`를 쓰며 음성 파일은 `POST_AUDIO_LOCAL_DIR` 아래에 저장된다.
@@ -57,7 +56,6 @@ SQL은 서버 전용 `service_role`에 필요한 권한을 부여한다. 브라�
 | `SUPABASE_URL` | 운영 Supabase 프로젝트 URL |
 | `SUPABASE_SCHEMA` | 2절에서 준비한 스키마 이름 |
 | `SUPABASE_SERVICE_ROLE_KEY` | 같은 프로젝트의 서버 전용 서비스 역할 키 |
-| `SUPABASE_POST_AUDIO_BUCKET` | `post-audio` (private Storage bucket 이름) |
 | `ANIMAL_API_KEY` | 구조동물 조회 서비스 사용 권한이 있는 공공데이터 API 키 |
 | `REDIS_URL` | 백엔드가 접속할 운영 Redis 연결 URL |
 
@@ -203,7 +201,7 @@ PY
 ## 9. 완료 확인표
 
 - [ ] 운영 스키마에 `kinds`, `kind_aliases`가 있다.
-- [ ] private `post-audio` bucket이 있고 서버 환경변수와 이름이 일치한다.
+- [ ] private `post-audio` bucket이 있고 백엔드 코드의 버킷 상수와 이름이 일치한다.
 - [ ] 스키마가 Data API에 노출되어 있고 서비스 역할 권한이 맞다.
 - [ ] 백엔드와 갱신 작업이 같은 DB·스키마·Redis DB를 사용한다.
 - [ ] GitHub Secrets 5개가 등록되어 있다.

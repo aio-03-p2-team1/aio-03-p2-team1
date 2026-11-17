@@ -34,7 +34,6 @@
 | `STORAGE_BACKEND` | `sqlite` 또는 `supabase`; 기본 `sqlite` |
 | `SQLITE_PATH` | 로컬 DB 경로; 기본 `.data/meet-again.db` |
 | `SUPABASE_URL`, `SUPABASE_SCHEMA`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase 주소·스키마·서버 전용 키. live 모드에서 Supabase 사용 시 설정 |
-| `SUPABASE_POST_AUDIO_BUCKET` | 게시글 음성 저장용 private Storage bucket; 기본 `post-audio` |
 | `POST_AUDIO_LOCAL_DIR` | SQLite 사용 시 음성 파일 저장 디렉터리; 기본 `.data/post-audio` |
 | `OPENAI_API_KEY`, `OPENAI_MODEL` | OpenAI 연결; 모델 기본값 `gpt-6-luna` |
 | `LANGSMITH_TRACING` | LangGraph·LangChain 실행 추적 여부; 기본 `false`. `true`면 API 키 필요 |

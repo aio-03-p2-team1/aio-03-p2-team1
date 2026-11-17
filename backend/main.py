@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.config import Settings, get_settings
+from backend.config import SUPABASE_POST_AUDIO_BUCKET, Settings, get_settings
 from backend.deps import AppContext
 from backend.errors import ApiError
 from backend.routers import auth, comments, memory, posts, public, searches
@@ -84,7 +84,7 @@ def build_context(settings: Settings) -> AppContext:
             backend=settings.storage_backend,
             local_dir=settings.post_audio_local_dir,
             url=settings.supabase_url,
-            bucket=settings.supabase_post_audio_bucket,
+            bucket=SUPABASE_POST_AUDIO_BUCKET,
             service_key=settings.supabase_service_role_key.get_secret_value() if settings.supabase_service_role_key else "",
             timeout=timeout,
         ),
