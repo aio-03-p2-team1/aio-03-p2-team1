@@ -17,6 +17,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
+from backend.routers import posts as board
+from backend.tools.lost_animal_api import LostAnimalApiError
 
 router = APIRouter(tags=["posters"])
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
@@ -178,6 +180,44 @@ async def upload_asset(
     raw = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise ApiError(413, "poster_asset_too_large", "사진은 15MB 이하로 올려 주세요.")
+    return await _store_asset(raw, user.owner, ctx)
+
+
+class FromPostBody(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    post_id: str = Field(alias="postId", min_length=1, max_length=80)
+
+
+@router.post("/poster/assets/from-post", status_code=201)
+async def asset_from_post(body: FromPostBody, ctx: AppContext = Depends(get_ctx), user=Depends(current_user)):
+    """실종 정보 게시판 글의 사진을 전단지 자산으로 복사한다.
+
+    회원 글은 저장된 사진을, 분실 신고는 원본의 사진 주소를 서버가 받아 온다(브라우저는 외부 사진을 CORS 로 못 읽음).
+    사진 주소는 클라이언트가 보내지 않고 게시글 ID 로 서버가 찾는다.
+    """
+    post_id = body.post_id
+    if board._POST_ID.match(post_id):
+        photo = (await board._get(ctx, post_id)).get("photo")
+        if not photo or photo.get("type") not in board.PHOTO_TYPES:
+            raise ApiError(404, "photo_not_found", "사진이 없는 게시글입니다.")
+        raw = base64.b64decode(photo["data"])
+    elif board._LOST_ID.match(post_id) and ctx.lost is not None:
+        try:
+            item = await ctx.lost.get(post_id)
+            if not item:
+                raise ApiError(404, "post_not_found", "게시글을 찾을 수 없습니다.")
+            if not item.get("photo_url"):
+                raise ApiError(404, "photo_not_found", "사진이 없는 게시글입니다.")
+            raw = await ctx.lost.api.fetch_photo(item["photo_url"], MAX_UPLOAD_BYTES)
+        except LostAnimalApiError as exc:
+            raise ApiError(502, "poster_photo_unavailable", "분실 신고 사진을 가져오지 못했어요. 사진을 직접 올려 주세요.") from exc
+    else:
+        raise ApiError(404, "post_not_found", "게시글을 찾을 수 없습니다.")
+    return await _store_asset(raw, user.owner, ctx)
+
+
+async def _store_asset(raw: bytes, owner: str, ctx: AppContext) -> dict[str, Any]:
+    """이미지 바이트를 검증·축소·WebP 로 바꿔 사용자 자산으로 저장한다(메타데이터 제거)."""
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
@@ -200,7 +240,7 @@ async def upload_asset(
         raise ApiError(422, "poster_asset_invalid", "이미지 파일을 읽을 수 없습니다.")
 
     asset_id = uuid.uuid4().hex
-    await ctx.store.put(user.owner, "asset", asset_id, {"content": base64.b64encode(output.getvalue()).decode("ascii"), "width": width, "height": height})
+    await ctx.store.put(owner, "asset", asset_id, {"content": base64.b64encode(output.getvalue()).decode("ascii"), "width": width, "height": height})
     return {"assetId": asset_id, "url": f"/poster/assets/{asset_id}", "width": width, "height": height, "format": "webp"}
 
 

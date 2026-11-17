@@ -4,6 +4,7 @@ import { api, API_BASE } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
 import { isLostReport, localDate, postPhotoPath, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { postToPosterFields, savePosterDraft } from '../lib/postPoster.js'
 import { postToSearch, savePostSearch } from '../lib/postSearch.js'
 import PostComments from '../components/PostComments.jsx'
 import PostVoices from '../components/PostVoices.jsx'
@@ -24,6 +25,7 @@ export default function PostDetailPage() {
   const [confirming, setConfirming] = useState(false)
   const [editing, setEditing] = useState(false)
   const [reload, setReload] = useState(0)
+  const [makingPoster, setMakingPoster] = useState(false)
 
   useEffect(() => {
     setStatus('loading')
@@ -44,6 +46,19 @@ export default function PostDetailPage() {
     // 사진도 함께 넘긴다(PostPhoto 와 같은 주소: 분실 신고는 공공데이터 사진, 회원 글은 우리 서버 사진).
     savePostSearch(postToSearch(post, localDate(), post.photo_url || API_BASE + postPhotoPath(post.id)))
     navigate('/search')
+  }
+
+  // 게시글 정보(문구·사진)를 전단지 편집기로 넘긴다. 저장은 편집기에서 사용자가 직접 한다. 연락처는 사용자가 넣는다.
+  async function makePoster() {
+    if (!user) {
+      navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)
+      return
+    }
+    setMakingPoster(true)
+    const assetId = post.has_photo ? await uploadPostPhoto(post) : null
+    if (post.has_photo && !assetId) toast('사진은 가져오지 못했어요. 편집기에서 직접 넣어 주세요.')
+    savePosterDraft({ fields: postToPosterFields(post), assetId })
+    navigate('/poster')
   }
 
   async function remove() {
@@ -144,6 +159,12 @@ export default function PostDetailPage() {
           </div>
           <div className="detail-page-actions">
             <button type="button" className="primary-button" onClick={searchWithPost}>이 정보로 구조 공고 찾기</button>
+            {post.mine && (
+              // 내가 쓴 글에만 보인다(분실 신고는 mine 이 항상 false).
+              <button type="button" className="secondary-button" onClick={makePoster} disabled={makingPoster}>
+                {makingPoster ? '전단지 준비 중…' : '전단지 만들기'}
+              </button>
+            )}
           </div>
           <p className="fineprint">
             {lost
@@ -157,6 +178,17 @@ export default function PostDetailPage() {
       <PostComments key={post.id} targetId={post.id} lostReport={lost} />
     </main>
   )
+}
+
+// 게시글 사진을 서버가 전단지 자산으로 복사한다. 분실 신고 사진은 외부 주소라 브라우저가 직접 읽지 못해(CORS) 서버를 거친다.
+// 실패하면 사진 없이 전단지를 만들고 사용자에게 알린다.
+async function uploadPostPhoto(post) {
+  try {
+    const { assetId } = await api('/poster/assets/from-post', { method: 'POST', body: { postId: post.id } })
+    return assetId
+  } catch {
+    return null
+  }
 }
 
 function PostEditForm({ post, onSaved }) {

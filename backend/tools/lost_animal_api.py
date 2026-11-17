@@ -175,6 +175,40 @@ class LostAnimalApi:
             rows=_int(body.get("numOfRows"), rows),
         )
 
+    async def fetch_photo(self, url: str, max_bytes: int) -> bytes:
+        """분실 신고 사진(popfile)을 서버에서 받는다. 브라우저는 외부 사진을 CORS 로 읽을 수 없어 전단지에 넣을 때 쓴다.
+
+        url 은 클라이언트가 보낸 값이 아니라 분실 신고 원본에서 꺼낸 주소이며, animal.go.kr 주소만 받는다.
+        https 연결이 실패하면(인증서 체인 문제 등) 원본 주소인 http 로 한 번 더 받는다.
+        """
+        parsed = httpx.URL(url) if url else None
+        host = (parsed.host or "").lower() if parsed else ""
+        if not parsed or parsed.scheme not in ("http", "https") or not (host == "animal.go.kr" or host.endswith(".animal.go.kr")):
+            raise LostAnimalApiError("lost_photo_host")
+        try:
+            return await self._download(url, max_bytes)
+        except LostAnimalApiError as exc:
+            if parsed.scheme != "https" or exc.code not in ("lost_network", "lost_timeout"):
+                raise
+            return await self._download("http://" + url[len("https://"):], max_bytes)
+
+    async def _download(self, url: str, max_bytes: int) -> bytes:
+        try:
+            async with self._client.stream("GET", url, follow_redirects=False) as res:
+                if res.status_code != 200:
+                    raise LostAnimalApiError("lost_photo_status", res.status_code)
+                chunks, size = [], 0
+                async for chunk in res.aiter_bytes():
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise LostAnimalApiError("lost_photo_too_large", res.status_code)
+                    chunks.append(chunk)
+        except httpx.TimeoutException as exc:
+            raise LostAnimalApiError("lost_timeout") from exc
+        except httpx.HTTPError as exc:
+            raise LostAnimalApiError("lost_network") from exc
+        return b"".join(chunks)
+
 
 # ── 화면용 변환 ─────────────────────────────────────────────────────────
 
