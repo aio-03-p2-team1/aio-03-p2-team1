@@ -87,7 +87,7 @@ export default function PostBoardPage() {
           <p>잃어버린 반려동물의 정보를 등록하고, 회원 글과 공공데이터 분실 신고를 함께 살펴보세요.</p>
         </div>
         <button type="button" className="primary-button" onClick={openForm} aria-expanded={formOpen}>
-          실종 정보 등록 ↗
+          실종 정보 등록
         </button>
       </div>
 
