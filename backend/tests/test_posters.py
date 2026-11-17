@@ -89,7 +89,7 @@ def test_poster_list_limit_update_and_delete(client):
     listed = client.get('/api/v1/posters').json()
     assert listed['limit'] == 5
     assert {item['id'] for item in listed['items']} == set(poster_ids)
-    assert all(item['title'] == '보리' and item['updated_at'] for item in listed['items'])
+    assert all(item['pet_name'] == '보리' and item['updated_at'] for item in listed['items'])
     assert all('components' not in item for item in listed['items'])
     rejected = client.post('/api/v1/posters', json=poster_body())
     assert rejected.status_code == 422
@@ -178,3 +178,21 @@ def test_redesigned_templates_have_distinct_layouts_and_complete_fields(client):
     photo = next(item for item in info if item["type"] == "image")
     name = next(item for item in info if item.get("fieldKey") == "pet_name")
     assert name["x"] > photo["x"] + photo["width"]
+
+
+def test_list_my_posters_returns_summaries_only_for_owner(client):
+    assert client.get("/api/v1/posters").status_code == 401
+    signup(client, "poster-list-a@example.com")
+    title = {"id": "title", "type": "text", "fieldKey": "title", "content": "강아지를 찾습니다", "x": 0, "y": 0, "width": 100, "height": 40}
+    first = client.post("/api/v1/posters", json=poster_body(components=[*poster_body()["components"], title])).json()
+    second = client.post("/api/v1/posters", json=poster_body(templateId="urgent")).json()
+    listed = client.get("/api/v1/posters").json()
+    assert listed["count"] == 2
+    by_id = {item["id"]: item for item in listed["items"]}
+    assert by_id[first["id"]]["title"] == "강아지를 찾습니다" and by_id[first["id"]]["pet_name"] == "보리"
+    assert by_id[second["id"]]["template_name"] == "긴급 주목형" and by_id[second["id"]]["photo_asset_id"] is None
+    assert "components" not in by_id[first["id"]] and by_id[first["id"]]["updated_at"]
+
+    client.post("/api/v1/auth/logout")
+    signup(client, "poster-list-b@example.com")
+    assert client.get("/api/v1/posters").json()["items"] == []

@@ -110,7 +110,7 @@ export default function MyPage() {
               <ul className="my-list my-run-list">
                 {posters.items.map((poster) => (
                   <li className="my-poster-item" key={poster.id}>
-                    <div><strong>{poster.title}</strong><p className="fineprint">수정 {formatDateTime(poster.updated_at)}</p></div>
+                    <div><strong>{poster.title || poster.pet_name || '실종 전단지'}</strong><p className="fineprint">수정 {formatDateTime(poster.updated_at)}</p></div>
                     <div className="my-poster-actions">
                       <Link className="secondary-button" to={`/poster?edit=${encodeURIComponent(poster.id)}`}>불러오기</Link>
                       <button type="button" className="text-action danger-text" disabled={deletingPoster !== null} onClick={() => deletePoster(poster)}>{deletingPoster === poster.id ? '삭제 중…' : '삭제'}</button>
@@ -167,6 +167,8 @@ export default function MyPage() {
               </ul>
             )}
           </section>
+
+
         </div>
       </div>
     </main>

@@ -1,72 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer } from 'react-konva'
+import { Stage, Layer, Rect, Transformer } from 'react-konva'
+import { CanvasItem } from '../components/PosterCanvasItem.jsx'
 import { API_BASE, api } from '../lib/api.js'
-import { createPosterFromTemplate, POSTER_FIELDS, switchPosterTemplate } from '../lib/posterDocument.js'
-import { POSTER_FONT, POSTER_LINE_HEIGHT, textOverflows } from '../lib/posterText.js'
+import { createPosterFromTemplate, POSTER_FIELDS, posterPayload, switchPosterTemplate } from '../lib/posterDocument.js'
+import { textOverflows } from '../lib/posterText.js'
 import { usePosterStore } from '../lib/posterStore.js'
 
 const makeId = () => crypto.randomUUID().replaceAll('-', '')
-
-function useAssetImage(assetId) {
-  const [image, setImage] = useState(null)
-  useEffect(() => {
-    if (!assetId) { setImage(null); return }
-    let live = true
-    const next = new window.Image()
-    next.onload = () => live && setImage(next)
-    next.onerror = () => live && setImage(null)
-    next.src = `${API_BASE}/poster/assets/${assetId}`
-    return () => { live = false }
-  }, [assetId])
-  return image
-}
-
-function imageCrop(image, item) {
-  if (!image) return undefined
-  const boxRatio = item.width / item.height
-  const sourceRatio = image.width / image.height
-  let width = image.width
-  let height = image.height
-  if (sourceRatio > boxRatio) width = image.height * boxRatio
-  else height = image.width / boxRatio
-  const zoom = Math.max(1, Math.min(3, Number(item.cropZoom) || 1))
-  width /= zoom; height /= zoom
-  const x = (image.width - width) * Math.max(0, Math.min(1, Number(item.cropX ?? 0.5)))
-  const y = (image.height - height) * Math.max(0, Math.min(1, Number(item.cropY ?? 0.5)))
-  return { x, y, width, height }
-}
-
-function CanvasItem({ item, selected, onSelect, onChange, registerNode }) {
-  const image = useAssetImage(item.assetId)
-  const common = {
-    id: item.id, x: item.x, y: item.y, width: item.width, height: item.height,
-    rotation: item.rotation || 0, draggable: true, opacity: item.opacity ?? 1,
-    onClick: onSelect, onTap: onSelect,
-    onDragEnd: (event) => onChange({ x: event.target.x(), y: event.target.y() }),
-    onTransformEnd: (event) => {
-      const node = event.target
-      const scaleX = node.scaleX(); const scaleY = node.scaleY()
-      node.scaleX(1); node.scaleY(1)
-      onChange({ x: node.x(), y: node.y(), width: Math.max(20, node.width() * scaleX), height: Math.max(20, node.height() * scaleY), rotation: node.rotation() })
-    },
-    ref: registerNode
-  }
-  if (item.type === 'image') {
-    return <>
-      <Rect {...common} fill="#eee9df" stroke={selected ? '#4c7757' : '#d8d0c4'} strokeWidth={selected ? 2 : 1} />
-      {image && <KonvaImage {...common} image={image} crop={imageCrop(image, item)} />}
-      {!image && <Text {...common} fontFamily={POSTER_FONT} lineHeight={item.lineHeight || POSTER_LINE_HEIGHT} text="사진을 추가해 주세요" align="center" verticalAlign="middle" fill="#8b8275" fontSize={18} listening={false} />}
-    </>
-  }
-  if (item.type === 'shape') {
-    return <Rect {...common} fill={item.fill || '#e8d8b5'} stroke={item.stroke || '#9c8250'} strokeWidth={item.strokeWidth ?? 2} />
-  }
-  return <>
-    {item.fill && <Rect {...common} fill={item.fill} stroke={selected ? '#4c7757' : undefined} strokeWidth={selected ? 2 : 0} />}
-    <Text {...common} fontFamily={POSTER_FONT} lineHeight={item.lineHeight || POSTER_LINE_HEIGHT} text={item.content || ''} fontSize={item.fontSize || 24} fill={item.color || '#34302b'} fontStyle={item.fontStyle || 'normal'} align={item.align || 'left'} verticalAlign="middle" wrap="word" padding={item.padding ?? 4} />
-  </>
-}
 
 function ComponentCanvas({ poster, selectedId, zoom, select, update, stageRef }) {
   const transformRef = useRef(null)
@@ -186,10 +127,12 @@ export default function PosterPage() {
     setSaving(true); setNotice('')
     try {
       const data = posterId
-        ? await api(`/posters/${posterId}`, { method: 'PUT', body: poster })
-        : await api('/posters', { method: 'POST', body: poster })
+        ? await api(`/posters/${posterId}`, { method: 'PUT', body: posterPayload(poster) })
+        : await api('/posters', { method: 'POST', body: posterPayload(poster) })
       setSaved(true); setNotice('전단지를 저장했어요.')
-      if (!posterId) navigate(`/poster?edit=${data.id}`, { replace: true })
+      // 상세에서 수정하러 온 전단지는 저장 후 상세로 돌아간다. 새 전단지는 편집을 이어갈 수 있게 주소만 바꾼다.
+      if (posterId) navigate(`/posters/${posterId}`, { replace: true })
+      else navigate(`/poster?edit=${data.id}`, { replace: true })
     } catch (error) { setNotice(error.message) } finally { setSaving(false) }
   }
 

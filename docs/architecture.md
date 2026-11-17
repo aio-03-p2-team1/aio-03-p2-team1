@@ -17,11 +17,12 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/` 전체 공고 | `img/dasimanna-cards-board.html` | `GET /notices`, `GET /regions` |
 | `/notices/:id` 공고 상세 | `img/dasimanna-cards-detail.html` | `GET /notices/{id}` 또는 `GET /runs/{run_id}` + 위치 API. '구조 위치' 옆 🗺️ 버튼은 구조 위치 글(`happen_place`)을 브라우저 카카오 SDK(주소 검색 → 장소 검색)로 찾아 작은 지도 창에 표시(좌표 저장 안 함, 못 찾으면 카카오맵 링크만). 창 밖 클릭·Esc 로 닫힘 |
 | `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
-| `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다 |
+| `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다, `GET /posters`(내가 만든 전단지, 누르면 `/posters/{id}` 상세) |
 | `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 20건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
 | `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET/PATCH /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자). 본문 아래 음성(최대 3개)과 댓글: 음성 `POST/GET/DELETE /posts/{id}/voices...`, 댓글 `GET/POST /posts/{id}/comments`, `DELETE /posts/{id}/comments/{comment_id}` |
 | `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음. 댓글은 계산된 분실 신고 ID(`lost-YYYYMMDD-해시`)로 같은 댓글 API 사용 |
-| `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST/GET/PUT/DELETE /posters/{id}` |
+| `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST/GET/PUT/DELETE /posters/{id}`. 상세에서 수정하러 온 전단지(`?edit=`)는 저장 후 `/posters/{id}` 상세로 이동 |
+| `/posters/:posterId` 전단지 상세(로그인) | — | `GET /posters/{id}`. 읽기 전용 캔버스(화면 폭에 맞춰 축소), 오른쪽 위 '수정' → `/poster?edit={id}` |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 
 ## 2. StateGraph
@@ -227,7 +228,7 @@ flowchart LR
 | `GET/POST /posters` · `GET/PUT/DELETE /posters/{id}` | 필요(소유자) | `poster_not_found`, `poster_component_invalid`, `poster_asset_unavailable`, `poster_limit`(422, 사용자당 5개) |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 
-전단지 목록 `GET /posters`는 로그인 사용자 소유의 DB 문서만 조회해 `items=[{id,title,templateId,updated_at}]`, `limit=5`를 반환한다. 마이페이지에서 `/poster?edit=<id>`로 바로 편집기를 열며, 삭제 전 확인 팝업을 표시한다. 신규 저장은 백엔드가 DB에서 해당 사용자의 `kind=poster` 문서를 조회해 5개 이상이면 `422 poster_limit`으로 거부한다. 기존 문서 수정에는 개수 제한을 적용하지 않으며 삭제 후 신규 저장할 수 있다.
+전단지 목록 `GET /posters`는 로그인 사용자 소유의 DB 문서만 조회해 `items=[{id,title,pet_name,template_id,template_name,lost_place,photo_asset_id,updated_at}]`, `limit=5`를 반환한다. 마이페이지에서 `/poster?edit=<id>`로 바로 편집기를 열며, 삭제 전 확인 팝업을 표시한다. 신규 저장은 백엔드가 DB에서 해당 사용자의 `kind=poster` 문서를 조회해 5개 이상이면 `422 poster_limit`으로 거부한다. 기존 문서 수정에는 개수 제한을 적용하지 않으며 삭제 후 신규 저장할 수 있다.
 
 실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 음성은 게시글 소유자만 추가·삭제할 수 있고 게시글당 3개·파일당 10 MiB·60초로 제한한다. 서버는 Mutagen으로 형식과 재생 시간을 검증하고 변환·압축하지 않는다. 허용 형식은 MP3·M4A/MP4·WAV·OGG Vorbis/Opus이며 파일명은 UUID로 생성한다. Supabase에서는 private Storage bucket(`post-audio`, `backend/config.py`의 코드 상수)에 바이너리를 저장하고, SQLite에서는 `POST_AUDIO_LOCAL_DIR`에 둔다. 게시글 문서에는 음성 ID·저장 키·형식·크기·길이·엔티티화된 설명만 저장한다. 설명은 API 출력 때 복원한 뒤 React 텍스트로 렌더링한다. 음성 섹션은 상세 내용과 댓글 사이에 표시한다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다. 상세 화면의 [이 정보로 구조 공고 찾기]는 글의 종류·시·도·실종 주소·날짜 및 품종코드(`form.breed_code`, 품종 셀렉트), 털색·성별·나이·특징(설명 글 앞에 붙임)으로 검색 화면을 미리 채운다(`frontend/src/lib/postSearch.js`). 바로 검색하지 않고 사용자가 확인 후 누르며, 로그인 화면을 거쳐도 이어지도록 sessionStorage 로 한 번만 전달한다. 분실 신고의 지역(`orgNm`)은 첫 낱말(시·도)만 쓴다.
 
