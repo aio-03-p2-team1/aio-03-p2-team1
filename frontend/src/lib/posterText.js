@@ -1,3 +1,6 @@
+export const POSTER_FONT = '"Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif'
+export const POSTER_LINE_HEIGHT = 1.3
+
 export function textOverflows(component, measureText) {
   const text = component?.content
   if (!text) return false
@@ -8,7 +11,7 @@ export function textOverflows(component, measureText) {
   if (!measure && typeof document !== 'undefined') {
     const context = document.createElement('canvas').getContext('2d')
     if (context) {
-      context.font = `${component.fontStyle === 'bold' ? 'bold ' : ''}${fontSize}px Arial, sans-serif`
+      context.font = `${component.fontStyle === 'bold' ? 'bold ' : ''}${fontSize}px ${POSTER_FONT}`
       measure = (value) => context.measureText(value).width
     }
   }
@@ -29,6 +32,6 @@ export function textOverflows(component, measureText) {
     }
     lines += 1
   }
-  const lineHeight = fontSize * (Number(component.lineHeight) || 1.2)
+  const lineHeight = fontSize * (Number(component.lineHeight) || POSTER_LINE_HEIGHT)
   return lines * lineHeight + padding * 2 > Number(component.height)
 }

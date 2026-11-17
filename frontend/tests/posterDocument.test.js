@@ -44,11 +44,24 @@ test('template switch keeps field values and every uploaded photo while resettin
   const photos = next.components.filter((item) => item.type === 'image' && item.assetId)
   assert.equal(byKey.title.content, '보리를 찾아요')
   assert.equal(byKey.pet_name.content, '보리')
-  assert.equal(byKey.title.y, 42)
+  assert.equal(byKey.title.y, 0)
+  assert.equal(byKey.title.width, 1)
   assert.deepEqual(photos.map((item) => item.assetId), ['asset-one', 'asset-two'])
   assert.equal(photos[0].cropZoom, 1.4)
   assert.equal(photos[1].cropX, 0.8)
   assert.equal(photos[0].y, photos[1].y)
   assert.ok(photos[1].x > photos[0].x)
   assert.equal(new Set(next.components.map((item) => item.id)).size, next.components.length)
+})
+
+
+test('server template geometry and typography survive document creation', () => {
+  const template = structuredClone(basic)
+  Object.assign(template.components[0], { x: 64, y: 38, width: 682, height: 78, fontSize: 46, align: 'left', color: '#163E32' })
+  const doc = createPosterFromTemplate(template, ids())
+  const title = doc.components.find((item) => item.fieldKey === 'title')
+  for (const key of ['x', 'y', 'width', 'height', 'fontSize', 'align', 'color']) {
+    assert.equal(title[key], template.components[0][key])
+  }
+  assert.equal(template.components.length, 2)
 })

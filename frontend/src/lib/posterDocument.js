@@ -10,27 +10,18 @@ export const POSTER_FIELDS = [
 ]
 
 const fieldMap = Object.fromEntries(POSTER_FIELDS.map(([key, label]) => [key, label]))
-const layouts = {
-  basic: { title: [42, 74], pet_name: [625, 58], species_breed: [690, 38], lost_datetime: [735, 38], lost_place: [780, 42], features: [828, 42], extra_description: [876, 42], contact: [970, 76] },
-  info: { title: [42, 70], pet_name: [590, 50], species_breed: [645, 38], lost_datetime: [688, 38], lost_place: [731, 38], features: [774, 90], extra_description: [870, 42], contact: [962, 70] },
-  urgent: { title: [38, 88], pet_name: [665, 56], species_breed: [722, 38], lost_datetime: [765, 38], lost_place: [808, 38], features: [851, 38], extra_description: [894, 38], contact: [968, 90] }
-}
 const defaultId = () => globalThis.crypto.randomUUID().replaceAll('-', '')
 
 export function createPosterFromTemplate(template, makeId = defaultId) {
   const components = structuredClone(template.components).map((item) => ({ ...item, id: item.id || makeId() }))
-  const layout = layouts[template.id] || layouts.basic
+  // 서버 프리셋의 좌표와 스타일을 그대로 사용한다.
   components.forEach((item) => {
-    if (item.type === 'text' && layout[item.fieldKey]) {
-      const [y, height] = layout[item.fieldKey]
-      item.y = y; item.height = height; item.x = 58; item.width = 678
-      item.label = fieldMap[item.fieldKey] || item.label
-    }
+    if (item.fieldKey) item.label = fieldMap[item.fieldKey] || item.label
   })
   const existing = new Set(components.map((item) => item.fieldKey).filter(Boolean))
   const defaults = POSTER_FIELDS.filter(([key]) => !existing.has(key)).map(([key, label, placeholder], index) => ({
     id: makeId(), type: 'text', label, fieldKey: key, content: placeholder,
-    x: 58, y: layout[key]?.[0] ?? 670 + index * 43, width: 678, height: layout[key]?.[1] ?? 36, fontSize: 17,
+    x: 58, y: 670 + index * 43, width: 678, height: 43, fontSize: 22,
     color: '#51493f', zIndex: components.length + index + 1
   }))
   return { templateId: template.id, width: template.width, height: template.height, components: [...components, ...defaults] }

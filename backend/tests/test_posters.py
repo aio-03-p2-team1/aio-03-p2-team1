@@ -125,3 +125,30 @@ def test_upload_rejects_non_image_and_unsupported_real_format(client):
     unsupported = client.post("/api/v1/poster/assets", files={"file": ("pet.gif", stream.getvalue(), "image/gif")})
     assert unsupported.status_code == 415
     assert unsupported.json()["detail"]["code"] == "poster_asset_format"
+
+
+def test_redesigned_templates_have_distinct_layouts_and_complete_fields(client):
+    required = {"title", "pet_name", "species_breed", "lost_datetime", "lost_place", "features", "extra_description", "contact"}
+    templates = [client.get(f"/api/v1/poster/templates/{key}").json() for key in ("basic", "info", "urgent")]
+    for template in templates:
+        components = template["components"]
+        assert {item["fieldKey"] for item in components if "fieldKey" in item} == required
+        assert len({item["id"] for item in components}) == len(components)
+        for item in components:
+            assert 0 <= item["x"] < item["x"] + item["width"] <= template["width"]
+            assert 0 <= item["y"] < item["y"] + item["height"] <= template["height"]
+            if "fieldKey" in item:
+                assert item["fontSize"] >= 20
+        # Labels and content must occupy separate boxes, even before editing.
+        visible = [item for item in components if item["type"] != "shape"]
+        for index, left in enumerate(visible):
+            for right in visible[index + 1:]:
+                assert (left["x"] + left["width"] <= right["x"] or right["x"] + right["width"] <= left["x"]
+                        or left["y"] + left["height"] <= right["y"] or right["y"] + right["height"] <= left["y"])
+    titles = [next(item for item in t["components"] if item.get("fieldKey") == "title") for t in templates]
+    assert len({item["content"] for item in titles}) == 3
+    assert len({item["color"] for item in titles}) == 3
+    info = templates[1]["components"]
+    photo = next(item for item in info if item["type"] == "image")
+    name = next(item for item in info if item.get("fieldKey") == "pet_name")
+    assert name["x"] > photo["x"] + photo["width"]

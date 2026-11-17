@@ -239,7 +239,7 @@ flowchart LR
 
 모든 변경 요청은 Origin 을 검사해 `403 origin_not_allowed` 로 막고, 응답에는 `Cache-Control: no-store` 를 붙인다.
 
-**실종 전단지 에디터** (`backend/routers/posters.py`, `frontend/src/pages/PosterPage.jsx`, `frontend/src/lib/posterStore.js`): 페이지·컴포넌트 좌표는 원본 A4 캔버스(794×1123) 기준이며 Zustand가 문구·도형·사진·선택·Undo/Redo 상태를 관리한다. 기본형·정보형·긴급형 프리셋은 서버 JSON으로 제공한다. 텍스트 컴포넌트마다 우측 입력란이 연결되고, 텍스트 줄바꿈 후 높이를 넘으면 경고한다. 템플릿 전환 시 `fieldKey`가 같은 문구와 모든 업로드 사진을 새 배치에 유지하고, 자유 배치는 기본 배치로 바꾼다. PNG는 브라우저 캔버스에서 내보내며 Transformer 선택 핸들은 숨겨 원본 캔버스 좌표로 2배 해상도 출력한다.
+**실종 전단지 에디터** (`backend/routers/posters.py`, `frontend/src/pages/PosterPage.jsx`, `frontend/src/lib/posterStore.js`): 페이지·컴포넌트 좌표는 원본 A4 캔버스(794×1123) 기준이며 Zustand가 문구·도형·사진·선택·Undo/Redo 상태를 관리한다. 사진 중심형(흰색·네이비, 큰 사진·중앙 정렬), 정보 전달형(민트·딥그린, 사진 옆 이름·항목별 정보), 긴급 주목형(노랑·검정, 제목·목격 장소 강조) 프리셋은 서버 JSON으로 제공한다. 기존 templateId(basic/info/urgent)와 문서 스키마는 유지한다. 필수 텍스트 8종과 구분 라벨·배경을 서버에서 모두 제공하며 프론트는 좌표·크기를 덮어쓰지 않는다. 한글 고딕 시스템 폰트(Noto Sans KR → Apple SD Gothic Neo → Malgun Gothic → sans-serif)와 기본 행간 1.3을 캔버스·넘침 측정에 동일하게 적용한다. 별도 웹폰트 다운로드는 없으며 설치된 폰트에 따라 기기별 글꼴은 달라질 수 있다. 저장된 기존 문서는 자동 재배치하지 않고 템플릿 전환 시 새 프리셋을 적용한다. 텍스트 컴포넌트마다 우측 입력란이 연결되고, 텍스트 줄바꿈 후 높이를 넘으면 경고한다. 템플릿 전환 시 `fieldKey`가 같은 문구와 모든 업로드 사진을 새 배치에 유지하고, 자유 배치는 기본 배치로 바꾼다. PNG는 브라우저 캔버스에서 내보내며 Transformer 선택 핸들은 숨겨 원본 캔버스 좌표로 2배 해상도 출력한다.
 
 전단지 JSON은 `owner=<로그인 사용자 키>`, `kind=poster` 로 기존 문서 저장소에 저장한다. 업로드는 multipart 파일 15MB 이하, JPEG/PNG/WebP 실제 디코딩 형식, 최대 2,500만 화소로 검증한다. Pillow의 EXIF transpose 후 긴 변을 2,000px로 줄이고 WebP 품질 85로 다시 인코딩해 위치정보 등 원본 메타데이터를 제거한다. 결과 바이트는 `owner=<로그인 사용자 키>`, `kind=asset` 문서에 보관하며 전단지는 URL 대신 `assetId`를 참조한다. 이미지 읽기와 전단지 저장 시에도 자산 소유자를 확인한다. 원본은 보관하지 않는다.
 

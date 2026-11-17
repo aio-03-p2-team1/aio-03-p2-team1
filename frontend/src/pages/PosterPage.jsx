@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer } from 'react-konva'
 import { API_BASE, api } from '../lib/api.js'
 import { createPosterFromTemplate, POSTER_FIELDS, switchPosterTemplate } from '../lib/posterDocument.js'
-import { textOverflows } from '../lib/posterText.js'
+import { POSTER_FONT, POSTER_LINE_HEIGHT, textOverflows } from '../lib/posterText.js'
 import { usePosterStore } from '../lib/posterStore.js'
 
 const makeId = () => crypto.randomUUID().replaceAll('-', '')
@@ -56,7 +56,7 @@ function CanvasItem({ item, selected, onSelect, onChange, registerNode }) {
     return <>
       <Rect {...common} fill="#eee9df" stroke={selected ? '#4c7757' : '#d8d0c4'} strokeWidth={selected ? 2 : 1} />
       {image && <KonvaImage {...common} image={image} crop={imageCrop(image, item)} />}
-      {!image && <Text {...common} text="사진을 추가해 주세요" align="center" verticalAlign="middle" fill="#8b8275" fontSize={18} listening={false} />}
+      {!image && <Text {...common} fontFamily={POSTER_FONT} lineHeight={item.lineHeight || POSTER_LINE_HEIGHT} text="사진을 추가해 주세요" align="center" verticalAlign="middle" fill="#8b8275" fontSize={18} listening={false} />}
     </>
   }
   if (item.type === 'shape') {
@@ -64,7 +64,7 @@ function CanvasItem({ item, selected, onSelect, onChange, registerNode }) {
   }
   return <>
     {item.fill && <Rect {...common} fill={item.fill} stroke={selected ? '#4c7757' : undefined} strokeWidth={selected ? 2 : 0} />}
-    <Text {...common} text={item.content || ''} fontSize={item.fontSize || 24} fill={item.color || '#34302b'} fontStyle={item.fontStyle || 'normal'} align={item.align || 'left'} verticalAlign="middle" wrap="word" padding={item.padding ?? 4} />
+    <Text {...common} fontFamily={POSTER_FONT} lineHeight={item.lineHeight || POSTER_LINE_HEIGHT} text={item.content || ''} fontSize={item.fontSize || 24} fill={item.color || '#34302b'} fontStyle={item.fontStyle || 'normal'} align={item.align || 'left'} verticalAlign="middle" wrap="word" padding={item.padding ?? 4} />
   </>
 }
 
@@ -86,7 +86,7 @@ function ComponentCanvas({ poster, selectedId, zoom, select, update, stageRef })
       onMouseDown={(event) => { if (event.target === event.target.getStage()) select(null) }}
       onTouchStart={(event) => { if (event.target === event.target.getStage()) select(null) }}>
       <Layer>
-        <Rect x={0} y={0} width={poster.width} height={poster.height} fill="#fffdf8" shadowColor="#342e23" shadowBlur={12} shadowOpacity={0.12} onMouseDown={() => select(null)} onTouchStart={() => select(null)} />
+        <Rect x={0} y={0} width={poster.width} height={poster.height} fill="#FFFFFF" shadowColor="#342e23" shadowBlur={12} shadowOpacity={0.12} onMouseDown={() => select(null)} onTouchStart={() => select(null)} />
         {sorted.map((item) => <CanvasItem key={item.id} item={item} selected={selectedId === item.id} onSelect={() => select(item.id)} onChange={(patch) => update(item.id, patch)} registerNode={(node) => { if (node) nodes.current[item.id] = node; else delete nodes.current[item.id] }} />)}
         <Transformer ref={transformRef} rotateEnabled anchorSize={9} borderStroke="#4c7757" anchorStroke="#4c7757" anchorFill="#fff" />
       </Layer>
