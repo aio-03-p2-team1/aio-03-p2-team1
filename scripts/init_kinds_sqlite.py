@@ -2,17 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sqlite3
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 try:
     from .kind_sync import ALIASES, fetch_records, normalize
+    from .logging_config import configure_logging
 except ImportError:  # direct execution: python scripts/init_kinds_sqlite.py
     from kind_sync import ALIASES, fetch_records, normalize
+    from logging_config import configure_logging
 
 BOOTSTRAP_SQL = Path(__file__).resolve().with_name("bootstrap_sqlite.sql")
+log = logging.getLogger(__name__)
 
 
 class SqliteSink:
@@ -23,6 +26,7 @@ class SqliteSink:
         self.db.executescript(BOOTSTRAP_SQL.read_text(encoding="utf-8"))
 
     def sync(self, records: list[dict]) -> None:
+        log.info("SQLite 품종 동기화 시작: kinds=%d", len(records))
         now = datetime.now(timezone.utc).isoformat()
         self.db.execute("UPDATE kinds SET active=0, updated_at=?", (now,))
         self.db.executemany(
@@ -35,6 +39,7 @@ class SqliteSink:
         )
         # Keep old kind rows, but refresh the curated alias set from the current API snapshot.
         self.db.execute("DELETE FROM kind_aliases WHERE source='curated'")
+        aliases = 0
         for record in records:
             for alias in ALIASES.get(normalize(record["name"]), []):
                 self.db.execute(
@@ -43,7 +48,9 @@ class SqliteSink:
                     VALUES(?,?,?,'curated',?,?)""",
                     (record["kind_code"], alias, normalize(alias), now, now),
                 )
+                aliases += 1
         self.db.commit()
+        log.info("SQLite 품종 동기화 완료: kinds=%d aliases=%d", len(records), aliases)
 
     def close(self) -> None:
         self.db.close()
@@ -52,16 +59,18 @@ class SqliteSink:
 async def main() -> int:
     from backend.config import Settings
 
+    configure_logging()
     settings = Settings()
     if settings.storage_backend != "sqlite":
         raise RuntimeError("SQLite 초기화에는 STORAGE_BACKEND=sqlite 를 설정하세요")
+    log.info("SQLite 품종 기준정보 동기화 준비: path=%s", settings.sqlite_path)
     records = await fetch_records(settings)
     sink = SqliteSink(settings.sqlite_path)
     try:
         sink.sync(records)
     finally:
         sink.close()
-    print(f"품종 동기화 완료: {len(records)}건, backend=sqlite")
+    log.info("품종 동기화 명령 완료: records=%d backend=sqlite", len(records))
     return 0
 
 
@@ -69,5 +78,6 @@ if __name__ == "__main__":
     try:
         raise SystemExit(asyncio.run(main()))
     except Exception as exc:
-        print(f"품종 SQLite 동기화 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        configure_logging()
+        logging.getLogger(__name__).error("품종 SQLite 동기화 실패: %s", type(exc).__name__)
         raise SystemExit(1)

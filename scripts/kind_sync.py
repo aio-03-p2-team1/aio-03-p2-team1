@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import sys
 from datetime import datetime, timezone
@@ -12,12 +13,15 @@ import httpx
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.config import Settings  # noqa: E402
 
+log = logging.getLogger(__name__)
+
 SPECIES = {"417000": "dog", "422400": "cat", "429900": "other"}
 ALIASES = {
     "래브라도리트리버": ["래브라도 리트리버", "라브라도 리트리버"],
     "저먼셰퍼드": ["저먼 셰퍼드", "독일 셰퍼드"],
     "코리안숏헤어": ["코리안 숏헤어", "한국 고양이", "코숏"],
     "믹스견": ["믹스", "혼종견"],
+    "토이푸들": ["푸들"],
 }
 
 
@@ -112,8 +116,12 @@ async def fetch_records(settings: Settings) -> list[dict]:
     records = []
     async with httpx.AsyncClient(timeout=30) as client:
         for up_code, species in SPECIES.items():
+            log.info("품종 API 조회 시작: species=%s up_kind_cd=%s", species, up_code)
             items = await fetch_all(client, settings, up_code)
-            records.extend(normalize_record(species, item, now) for item in items)
+            normalized = [normalize_record(species, item, now) for item in items]
+            records.extend(normalized)
+            log.info("품종 API 조회 완료: species=%s records=%d", species, len(normalized))
     if not records:
         raise RuntimeError("품종 API 응답이 비어 있어 DB를 변경하지 않았습니다")
+    log.info("품종 기준정보 수집 완료: records=%d", len(records))
     return records
