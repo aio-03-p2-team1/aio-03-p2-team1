@@ -22,6 +22,7 @@ export default function Header() {
         <NavLink to="/" end>전체 공고</NavLink>
         <NavLink to="/search">우리 아이 찾기</NavLink>
         <NavLink to="/board">실종 정보 게시판</NavLink>
+        <NavLink to="/poster">전단지 만들기</NavLink>
         <NavLink to="/my">마이페이지</NavLink>
       </nav>
       {user ? (
