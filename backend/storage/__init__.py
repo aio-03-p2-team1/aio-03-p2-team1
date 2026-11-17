@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-KINDS = {"identity", "thread", "memory", "saved", "run", "subscription", "notification", "post", "comment"}
+KINDS = {"identity", "thread", "memory", "saved", "run", "subscription", "notification", "post", "comment", "poster", "asset"}
 
 
 class StorageError(RuntimeError):

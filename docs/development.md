@@ -12,8 +12,8 @@
 
 | 영역 | 기술 |
 | --- | --- |
-| 프론트엔드 | React 19, React Router 7, Vite 8, Node.js 22+, npm |
-| 백엔드 | Python 3.12+, FastAPI, Uvicorn, Pydantic Settings |
+| 프론트엔드 | React 19, React Router 7, React Konva, Zustand, Vite 8, Node.js 22+, npm |
+| 백엔드 | Python 3.12+, FastAPI, Uvicorn, Pydantic Settings, Pillow, python-multipart |
 | 에이전트·모델 | LangGraph, LangChain `langchain-openai` (`ChatOpenAI`, `OpenAIEmbeddings`; 기본 채팅 모델 `gpt-6-luna`) |
 | 데이터 저장 | Supabase 문서 저장소, 로컬 SQLite 대체 저장소 |
 | 세션·검색 캐시 | Redis |

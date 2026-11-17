@@ -21,6 +21,7 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 20건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
 | `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET/PATCH /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자). 본문 아래 음성(최대 3개)과 댓글: 음성 `POST/GET/DELETE /posts/{id}/voices...`, 댓글 `GET/POST /posts/{id}/comments`, `DELETE /posts/{id}/comments/{comment_id}` |
 | `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음. 댓글은 계산된 분실 신고 ID(`lost-YYYYMMDD-해시`)로 같은 댓글 API 사용 |
+| `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST/GET/PUT/DELETE /posters/{id}` |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 
 ## 2. StateGraph
@@ -221,6 +222,9 @@ flowchart LR
 | `POST /posts/{id}/voices` · `DELETE /posts/{id}/voices/{voice_id}` | 필요(게시글 소유자만) | multipart `audio`와 필수 설명(1~200자), `voice_invalid`, `voice_too_large`(413, 10 MiB), `voice_too_long`(60초 초과), `voice_limit`(게시글당 3개), `voice_description_invalid`, `voice_not_found`, `post_forbidden` |
 | `GET /posts/{id}/comments` | 없음(공개) | `post_not_found`(ID 형식이 아님). 오래된 순, 최대 200개, 응답에 작성자 키 미포함(`mine` 만) |
 | `POST /posts/{id}/comments` · `DELETE /posts/{id}/comments/{comment_id}` | 필요(삭제는 작성자만) | `not_authenticated`, `invalid_request`(422, 빈 글·500자 초과), `post_not_found`(대상 글 없음), `lost_*`(502, 분실 신고 확인 실패), `comment_rate_limited`(429, 1분 5개), `comment_limit`(429, 글당 200개), `comment_not_found`, `comment_forbidden`(403) |
+| `GET /poster/templates` · `GET /poster/templates/{id}` | 없음 | `poster_template_not_found` |
+| `POST /poster/assets` · `GET /poster/assets/{asset_id}` | 필요(소유자) | `poster_asset_too_large`(413, 15MB), `poster_asset_pixels`(413, 2,500만 화소), `poster_asset_format`(415), `poster_asset_invalid`(422), `poster_asset_not_found` |
+| `POST /posters` · `GET/PUT/DELETE /posters/{id}` | 필요(소유자) | `poster_not_found`, `poster_component_invalid`, `poster_asset_unavailable` |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 
 실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 음성은 게시글 소유자만 추가·삭제할 수 있고 게시글당 3개·파일당 10 MiB·60초로 제한한다. 서버는 Mutagen으로 형식과 재생 시간을 검증하고 변환·압축하지 않는다. 허용 형식은 MP3·M4A/MP4·WAV·OGG Vorbis/Opus이며 파일명은 UUID로 생성한다. Supabase에서는 private Storage bucket(`SUPABASE_POST_AUDIO_BUCKET`)에 바이너리를 저장하고, SQLite에서는 `POST_AUDIO_LOCAL_DIR`에 둔다. 게시글 문서에는 음성 ID·저장 키·형식·크기·길이·엔티티화된 설명만 저장한다. 설명은 API 출력 때 복원한 뒤 React 텍스트로 렌더링한다. 음성 섹션은 상세 내용과 댓글 사이에 표시한다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다. 상세 화면의 [이 정보로 구조 공고 찾기]는 글의 종류·시·도·실종 주소·날짜 및 품종코드(`form.breed_code`, 품종 셀렉트), 털색·성별·나이·특징(설명 글 앞에 붙임)으로 검색 화면을 미리 채운다(`frontend/src/lib/postSearch.js`). 바로 검색하지 않고 사용자가 확인 후 누르며, 로그인 화면을 거쳐도 이어지도록 sessionStorage 로 한 번만 전달한다. 분실 신고의 지역(`orgNm`)은 첫 낱말(시·도)만 쓴다.
@@ -237,6 +241,12 @@ flowchart LR
 - 분실 신고 호출이 실패해도 회원 글은 보여 주고 `lost.status=unavailable` 로 알린다(빈 결과로 위장하지 않음).
 
 모든 변경 요청은 Origin 을 검사해 `403 origin_not_allowed` 로 막고, 응답에는 `Cache-Control: no-store` 를 붙인다.
+
+**실종 전단지 에디터** (`backend/routers/posters.py`, `frontend/src/pages/PosterPage.jsx`, `frontend/src/lib/posterStore.js`): 페이지·컴포넌트 좌표는 원본 A4 캔버스(794×1123) 기준이며 Zustand가 문구·도형·사진·선택·Undo/Redo 상태를 관리한다. 사진 중심형(흰색·네이비, 큰 사진·중앙 정렬), 정보 전달형(민트·딥그린, 사진 옆 이름·항목별 정보), 긴급 주목형(노랑·검정, 제목·목격 장소 강조) 프리셋은 서버 JSON으로 제공한다. 기존 templateId(basic/info/urgent)와 문서 스키마는 유지한다. 필수 텍스트 8종과 구분 라벨·배경을 서버에서 모두 제공하며 프론트는 좌표·크기를 덮어쓰지 않는다. 한글 고딕 시스템 폰트(Noto Sans KR → Apple SD Gothic Neo → Malgun Gothic → sans-serif)와 기본 행간 1.3을 캔버스·넘침 측정에 동일하게 적용한다. 별도 웹폰트 다운로드는 없으며 설치된 폰트에 따라 기기별 글꼴은 달라질 수 있다. 저장된 기존 문서는 자동 재배치하지 않고 템플릿 전환 시 새 프리셋을 적용한다. 텍스트 컴포넌트마다 우측 입력란이 연결되고, 텍스트 줄바꿈 후 높이를 넘으면 경고한다. 템플릿 전환 시 `fieldKey`가 같은 문구와 모든 업로드 사진을 새 배치에 유지하고, 자유 배치는 기본 배치로 바꾼다. PNG는 브라우저 캔버스에서 내보내며 Transformer 선택 핸들은 숨겨 원본 캔버스 좌표로 2배 해상도 출력한다.
+
+전단지 JSON은 `owner=<로그인 사용자 키>`, `kind=poster` 로 기존 문서 저장소에 저장한다. 업로드는 multipart 파일 15MB 이하, JPEG/PNG/WebP 실제 디코딩 형식, 최대 2,500만 화소로 검증한다. Pillow의 EXIF transpose 후 긴 변을 2,000px로 줄이고 WebP 품질 85로 다시 인코딩해 위치정보 등 원본 메타데이터를 제거한다. 결과 바이트는 `owner=<로그인 사용자 키>`, `kind=asset` 문서에 보관하며 전단지는 URL 대신 `assetId`를 참조한다. 이미지 읽기와 전단지 저장 시에도 자산 소유자를 확인한다. 원본은 보관하지 않는다.
+
+Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해야 한다. 새 DB는 `scripts/bootstrap_schema.sql`을 사용하고, 기존 DB는 그 파일 끝의 2026-11-17 ALTER 주석을 적용한다. 이미지 자르기는 종횡비를 유지하는 프레임 채우기와 확대·가로/세로 위치 조절로 제공하며, 회전·투명도도 속성 패널에서 바꾼다. PDF/인쇄는 A4 크기의 인쇄 전용 창을 열어 브라우저 인쇄 대화상자를 사용한다(사용자가 PDF로 저장 가능).
 
 ## 9. 미구현·미확정
 

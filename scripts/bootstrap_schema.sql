@@ -6,7 +6,7 @@ create schema if not exists "aio-03-p2-team1-demo";
 
 create table if not exists "aio-03-p2-team1-demo".documents (
     owner      text        not null,
-    kind       text        not null check (kind in ('identity','thread','memory','saved','run','subscription','notification','post','comment')),
+    kind       text        not null check (kind in ('identity','thread','memory','saved','run','subscription','notification','post','comment','poster','asset')),
     id         text        not null,
     data       jsonb       not null,
     updated_at timestamptz not null default now(),
@@ -78,3 +78,9 @@ grant usage, select on all sequences in schema "aio-03-p2-team1-demo" to service
 -- alter table "aio-03-p2-team1-demo".documents drop constraint if exists documents_kind_check;
 -- alter table "aio-03-p2-team1-demo".documents add constraint documents_kind_check
 --     check (kind in ('identity','thread','memory','saved','run','subscription','notification','post','comment'));
+
+-- 2026-11-17 실종 전단지 문서(kind=poster)와 이미지 자산(kind=asset) 추가.
+-- 이미 documents 테이블이 있는 DB 는 아래로 check 제약을 바꾼다.
+-- alter table "aio-03-p2-team1-demo".documents drop constraint if exists documents_kind_check;
+-- alter table "aio-03-p2-team1-demo".documents add constraint documents_kind_check
+--     check (kind in ('identity','thread','memory','saved','run','subscription','notification','post','comment','poster','asset'));
