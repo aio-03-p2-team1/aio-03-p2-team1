@@ -93,11 +93,6 @@ export default function PosterPage() {
     addComponent(component); setSaved(false)
   }
 
-  function addShape() {
-    const component = { id: makeId(), type: 'shape', label: '도형', x: 150, y: 350, width: 320, height: 120, fill: '#e8d8b5', stroke: '#9c8250', opacity: 1, zIndex: Math.max(0, ...poster.components.map((item) => item.zIndex || 0)) + 1 }
-    addComponent(component); setSaved(false)
-  }
-
   function addPhotoSlot() {
     const component = { id: makeId(), type: 'image', label: '반려동물 사진', assetId: null, x: 150, y: 260, width: 480, height: 360, opacity: 1, zIndex: Math.max(0, ...poster.components.map((item) => item.zIndex || 0)) + 1 }
     addComponent(component); fileRef.current?.click(); setSaved(false)
@@ -190,7 +185,7 @@ export default function PosterPage() {
     <div className="poster-workspace">
       <section className="poster-canvas-panel panel" aria-label="전단지 캔버스">
         <div className="poster-canvas-toolbar">
-          <div className="poster-add-actions"><button type="button" onClick={addText}>＋ 텍스트</button><button type="button" onClick={addPhotoSlot}>＋ 사진</button><button type="button" onClick={addShape}>＋ 도형</button></div>
+          <div className="poster-add-actions"><button type="button" onClick={addText}>＋ 텍스트</button><button type="button" onClick={addPhotoSlot}>＋ 사진</button></div>
           <label>확대 <input type="range" min="0.35" max="0.95" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /> <span>{Math.round(zoom * 100)}%</span></label>
         </div>
         <ComponentCanvas poster={poster} selectedId={selectedId} zoom={zoom} select={select} update={(id, patch) => { update(id, patch); setSaved(false) }} stageRef={stageRef} />
