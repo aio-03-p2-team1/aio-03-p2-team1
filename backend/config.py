@@ -17,6 +17,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class ConfigError(RuntimeError):
     pass
 
+SUPABASE_POST_AUDIO_BUCKET = "post-audio"
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -27,6 +29,7 @@ class Settings(BaseSettings):
     supabase_url: str = "https://yaywavgjaquftvekuvsb.supabase.co"
     supabase_schema: str = "aio-03-p2-team1-demo"
     supabase_service_role_key: SecretStr | None = None
+    post_audio_local_dir: str = ".data/post-audio"
 
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-6-luna"

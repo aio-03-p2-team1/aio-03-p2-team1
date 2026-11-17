@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.config import Settings, get_settings
+from backend.config import SUPABASE_POST_AUDIO_BUCKET, Settings, get_settings
 from backend.deps import AppContext
 from backend.errors import ApiError
 from backend.routers import auth, comments, memory, posters, posts, public, searches
@@ -42,6 +42,7 @@ def build_context(settings: Settings) -> AppContext:
     from backend.agent.search_cache import SearchCache
     from backend.auth.sessions import SessionStore
     from backend.storage import build_store
+    from backend.storage.post_audio import PostAudioStore
     from backend.tools.animal_api import AnimalApi, SampleAnimalApi
     from backend.tools.kakao import KakaoGeocoder
     from backend.tools.lost_animal_api import LostAnimalApi
@@ -79,6 +80,14 @@ def build_context(settings: Settings) -> AppContext:
         breed_normalizer=BreedNormalizer(kinds, photo_llm._client if photo_llm else None),
         settings=settings,
         store=build_store(settings),
+        post_audio=PostAudioStore(
+            backend=settings.storage_backend,
+            local_dir=settings.post_audio_local_dir,
+            url=settings.supabase_url,
+            bucket=SUPABASE_POST_AUDIO_BUCKET,
+            service_key=settings.supabase_service_role_key.get_secret_value() if settings.supabase_service_role_key else "",
+            timeout=timeout,
+        ),
         sessions=SessionStore(redis, settings.auth_session_ttl_seconds),
         animal=animal,
         kakao=KakaoGeocoder(kakao_key, timeout=min(timeout, 15)),
@@ -140,7 +149,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=sorted(allowed),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type"],
     )
 

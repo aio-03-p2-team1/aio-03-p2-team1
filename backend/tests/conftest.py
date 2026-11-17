@@ -101,6 +101,7 @@ def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None, sear
         llm=llm,
         embedder=FakeEmbedder(),
         search_agent=search_agent,
+        post_audio=FakePostAudioStore(),
     )
 
 
@@ -113,6 +114,24 @@ class FakeEmbedder:
     async def embed(self, texts):
         self.calls.append(texts)
         return [[1.0, 0.0] for _ in texts]
+
+
+class FakePostAudioStore:
+    def __init__(self):
+        self.data = {}
+
+    async def put(self, key, data, content_type):
+        self.data[key] = (data, content_type)
+
+    async def get(self, key):
+        entry = self.data.get(key)
+        return entry[0] if entry else None
+
+    async def delete(self, key):
+        self.data.pop(key, None)
+
+    async def aclose(self):
+        pass
 
 
 @pytest.fixture
