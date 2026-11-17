@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import logging
 import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
 from backend.agent.llm import LlmError
+from backend.agent import photo_store
 from backend.agent.photo import InvalidPhoto, decode_and_validate
 from backend.tools import remote_photo
 from backend.agent.runner import run_search
@@ -18,6 +20,7 @@ from backend.routers.public import remember_items
 from backend.tools.kakao import KakaoError
 
 router = APIRouter(tags=["searches"])
+log = logging.getLogger("dasimanna.searches")
 
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
@@ -46,10 +49,22 @@ async def create_search(body: SearchBody, user: SessionUser = Depends(current_us
         "profile_id": body.profile_id,
         "reflection_enabled": body.reflection_enabled,
         "declined": body.declined,
+        # 사진 분석 번호로 서버가 보관한 결과를 꺼낸다(설명 글 속 사진 문장은 판단에 쓰지 않는다).
+        "photo": await _load_photo(ctx, user.owner, body.photo_analysis_id),
     }
     run = await run_search(_deps(ctx), user.owner, request)
     remember_items(run.get("candidates") or [])
     return page_result(run)
+
+
+async def _load_photo(ctx: AppContext, owner: str, analysis_id: str | None):
+    if not analysis_id:
+        return None
+    try:
+        return await photo_store.load(ctx.sessions._redis, owner, analysis_id)
+    except Exception:  # Redis 장애면 사진 없이 검색한다
+        log.warning("photo analysis load failed")
+        return None
 
 
 @router.post("/photo-analysis", response_model=PhotoAnalysisResponse)
@@ -76,9 +91,16 @@ async def analyze_photo(
         result = await ctx.photo_llm.analyze_photo(image_data, mime_type)
     except LlmError as exc:
         raise ApiError(502, exc.code, "사진을 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.")
+    analysis_id = None
+    try:
+        # 검색 때 번호로 꺼내 쓰도록 결과(특징만)를 잠시 보관한다. 보관에 실패해도 분석 결과는 돌려준다.
+        analysis_id = await photo_store.save(ctx.sessions._redis, user.owner, result.model_dump())
+    except Exception:  # Redis 장애는 분석 자체를 막지 않는다
+        log.warning("photo analysis store failed")
     return PhotoAnalysisResponse(
         **result.model_dump(),
         analysis_ms=round((time.perf_counter() - started) * 1000),
+        analysis_id=analysis_id,
     )
 
 

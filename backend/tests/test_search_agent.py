@@ -41,8 +41,13 @@ def tools_used(run):
 def test_confidence_low_for_mixed_breed_without_photo():
     cands = [{"semantic_score": 0.8, "evidence": {"matched": ["털색"]}}, {"semantic_score": 0.6}]
     assert "mixed_breed" in confidence_signals(cands, {"description": "믹스견 하얀색 엉덩이에 얼룩"})["reasons"]
-    photo = confidence_signals(cands, {"description": "사진에서 확인한 특징: 믹스견, 흰색\n엉덩이 얼룩"})
-    assert "mixed_breed" not in photo["reasons"]
+    # 사진을 받았는지는 설명 글 문장이 아니라 서버가 보관한 사진 분석 결과로만 판단한다.
+    text_only = confidence_signals(cands, {"description": "사진에서 확인한 특징: 믹스견, 흰색\n엉덩이 얼룩"})
+    assert "mixed_breed" in text_only["reasons"]  # 문장만으로는 사진을 받은 것으로 보지 않음
+    good = {"suitable": True, "colors": ["흰색"], "marks": ["얼룩"], "sex": "", "breed": "", "species": "dog"}
+    assert "mixed_breed" not in confidence_signals(cands, {"description": "믹스견"}, None, good)["reasons"]
+    bad = {**good, "suitable": False}
+    assert "mixed_breed" in confidence_signals(cands, {"description": "믹스견"}, None, bad)["reasons"]  # 쓸 수 없는 사진
 
 
 def test_feature_updates_need_evidence_in_user_text():
@@ -154,3 +159,15 @@ def test_relaxing_breed_clears_code_together():
     result = SA.execute_tool('relax_condition', {'field': 'breed'}, state, {})
     assert 'breed' not in result['update']['criteria']
     assert 'breed_code' not in result['update']['criteria']
+
+
+def test_stored_photo_features_stop_photo_request_and_feed_ranking():
+    photo = {"suitable": True, "species": "dog", "breed": "", "breed_code": "", "colors": ["흰색"], "sex": "M",
+             "marks": ["빨간 목줄"], "reason_code": None}
+    d, _ = agent_deps([("RequestPhoto", {"reason": "사진을 올려 주세요."})])
+    run = search(d, {**MIXED, "description": "믹스견"}, photo=photo)
+    assert run["photo_features"] == photo
+    assert run["agent_request"] is None  # 사진을 이미 받아 사진 요청은 거부됨
+    assert run["agent_decision"]["log"] and any(e.get("tool") == "request_photo" and e["ok"] is False
+                                                 for e in run["agent_decision"]["log"])
+    assert set(run["llm_features"]["colors"]) == {"흰색"} and run["llm_features"]["sex"] == "M"

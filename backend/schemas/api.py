@@ -39,6 +39,8 @@ class SearchBody(BaseModel):
     profile_id: str | None = Field(default=None, max_length=40, pattern=r"^[\w-]{1,40}$")
     reflection_enabled: bool = True
     # 에이전트 요청에 사용자가 '잘 모르겠어요'라고 답한 항목. 같은 대화에서 다시 묻지 않는다.
+    # 사진 분석 결과 번호(/photo-analysis 응답의 analysis_id). 서버가 보관한 결과를 꺼내 특징·판단에 쓴다.
+    photo_analysis_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$")
     declined: list[Literal["photo", "color", "size", "sex", "marks"]] = Field(default_factory=list, max_length=5)
 
 
@@ -138,3 +140,5 @@ class PhotoAnalysisResponse(StrictSchema):
     marks: list[str]
     reason_code: PhotoAnalysisReason | None
     analysis_ms: int = Field(ge=0)
+    # 서버에 잠시 보관한 분석 결과 번호. 검색 요청의 photo_analysis_id 로 보내면 서버가 이 결과를 쓴다(보관 실패 시 None).
+    analysis_id: str | None = None

@@ -13,7 +13,7 @@ import RegionPicker from '../components/RegionPicker.jsx'
 import SpeciesPicker from '../components/SpeciesPicker.jsx'
 import SourceBadge from '../components/SourceBadge.jsx'
 import { useToast } from '../components/Toast.jsx'
-import { photoAnalysisError, photoErrorMessage, photoSelectionError, unsuitablePhotoMessage } from '../lib/photo.js'
+import { photoAnalysisError, photoErrorMessage, photoSelectionError, photoTraitLine, unsuitablePhotoMessage } from '../lib/photo.js'
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 import { takePostSearch } from '../lib/postSearch.js'
@@ -51,6 +51,9 @@ export default function SearchPage() {
   const photoRequestId = useRef(0)
   const [photoFeatureText, setPhotoFeatureText] = useSearchViewState('photoFeatureText', '')
   const [photoSpecies, setPhotoSpecies] = useSearchViewState('photoSpecies', '')
+  // 서버가 보관한 사진 분석 결과 번호. 검색 때 함께 보내면 서버가 사진 특징·사진 받음 여부를 이 결과로 판단한다
+  // (설명 글의 '사진에서 확인한 특징' 줄은 보여 주기용이라, 사용자가 지우거나 고쳐도 판단은 바뀌지 않음).
+  const [photoAnalysisId, setPhotoAnalysisId] = useSearchViewState('photoAnalysisId', '')
   const [run, setRun] = useSearchViewState('run', null)
   const [pageCache, setPageCache] = useSearchViewState('pages', {})
   const [busy, setBusy] = useState(false)
@@ -86,13 +89,14 @@ export default function SearchPage() {
     setPhoto('')
     setPhotoFeatureText('')
     setPhotoSpecies('')
+    setPhotoAnalysisId('')
     setParams({}, { replace: true })
     toast(`'${prefill.source?.title || '게시글'}' 정보로 찾고 있어요. 입력을 고쳐 다시 찾을 수도 있어요.`)
     const auto = { baseForm: prefill.form, location: prefill.location }
     if (prefill.photo && prefill.source?.id) {
       analyzePhoto({ postId: prefill.source.id }, prefill.photo, { fresh: true, autoSearch: auto })
     } else {
-      submit(buildCriteria(prefill.form, {}, prefill.location))
+      submit(buildCriteria(prefill.form, {}, prefill.location), undefined, { photoId: '' })
     }
   }, [])
 
@@ -162,6 +166,8 @@ export default function SearchPage() {
     }
     setPhotoFeatureText('')
     setPhotoSpecies('')
+    setPhotoAnalysisId('')
+    let analysisId = ''
     setPhoto(previewUrl)
     setPhotoMessage('')
     setPhotoFeedbackOpen(false)
@@ -171,6 +177,9 @@ export default function SearchPage() {
       const body = file ? { image_base64: await readAsBase64(file) } : { post_id: postId }
       const result = await api('/photo-analysis', { method: 'POST', body })
       if (requestId !== photoRequestId.current) return
+      // 쓸 수 없는 사진이어도 번호는 보낸다(서버가 '받았지만 쓸 수 없음'으로 보고 더 나은 사진을 요청할 수 있게).
+      analysisId = result.analysis_id || ''
+      setPhotoAnalysisId(analysisId)
       const unsuitableMessage = unsuitablePhotoMessage(result)
       if (unsuitableMessage) {
         setPhotoMessage(unsuitableMessage)
@@ -181,7 +190,10 @@ export default function SearchPage() {
         result.sex === 'M' ? '수컷' : result.sex === 'F' ? '암컷' : '',
         ...result.marks,
       ].filter(Boolean)
-      const extracted = traits.length ? `사진에서 확인한 특징: ${traits.join(', ')}` : ''
+      // 설명 글에 이미 있는 특징(예: 털색: 흰색, 빨간 목줄)은 빼고 새로 확인한 것만 붙인다.
+      // 비교할 글에서는 이전 사진 줄(oldAuto)을 빼고 본다(사진을 바꿔 올렸을 때 이전 사진 특징과 비교하지 않게).
+      const written = (searchForm || form).description || ''
+      const extracted = photoTraitLine(traits, oldAuto && written.startsWith(oldAuto) ? written.slice(oldAuto.length) : written)
       const hasAutoValues = Boolean(result.species || extracted)
       if (!hasAutoValues) {
         setPhotoMessage('사진은 확인했지만 신뢰도 높은 특징을 찾지 못했어요. 아래 입력란에 직접 적어 주세요.')
@@ -210,7 +222,7 @@ export default function SearchPage() {
           ...withPhotoBreed(form, result),
           description: [extracted, base].filter(Boolean).join('\n'),
         }
-        submit(buildCriteria(nextForm, answers), run.thread_id)
+        submit(buildCriteria(nextForm, answers), run.thread_id, { photoId: analysisId })
       }
     } catch (err) {
       if (requestId === photoRequestId.current) setPhotoMessage(photoErrorMessage(photoAnalysisError(err)))
@@ -218,7 +230,11 @@ export default function SearchPage() {
       if (requestId === photoRequestId.current) {
         setPhotoAnalyzing(false)
         // 게시글로 들어온 경우: 사진 분석이 실패해도 글 정보만으로 찾는다.
-        if (searchForm) submit(buildCriteria(searchForm, {}, autoSearch.location))
+        // 게시글 사진을 이미 보여 줬으므로, 분석이 실패해(번호 없음) 사진을 다시 요청하는 일은 막는다.
+        if (searchForm) {
+          submit(buildCriteria(searchForm, {}, autoSearch.location), undefined,
+            { photoId: analysisId, extraDeclined: analysisId ? [] : ['photo'] })
+        }
       }
     }
   }
@@ -251,15 +267,19 @@ export default function SearchPage() {
         preview && (shownKm != null ? kmLabel(shownKm) : '조회 지역 전체'),
       ].filter(Boolean).join(' · ')
 
-  async function submit(criteria, threadId) {
+  // photoId: 사진 분석 번호(기본은 지금 화면의 번호. 분석 직후처럼 상태가 아직 반영되지 않았으면 직접 넘긴다).
+  // extraDeclined: 이번 검색에서 다시 묻지 않을 항목.
+  async function submit(criteria, threadId, { photoId = photoAnalysisId, extraDeclined = [] } = {}) {
     setBusy(true)
     setError(null)
     try {
       const body = { criteria, reflection_enabled: true }
       if (threadId) body.thread_id = threadId
       // 같은 대화면 '모르겠어요' 항목을 함께 보내 다시 묻지 않게 한다. 새 대화면 초기화.
-      if (threadId && declined.length) body.declined = declined
-      if (!threadId) setDeclined([])
+      if (photoId) body.photo_analysis_id = photoId
+      const skip = [...new Set([...(threadId ? declined : []), ...extraDeclined])]
+      if (skip.length) body.declined = skip
+      if (!threadId) setDeclined(extraDeclined)
       const result = await api('/searches', { method: 'POST', body })
       setRun(result)
       setPageCache((previous) => rememberPage(previous, `${result.run_id}:1`, result))

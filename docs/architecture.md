@@ -126,7 +126,8 @@ sequenceDiagram
 | `criteria` | 정규화 조건 | `Criteria` | — | analyze, context, breed, plan | run, thread(기억 출처 제외) |
 | `missing` / `input_errors` / `questions` | 누락·오류·질문 | list | [] | analyze, reflect | run, thread |
 | `memory_used` | 장기 기억에서 채운 값 | dict | {} | context | run |
-| `llm_features` | LLM 추출 특징 | dict | — | context | run |
+| `llm_features` | LLM 추출 특징 + 쓸 만한 사진의 특징(`photo_store.merge_features`) | dict | — | context, agent_tools | run |
+| `photo_features` | 서버가 보관한 사진 분석 결과(`suitable`, 종류·품종·털색·성별·특징). 사진을 받았는지 판단은 이 값으로만 | dict \| None | 요청 `photo_analysis_id` | runner | run |
 | `context_summary` | 값 출처, 모델 입력 필드 | dict | — | analyze, context | run |
 | `plan` | 조회 계획 | list | — | plan | run |
 | `tool_calls` | 도구 호출 기록(누적) | list | [] | plan, execute, context, locate | run |
@@ -263,6 +264,7 @@ Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해�
 
 - 브라우저에서 JPG·PNG·WEBP, 8MB 이하 파일을 고르고 base64 JSON으로 `POST /photo-analysis`에 보낸다. 서버는 인증 사용자별 분당 5회로 제한한다.
 - 요청 본문은 `image_base64` 또는 `post_id` 중 하나만 받는다. `post_id` 면 실종 정보 게시판 글의 사진을 서버가 꺼낸다: 회원 글은 저장된 사진, 분실 신고(`lost-…` ID)는 `LostFeed.get` 으로 찾은 공공 API 응답의 `photo_url` 을 서버가 받는다(`backend/tools/remote_photo.py`). 공공데이터 사진 서버가 교차 출처 읽기를 허용하지 않아 브라우저는 사진 내용을 읽지 못하기 때문이다(2026-11-17 배포 사이트에서 확인). 임의 주소 요청 통로가 되지 않도록 사용자가 보낸 주소는 받지 않고, https + 허용 호스트(`openapi.animal.go.kr`)만, 리다이렉트 없이, 8MB·10초 제한으로 받는다.
+- **사진 분석 번호(photo-id-v1):** 분석이 끝나면 서버가 결과의 특징(`suitable`, 종류·품종·품종 코드·털색·성별·특징·이유 코드)만 Redis 에 1시간 보관하고 응답에 `analysis_id`(32자 hex)를 준다(`backend/agent/photo_store.py`, 키에 로그인 사용자 포함). 사진 자체는 저장하지 않는다. 검색 요청에 `photo_analysis_id` 를 보내면 서버가 그 사용자의 결과를 꺼내 `photo_features` 로 쓴다(형식이 틀리면 422, 다른 사람 것·만료면 사진 없음). 쓸 만한 사진이면 털색·특징·성별·품종을 `llm_features` 에 합쳐 키워드 점수(털색 포함)에 쓰고, 확신 신호의 `photo_given` 과 에이전트의 사진 요청 판단도 이 값으로 한다. 설명 글의 '사진에서 확인한 특징' 줄은 보여 주기용이라 지우거나 고쳐도 판단은 바뀌지 않는다. 화면은 이 줄에 설명 글에 이미 있는 특징(같은 색의 다른 표현·띄어쓰기 차이 포함)을 빼고 새 특징만 적는다. 사진 특징이 다르면 결과가 달라지므로 조건 캐시 키에 사진 특징을 넣는다.
 - `backend/agent/photo.py`가 Pillow로 실제 포맷·파일 무결성을 확인하고, 픽셀 수가 2,000만을 넘으면 거부한다. 파일은 처리 후 저장하지 않는다.
 - `backend/agent/llm.py`의 `PHOTO_SYSTEM_PROMPT`가 동물 존재, 외형 식별 가능 여부, 특정 동물의 중심·구분 가능 여부를 각각 판단한다. 색상 허용값은 `schema.py`의 `Color` 리터럴에서 템플릿으로 주입하며, 여러 색상과 각각의 confidence를 반환하도록 한다. 세 적합성 조건과 각 자동 입력 특징 신뢰도가 0.8 이상인 값만 반환한다.
 - 프롬프트 버전은 글 특징 추출 `feature-extract-v3`, 사진 분석 지침은 수정 이력 v3를 기준으로 관리한다. 사용자 서술·사진 속 문구를 명령으로 취급하지 않고, 불확실한 품종·성별·색상은 비우도록 안내한다. 사진 신뢰도는 근거 강도 기준을 제시하고 0.8 미만 값을 자동 입력에서 제외한다. 모델 계층은 정규화된 판정 사유 코드를 반환하고, API는 `reason_code`를 응답하며 프론트엔드가 사용자 안내 문구로 매핑한다. 사진 분석 응답에는 사용되지 않는 모델명·프롬프트 버전은 포함하지 않는다.
@@ -323,7 +325,7 @@ Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해�
 | 수정 | `update_features` | `colors`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값만 반영 → 유사도 다시 계산(rank) |
 | 수정 | `relax_condition` | `field ∈ breed·sex`, `reason` | 그 조건 제거 → rank |
 | 수정 | `widen_radius` | `reason` | 반경 적용 중이고 최대 단계가 아니면 `radius_step+1` → radius(공고 API 재호출 없음) |
-| 종료 | `request_photo` | `reason` | 대화당 1회, 사진을 이미 줬거나 '모르겠어요'면 거부 |
+| 종료 | `request_photo` | `reason` | 대화당 1회, 서버가 보관한 쓸 만한 사진 분석 결과가 있거나(`photo_features`) '모르겠어요'면 거부 |
 | 종료 | `request_info` | `field ∈ color·size·sex·marks`, `reason` | 보기는 서버 목록(털색 9종, 소형/중형/대형, 수컷/암컷, 특징 7종), 대화당 2회, 이미 받은 정보·이미 물은 항목·'모르겠어요' 거부 |
 | 종료 | `finish` | `note` | 지금 결과로 확정 |
 
