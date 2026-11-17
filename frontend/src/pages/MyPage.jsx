@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../lib/api.js'
+import { API_BASE, api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime, paginate, runStatusLabel, runSummary, sourceLabel } from '../lib/format.js'
 import { postSpeciesLabel, postTitle } from '../lib/post.js'
@@ -28,6 +28,7 @@ export default function MyPage() {
   const toast = useToast()
   const runs = useList(`/runs?limit=${HISTORY_LIMIT}`, (b) => b.runs)
   const posts = useList('/posts/mine', (b) => b.items)
+  const posters = useList('/posters', (b) => b.items)
   const [page, setPage] = useState(1)
 
   useEffect(() => {
@@ -124,6 +125,34 @@ export default function MyPage() {
                       <strong>{postTitle(p)}</strong>
                       <span>
                         {postSpeciesLabel(p.species)}{p.breed ? ` · ${p.breed}` : ''} · {p.region} · 실종 {formatDate(p.lost_date)} · 등록 {formatDateTime(p.created_at)}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className="panel my-posters-panel" aria-labelledby="my-posters-title">
+            <div className="my-section-head">
+              <div><span className="eyebrow">실종 전단지</span><h2 id="my-posters-title">내가 만든 전단지</h2></div>
+              <Link className="text-link" to="/poster">전단지 만들기 ↗</Link>
+            </div>
+            <ListState list={posters} empty="아직 저장한 전단지가 없어요. 전단지 만들기에서 만들어 보세요." loading="전단지를 불러오고 있어요…" />
+            {posters.status === 'ready' && posters.items.length > 0 && (
+              <ul className="my-list my-poster-list">
+                {posters.items.map((p) => (
+                  <li key={p.id}>
+                    <Link to={`/posters/${encodeURIComponent(p.id)}`}>
+                      <span className="my-poster-thumb" aria-hidden="true">
+                        {p.photo_asset_id ? <img src={`${API_BASE}/poster/assets/${encodeURIComponent(p.photo_asset_id)}`} alt="" loading="lazy" /> : '📄'}
+                      </span>
+                      <span className="my-poster-text">
+                        <strong>{p.title || '실종 전단지'}</strong>
+                        <span>
+                          {[p.pet_name, p.lost_place].filter(Boolean).join(' · ') || '내용 미입력'} · {p.template_name}
+                          {p.updated_at ? ` · 저장 ${formatDateTime(p.updated_at)}` : ''}
+                        </span>
                       </span>
                     </Link>
                   </li>

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createPosterFromTemplate, POSTER_FIELDS, switchPosterTemplate } from '../src/lib/posterDocument.js'
+import { createPosterFromTemplate, POSTER_FIELDS, posterPayload, switchPosterTemplate } from '../src/lib/posterDocument.js'
 
 const basic = {
   id: 'basic', width: 794, height: 1123,
@@ -64,4 +64,9 @@ test('server template geometry and typography survive document creation', () => 
     assert.equal(title[key], template.components[0][key])
   }
   assert.equal(template.components.length, 2)
+})
+
+test('save payload drops id and other extra keys from a loaded poster', () => {
+  const loaded = { id: 'a'.repeat(32), templateId: 'basic', width: 794, height: 1123, components: [{ id: 'x' }], extra: 1 }
+  assert.deepEqual(posterPayload(loaded), { templateId: 'basic', width: 794, height: 1123, components: [{ id: 'x' }] })
 })

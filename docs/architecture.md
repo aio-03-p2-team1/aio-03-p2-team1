@@ -17,11 +17,12 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/` 전체 공고 | `img/dasimanna-cards-board.html` | `GET /notices`, `GET /regions` |
 | `/notices/:id` 공고 상세 | `img/dasimanna-cards-detail.html` | `GET /notices/{id}` 또는 `GET /runs/{run_id}` + 위치 API. '구조 위치' 옆 🗺️ 버튼은 구조 위치 글(`happen_place`)을 브라우저 카카오 SDK(주소 검색 → 장소 검색)로 찾아 작은 지도 창에 표시(좌표 저장 안 함, 못 찾으면 카카오맵 링크만). 창 밖 클릭·Esc 로 닫힘 |
 | `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
-| `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다 |
+| `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다, `GET /posters`(내가 만든 전단지, 누르면 `/posters/{id}` 상세) |
 | `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 20건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
 | `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET/PATCH /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자). 본문 아래 음성(최대 3개)과 댓글: 음성 `POST/GET/DELETE /posts/{id}/voices...`, 댓글 `GET/POST /posts/{id}/comments`, `DELETE /posts/{id}/comments/{comment_id}` |
 | `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음. 댓글은 계산된 분실 신고 ID(`lost-YYYYMMDD-해시`)로 같은 댓글 API 사용 |
-| `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST/GET/PUT/DELETE /posters/{id}` |
+| `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST/GET/PUT/DELETE /posters/{id}`. 상세에서 수정하러 온 전단지(`?edit=`)는 저장 후 `/posters/{id}` 상세로 이동 |
+| `/posters/:posterId` 전단지 상세(로그인) | — | `GET /posters/{id}`. 읽기 전용 캔버스(화면 폭에 맞춰 축소), 오른쪽 위 '수정' → `/poster?edit={id}` |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 
 ## 2. StateGraph
@@ -224,6 +225,7 @@ flowchart LR
 | `POST /posts/{id}/comments` · `DELETE /posts/{id}/comments/{comment_id}` | 필요(삭제는 작성자만) | `not_authenticated`, `invalid_request`(422, 빈 글·500자 초과), `post_not_found`(대상 글 없음), `lost_*`(502, 분실 신고 확인 실패), `comment_rate_limited`(429, 1분 5개), `comment_limit`(429, 글당 200개), `comment_not_found`, `comment_forbidden`(403) |
 | `GET /poster/templates` · `GET /poster/templates/{id}` | 없음 | `poster_template_not_found` |
 | `POST /poster/assets` · `GET /poster/assets/{asset_id}` | 필요(소유자) | `poster_asset_too_large`(413, 15MB), `poster_asset_pixels`(413, 2,500만 화소), `poster_asset_format`(415), `poster_asset_invalid`(422), `poster_asset_not_found` |
+| `GET /posters` | 필요 | `not_authenticated`. 내 전단지 요약 목록(최근 수정 순, 최대 50): `id, template_id, template_name, title, pet_name, lost_place, photo_asset_id, updated_at`(구성 요소 전체는 미포함) |
 | `POST /posters` · `GET/PUT/DELETE /posters/{id}` | 필요(소유자) | `poster_not_found`, `poster_component_invalid`, `poster_asset_unavailable` |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 

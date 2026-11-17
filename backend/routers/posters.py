@@ -213,6 +213,40 @@ async def get_asset(asset_id: str, user=Depends(current_user), ctx: AppContext =
     return Response(base64.b64decode(asset["content"]), media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
 
 
+MAX_POSTERS_LISTED = 50  # 마이페이지 '내가 만든 전단지' 목록 최대 개수(최근 수정 순)
+
+
+def _field(doc: dict[str, Any], key: str) -> str:
+    for component in doc.get("components") or []:
+        if component.get("fieldKey") == key and isinstance(component.get("content"), str):
+            return component["content"].strip()[:120]
+    return ""
+
+
+def _summary(poster_id: str, doc: dict[str, Any], updated_at: Any) -> dict[str, Any]:
+    """목록용 요약: 제목·이름·장소 문구와 첫 사진 자산 ID 만 돌려준다(구성 요소 전체는 상세에서)."""
+    template_names = {item["id"]: item["name"] for item in TEMPLATES}
+    photo = next((c.get("assetId") for c in doc.get("components") or [] if c.get("type") == "image" and c.get("assetId")), None)
+    return {
+        "id": poster_id,
+        "template_id": doc.get("templateId"),
+        "template_name": template_names.get(doc.get("templateId"), "전단지"),
+        "title": _field(doc, "title"),
+        "pet_name": _field(doc, "pet_name"),
+        "lost_place": _field(doc, "lost_place"),
+        "photo_asset_id": photo,
+        "updated_at": updated_at,
+    }
+
+
+@router.get("/posters")
+async def list_posters(user=Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    """로그인 사용자가 저장한 전단지 목록(최근 수정 순). 다른 사람 전단지는 소유자 키가 달라 보이지 않는다."""
+    rows = await ctx.store.list(user.owner, "poster", MAX_POSTERS_LISTED)
+    items = [_summary(r["id"], r["data"], r.get("updated_at")) for r in rows]
+    return {"items": items, "count": len(items), "limit": MAX_POSTERS_LISTED}
+
+
 @router.post("/posters", status_code=201)
 async def create_poster(body: PosterBody, user=Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     doc = _validate_document(body)
