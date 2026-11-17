@@ -87,7 +87,22 @@ export default function PostDetailPage() {
           <h1>{postTitle(post)}</h1>
           <p>{lost ? '공공데이터 분실 신고' : '실종 정보 게시판'} · {post.region}</p>
         </div>
-        <Link className="text-link" to="/board">← 게시판으로</Link>
+        <div className="post-detail-heading-actions">
+          {post.mine && (
+            <div className="post-owner-actions">
+              {!editing && !confirming && <button type="button" className="secondary-button" onClick={() => setEditing(true)}>게시글 수정</button>}
+              {editing && <button type="button" className="secondary-button" onClick={() => setEditing(false)}>수정 취소</button>}
+              {!confirming && <button type="button" className="secondary-button danger-button" onClick={() => { setEditing(false); setConfirming(true) }}>게시글 삭제</button>}
+              {confirming && (
+                <>
+                  <button type="button" className="primary-button danger-button" onClick={remove} disabled={deleting}>{deleting ? '삭제 중…' : '삭제 확인'}</button>
+                  <button type="button" className="secondary-button" onClick={() => setConfirming(false)} disabled={deleting}>취소</button>
+                </>
+              )}
+            </div>
+          )}
+          <Link className="text-link" to="/board">← 게시판으로</Link>
+        </div>
       </div>
       <div className="post-detail-layout">
         <div className="post-detail-media">
@@ -128,21 +143,6 @@ export default function PostDetailPage() {
           </div>
           <div className="detail-page-actions">
             <button type="button" className="primary-button" onClick={searchWithPost}>이 정보로 구조 공고 찾기</button>
-            <Link className="secondary-button" to="/board">게시판 목록</Link>
-            {post.mine && !confirming && (
-              <button type="button" className="secondary-button danger-button" onClick={() => setConfirming(true)}>게시글 삭제</button>
-            )}
-            {post.mine && !editing && !confirming && (
-              <button type="button" className="secondary-button" onClick={() => setEditing(true)}>게시글 수정</button>
-            )}
-            {post.mine && confirming && (
-              <>
-                <button type="button" className="primary-button danger-button" onClick={remove} disabled={deleting}>
-                  {deleting ? '지우는 중…' : '정말 지울게요'}
-                </button>
-                <button type="button" className="secondary-button" onClick={() => setConfirming(false)} disabled={deleting}>취소</button>
-              </>
-            )}
           </div>
           <p className="fineprint">
             {lost
@@ -151,14 +151,14 @@ export default function PostDetailPage() {
           </p>
         </section>
       </div>
-      {editing && post.mine && <PostEditForm post={post} onCancel={() => setEditing(false)} onSaved={() => { setEditing(false); setReload((n) => n + 1) }} />}
-      {!lost && <PostVoices post={post} onChanged={() => setReload((n) => n + 1)} />}
+      {editing && post.mine && <PostEditForm post={post} onSaved={() => { setEditing(false); setReload((n) => n + 1) }} />}
+      {!lost && <PostVoices post={post} editable={editing} onChanged={() => setReload((n) => n + 1)} />}
       <PostComments key={post.id} targetId={post.id} lostReport={lost} />
     </main>
   )
 }
 
-function PostEditForm({ post, onCancel, onSaved }) {
+function PostEditForm({ post, onSaved }) {
   const [form, setForm] = useState({
     pet_name: post.pet_name, species: post.species, region: post.region, lost_place: post.lost_place || '',
     lost_date: post.lost_date, breed: post.breed || '', description: post.description
@@ -192,7 +192,7 @@ function PostEditForm({ post, onCancel, onSaved }) {
         <label className="wide">특징<textarea value={form.description} minLength={5} maxLength={1000} onChange={change('description')} required /></label>
       </div>
       {error && <p className="field-error" role="alert">{error}</p>}
-      <div className="form-bottom"><span className="fineprint">현재 사진은 유지됩니다.</span><div><button type="button" className="secondary-button" onClick={onCancel} disabled={busy}>취소</button> <button type="submit" className="primary-button" disabled={busy}>{busy ? '저장 중…' : '수정 저장'}</button></div></div>
+      <div className="form-bottom"><span className="fineprint">현재 사진과 음성은 유지됩니다.</span><div><button type="submit" className="primary-button" disabled={busy}>{busy ? '저장 중…' : '수정 저장'}</button></div></div>
     </form>
   )
 }

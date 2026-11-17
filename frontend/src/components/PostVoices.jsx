@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { api, API_BASE } from '../lib/api.js'
+import { api } from '../lib/api.js'
 import { errorMessage } from '../lib/format.js'
+import PostVoiceCard from './PostVoiceCard.jsx'
 
 const MAX_VOICES = 3
 const MAX_BYTES = 10 * 1024 * 1024
 const ACCEPT = 'audio/mpeg,audio/mp4,audio/wav,audio/x-wav,audio/ogg,audio/opus,.mp3,.m4a,.wav,.ogg,.opus'
 
-export default function PostVoices({ post, onChanged }) {
+export default function PostVoices({ post, editable = false, onChanged }) {
   const [file, setFile] = useState(null)
   const [description, setDescription] = useState('')
   const [error, setError] = useState('')
@@ -63,14 +64,10 @@ export default function PostVoices({ post, onChanged }) {
       {voices.length === 0 && <p className="fineprint">등록된 음성 파일이 없어요.</p>}
       <ul className="voice-list">
         {voices.map((voice) => (
-          <li key={voice.id}>
-            <p>{voice.description}</p>
-            <audio controls preload="none" src={`${API_BASE}/posts/${encodeURIComponent(post.id)}/voices/${encodeURIComponent(voice.id)}/audio`} />
-            {post.mine && <button type="button" className="text-action" disabled={busy} onClick={() => remove(voice.id)}>음성 삭제</button>}
-          </li>
+          <PostVoiceCard key={voice.id} postId={post.id} voice={voice} editable={post.mine && editable} busy={busy} onRemove={remove} />
         ))}
       </ul>
-      {post.mine && voices.length < MAX_VOICES && (
+      {post.mine && editable && voices.length < MAX_VOICES && (
         <form className="voice-form" onSubmit={add}>
           <label>음성 파일 <input type="file" accept={ACCEPT} onChange={choose} /></label>
           <label>음성 설명 <input value={description} maxLength={200} onChange={(e) => setDescription(e.target.value)} placeholder="예: 초코가 부르면 반응하는 이름" /></label>
@@ -79,7 +76,7 @@ export default function PostVoices({ post, onChanged }) {
           <button type="submit" className="secondary-button" disabled={busy || !file || !description.trim()}>{busy ? '처리 중…' : '음성 추가'}</button>
         </form>
       )}
-      {!post.mine && error && <p className="field-error" role="alert">{error}</p>}
+      {error && <p className="field-error" role="alert">{error}</p>}
     </section>
   )
 }
