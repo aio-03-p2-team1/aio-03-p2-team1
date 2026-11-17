@@ -221,4 +221,25 @@ button[disabled]{opacity:.65;cursor:progress}
 .comment-form textarea{width:100%;min-height:84px;padding:12px 14px;border:1px solid #e3dccf;border-radius:10px;font:inherit;resize:vertical}
 .comment-form-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .comment-login{margin:0;color:#6e665b;font-size:14px}
+.post-voices,.post-edit-form{margin-top:clamp(20px,3vw,32px)}
+.post-voices h2,.post-edit-form h2{margin:0 0 12px;font-size:20px}
+.voice-list{display:grid;gap:12px;margin:0 0 16px;padding:0;list-style:none}
+.voice-list li{display:grid;gap:6px;padding:12px 14px;border:1px solid #eee8df;border-radius:10px;background:#fff}
+.voice-list li p{margin:0;color:#3d3832;font-size:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.voice-list audio{width:100%;max-width:560px}
+.voice-list .text-action{justify-self:start}
+.voice-form{display:grid;gap:10px;padding-top:12px;border-top:1px solid #eee8df}
+.voice-form label{display:grid;gap:6px;color:#59554e;font-size:12px;font-weight:700}
+.voice-form input:not([type=file]){width:100%;padding:10px 12px;border:1px solid #e3ded6;border-radius:8px;font:inherit}
+.voice-form button{justify-self:start}
+.voice-draft{display:grid;grid-template-columns:minmax(100px,1fr) minmax(140px,2fr) auto;align-items:center;gap:8px;padding:8px 10px;border:1px solid #eee8df;border-radius:8px;background:#fff}
+.voice-draft span{overflow:hidden;text-overflow:ellipsis;font-size:12px}
+.voice-draft input{min-width:0;padding:8px 10px;border:1px solid #e3ded6;border-radius:7px;font:inherit;font-size:13px}
+.post-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.post-edit-grid label{display:grid;gap:6px;color:#59554e;font-size:12px;font-weight:700}
+.post-edit-grid label.wide{grid-column:1/-1}
+.post-edit-grid input,.post-edit-grid select,.post-edit-grid textarea{width:100%;padding:10px 12px;border:1px solid #e3ded6;border-radius:8px;font:inherit}
+.post-edit-grid textarea{min-height:100px;resize:vertical}
+.post-edit-form .form-bottom{margin-top:14px}
+@media(max-width:600px){.voice-draft{grid-template-columns:1fr auto}.voice-draft input{grid-column:1/-1;grid-row:2}.post-edit-grid{grid-template-columns:1fr}}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

@@ -14,6 +14,8 @@ import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
 
 const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed_code: '', description: '' }
+const MAX_POST_VOICES = 3
+const MAX_VOICE_BYTES = 10 * 1024 * 1024
 
 export default function PostBoardPage() {
   const { user } = useAuth()
@@ -213,6 +215,8 @@ function PostForm({ regions, onCancel, onCreated }) {
   const [location, setLocation] = useState(null)
   const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useState(null)
+  const [voices, setVoices] = useState([])
+  const [voiceError, setVoiceError] = useState('')
   const [errors, setErrors] = useState({})
   const [photoError, setPhotoError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -250,6 +254,20 @@ function PostForm({ regions, onCancel, onCreated }) {
     }
   }
 
+  function chooseVoice(event) {
+    const file = event.target.files?.[0]
+    setVoiceError('')
+    if (!file) return
+    if (voices.length >= MAX_POST_VOICES) {
+      setVoiceError('음성은 게시글당 3개까지 올릴 수 있어요.')
+    } else if (file.size > MAX_VOICE_BYTES) {
+      setVoiceError('음성 파일은 하나당 10 MiB까지 올릴 수 있어요.')
+    } else {
+      setVoices((items) => [...items, { file, description: '' }])
+    }
+    event.target.value = ''
+  }
+
   async function submit(event) {
     event.preventDefault()
     const found = validatePost(form, today)
@@ -260,6 +278,18 @@ function PostForm({ regions, onCancel, onCreated }) {
     try {
       const body = { ...form, photo: photo || undefined }
       const post = await api('/posts', { method: 'POST', body })
+      try {
+        for (const voice of voices) {
+          const data = new FormData()
+          data.append('audio', voice.file)
+          data.append('description', voice.description.trim())
+          await api(`/posts/${encodeURIComponent(post.id)}/voices`, { method: 'POST', body: data })
+        }
+      } catch (err) {
+        toast(`게시글은 등록했지만 음성 일부를 올리지 못했어요: ${errorMessage(err)}`)
+        onCreated(post)
+        return
+      }
       toast('게시글을 등록했어요.')
       onCreated(post)
     } catch (err) {
@@ -324,6 +354,19 @@ function PostForm({ regions, onCancel, onCreated }) {
           {photo && <img className="post-photo-preview" src={photo} alt="선택한 사진 미리보기" />}
           <FieldError text={photoError} />
         </label>
+        <div className="field-block wide">
+          <span className="field-label">목소리 음성 (선택, 최대 3개)</span>
+          <input type="file" accept="audio/mpeg,audio/mp4,audio/wav,audio/x-wav,audio/ogg,audio/opus,.mp3,.m4a,.wav,.ogg,.opus" onChange={chooseVoice} />
+          <span className="fineprint">MP3·M4A·WAV·OGG, 1분 이내, 파일당 10 MiB까지. 서버에서 압축하지 않아요.</span>
+          {voices.map((voice, index) => (
+            <div className="voice-draft" key={`${voice.file.name}-${index}`}>
+              <span>{voice.file.name} ({Math.ceil(voice.file.size / 1024)} KB)</span>
+              <input aria-label={`${voice.file.name} 음성 설명`} placeholder="이 음성에 대한 설명 (필수)" maxLength={200} value={voice.description} onChange={(event) => setVoices((items) => items.map((item, i) => i === index ? { ...item, description: event.target.value } : item))} />
+              <button type="button" className="text-action" onClick={() => setVoices((items) => items.filter((_, i) => i !== index))}>제거</button>
+            </div>
+          ))}
+          {voiceError && <FieldError text={voiceError} />}
+        </div>
         <label className="wide">
           특징과 마지막으로 본 장소
           <textarea rows={4} value={form.description} onChange={update('description')} placeholder="털 색, 크기, 목줄, 마지막으로 본 장소를 적어주세요." maxLength={1000} aria-invalid={!!errors.description} />
@@ -339,7 +382,7 @@ function PostForm({ regions, onCancel, onCreated }) {
         </p>
         <div>
           <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>취소</button>
-          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? '등록 중…' : '게시글 등록'}</button>
+          <button type="submit" className="primary-button" disabled={submitting || voices.some((voice) => !voice.description.trim())}>{submitting ? '등록 중…' : '게시글 등록'}</button>
         </div>
       </div>
     </form>

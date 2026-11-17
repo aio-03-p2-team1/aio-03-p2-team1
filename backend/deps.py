@@ -30,10 +30,11 @@ class AppContext:
     breed_normalizer: Any = None
     search_agent: Any = None  # 결과가 애매할 때 결과를 읽고 조건을 고치는 검색 에이전트(LLM 도구 호출). 키 없으면 None
     lost: Any = None  # 분실 신고 목록 캐시(LostFeed). LOST_ANIMAL_API_KEY 가 없으면 None
+    post_audio: Any = None
 
     async def aclose(self) -> None:
         # SearchCache uses the Redis client owned by SessionStore; close it only once.
-        resources = (self.store, self.sessions, self.animal, self.kakao, self.llm, self.photo_llm, self.embedder, self.lost)
+        resources = (self.store, self.post_audio, self.sessions, self.animal, self.kakao, self.llm, self.photo_llm, self.embedder, self.lost)
         closed: set[int] = set()
         for resource in resources:
             if resource is None or id(resource) in closed:
