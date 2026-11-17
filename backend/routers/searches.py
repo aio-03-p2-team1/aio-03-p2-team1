@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Query
 
 from backend.agent.llm import LlmError
 from backend.agent import photo_store
-from backend.agent.photo import InvalidPhoto, decode_and_validate
+from backend.agent.photo import InvalidPhoto, decode_and_validate, shrink_for_analysis
 from backend.tools import remote_photo
 from backend.agent.runner import run_search
 from backend.schemas.api import PhotoAnalysisBody, PhotoAnalysisResponse, SearchBody
@@ -84,6 +84,8 @@ async def analyze_photo(
     try:
         encoded = body.image_base64 if body.image_base64 is not None else await _post_photo_base64(ctx, body.post_id)
         image_data, mime_type = decode_and_validate(encoded)
+        # 분석 시간을 줄이려고 긴 변 1024px 로 줄여 보낸다(직접 올린 사진·게시글 사진 공통).
+        image_data, mime_type = shrink_for_analysis(image_data, mime_type)
     except InvalidPhoto as exc:
         raise ApiError(422, exc.code, exc.message)
     started = time.perf_counter()
