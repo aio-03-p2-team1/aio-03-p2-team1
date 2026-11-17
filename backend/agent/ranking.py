@@ -7,7 +7,7 @@ from typing import Any
 
 from backend.agent.color_tokenizer import tokenize_color_words
 
-WEIGHTS = {"breed": 3, "color": 3, "sex": 2, "keyword": 1}
+WEIGHTS = {"color": 3, "sex": 2, "keyword": 1}
 MAX_KEYWORD_POINTS = 3
 TOP_K = 300
 RRF_K = 60
@@ -15,7 +15,7 @@ RRF_K = 60
 
 def feature_text(item: dict) -> str:
     return " · ".join(f"{key}: {item[key]}" for key in
-                     ("species", "breed", "color", "sex", "age", "size", "weight", "description", "special_mark")
+                     ("species", "color", "sex", "age", "size", "weight", "description", "special_mark")
                      if item.get(key))[:2000] or "동물 특징 미확인"
 
 
@@ -111,16 +111,6 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
     matched, mismatched, unknown = [], [], []
     points = 0
 
-    breed = criteria.get("breed")
-    if breed:
-        if not item.get("breed"):
-            unknown.append("품종")
-        elif breed.replace(" ", "") in item["breed"].replace(" ", "") or item["breed"].replace(" ", "") in breed.replace(" ", ""):
-            points += WEIGHTS["breed"]
-            matched.append(f"품종: {item['breed']}")
-        else:
-            mismatched.append(f"품종: {item['breed']}")
-
     wanted = tokenize_color_words(criteria.get("color"))
     described = tokenize_color_words(criteria.get("description"))
     wanted_colors = wanted["colors"] | described["colors"]
@@ -174,9 +164,14 @@ def _date_gap(item: dict[str, Any], lost_date: str | None) -> int:
 
 def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     lost_date = criteria.get("lost_date") or criteria.get("start_date")
+    # 구조동물 API는 품종 코드를 검색 파라미터로 받지 않으므로, 조회한 공고의
+    # 품종명과 코드 목록에서 확인한 이름을 대조해 RRF 전에 후보를 좁힌다.
+    breed = "".join((criteria.get("breed") or "").split()).casefold()
     out = []
     for item in items:
         if in_scope(item, criteria):
+            continue
+        if breed and "".join((item.get("breed") or "").split()).casefold() != breed:
             continue
         evidence = score(item, criteria, features)
         out.append({**item, "evidence": evidence, "score": evidence["score"]})
