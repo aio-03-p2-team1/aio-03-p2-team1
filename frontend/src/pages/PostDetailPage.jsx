@@ -3,7 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate, formatDateTime } from '../lib/format.js'
-import { isLostReport, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { isLostReport, localDate, postSpeciesLabel, postTitle, sexLabel } from '../lib/post.js'
+import { postToSearch, savePostSearch } from '../lib/postSearch.js'
 import PostComments from '../components/PostComments.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { PostPhoto } from './PostBoardPage.jsx'
@@ -34,6 +35,12 @@ export default function PostDetailPage() {
         setStatus('error')
       })
   }, [apiPath, user])
+
+  // 이 글의 종류·위치·날짜·특징으로 검색 화면을 채운다(바로 검색하지 않음, 로그인이 필요하면 로그인 후 이어짐).
+  function searchWithPost() {
+    savePostSearch(postToSearch(post, localDate()))
+    navigate('/search')
+  }
 
   async function remove() {
     setDeleting(true)
@@ -117,6 +124,7 @@ export default function PostDetailPage() {
             <p className="post-description">{post.description}</p>
           </div>
           <div className="detail-page-actions">
+            <button type="button" className="primary-button" onClick={searchWithPost}>이 정보로 구조 공고 찾기</button>
             <Link className="secondary-button" to="/board">게시판 목록</Link>
             {post.mine && !confirming && (
               <button type="button" className="secondary-button danger-button" onClick={() => setConfirming(true)}>게시글 삭제</button>
