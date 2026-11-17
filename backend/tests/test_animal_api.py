@@ -38,9 +38,10 @@ def test_search_builds_params_and_normalizes():
         assert request.url.path.endswith("/abandonmentPublic_v2")
         return httpx.Response(200, json=ok_body([api_item(1)], total=1))
 
-    page = run(api(handler).search(region_code="6110000", start=date(2026, 11, 1), end=date(2026, 11, 12), species="dog"))
+    page = run(api(handler).search(region_code="6110000", start=date(2026, 11, 1), end=date(2026, 11, 12), species="dog", kind="001"))
     assert seen["bgnde"] == "20261101" and seen["endde"] == "20261112"
     assert seen["upkind"] == "417000" and seen["upr_cd"] == "6110000" and seen["_type"] == "json"
+    assert seen["kind"] == "001"
     item = page.items[0]
     assert item["species"] == "dog" and item["care"]["tel"] == "02-000-0000"
     assert item["photos"][0].startswith("https://")

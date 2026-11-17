@@ -73,8 +73,8 @@ class FakeAnimal:
         self.region_calls += 1
         return self.region_list
 
-    async def search(self, *, region_code, start, end, species, page=1, rows=50):
-        self.calls.append({"region_code": region_code, "page": page, "species": species, "rows": rows})
+    async def search(self, *, region_code, start, end, species, kind=None, page=1, rows=50):
+        self.calls.append({"region_code": region_code, "page": page, "species": species, "kind": kind, "rows": rows})
         if self.errors:
             err = self.errors.pop(0)
             if err:

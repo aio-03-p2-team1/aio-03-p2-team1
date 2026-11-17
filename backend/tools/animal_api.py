@@ -204,6 +204,7 @@ class AnimalApi:
         start: date,
         end: date,
         species: str,
+        kind: str | None = None,
         page: int = 1,
         rows: int = 50,
     ) -> SearchPage:
@@ -211,6 +212,7 @@ class AnimalApi:
             "bgnde": start.strftime("%Y%m%d"),
             "endde": end.strftime("%Y%m%d"),
             "upkind": UPKIND.get(species),
+            "kind": kind,
             "upr_cd": region_code,
             "pageNo": page,
             "numOfRows": rows,
@@ -278,7 +280,7 @@ class SampleAnimalApi:
     async def regions(self) -> list[Region]:
         return SAMPLE_REGIONS
 
-    async def search(self, *, region_code, start, end, species, page=1, rows=50) -> SearchPage:
+    async def search(self, *, region_code, start, end, species, kind=None, page=1, rows=50) -> SearchPage:
         fetched = _now_iso()
         region_name = next((r.name for r in SAMPLE_REGIONS if r.code == region_code), None)
         matched = []

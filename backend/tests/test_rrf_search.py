@@ -22,6 +22,14 @@ def test_rrf_combines_rank_positions_not_raw_score_scales():
     assert [item["rank"] for item in result] == [1, 2, 3]
     assert result[0]["lexical_score"] == 9999
     assert "secret" not in feature_text({"breed": "푸들", "id": "secret", "care": {"tel": "secret"}})
+    assert "breed" not in feature_text({"breed": "푸들"})
+
+
+def test_breed_does_not_contribute_to_lexical_score_or_mismatch():
+    from backend.agent.ranking import score
+
+    result = score({"breed": "말티즈"}, {"breed": "푸들"})
+    assert result == {"score": 0, "matched": [], "mismatched": [], "unknown": []}
 
 
 def test_distance_rank_per_km_unknown_last_and_weighted():
@@ -64,7 +72,7 @@ def test_thousand_embeddings_top_300_cache_hit_ttl_and_expiry():
         assert len(first["candidates"]) == 300
         assert first["scope"]["fetched_rows"] == 1000
         assert not first["scope"]["complete"]
-        assert animal.calls == [{"region_code": None, "page": 1, "species": "dog", "rows": 1000}]
+        assert animal.calls == [{"region_code": None, "page": 1, "species": "dog", "kind": None, "rows": 1000}]
         assert len(d["embedder"].calls[0]) == 1001
         assert 598 <= await redis.ttl(first["cache_key"]) <= 600
         snapshot = await d["search_cache"].get(first["cache_key"])
