@@ -246,6 +246,7 @@ def normalize_lost(raw: dict[str, Any], species: str) -> dict[str, Any] | None:
         "happen_place": str(raw.get("happenPlace") or "").strip(),
         "lost_date": _iso_date(raw.get("happenDt")),
         "breed": str(raw.get("kindCd") or "").strip(),
+        "breed_code": "",  # kindCd는 코드가 아닌 이름. 게시판에서 축종별 기준정보로 확인한다.
         "color": str(raw.get("colorCd") or "").strip(),
         "sex": raw.get("sexCd") if raw.get("sexCd") in ("M", "F") else None,
         "age": str(raw.get("age") or "").strip(),

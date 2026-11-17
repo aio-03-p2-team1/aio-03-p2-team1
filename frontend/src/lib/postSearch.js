@@ -17,9 +17,8 @@ export function postToSearch(post, today) {
   // 검색 지역은 시·도 이름이다. 분실 신고의 지역은 '경기도 수원시'처럼 시·군·구까지 있어 첫 낱말만 쓴다.
   const sido = clean(post?.region).split(' ')[0] || ''
   const address = clean(post?.lost_place) || clean(post?.region)
-  // 검색 화면에는 품종·털색·성별 칸이 따로 없어 설명 글 앞에 붙인다(에이전트·특징 추출이 조건으로 해석).
+  // 품종은 서버가 검증한 코드로 선택란에 전달한다. 나머지 특징만 설명에 붙인다.
   const facts = [
-    post?.breed && `품종: ${clean(post.breed)}`,
     post?.color && `털색: ${clean(post.color)}`,
     sexLabel(post?.sex) && `성별: ${sexLabel(post.sex)}`,
     post?.age && `나이: ${clean(post.age)}`,
@@ -31,7 +30,7 @@ export function postToSearch(post, today) {
   ].filter(Boolean)
   return {
     form: {
-      breed_code: '',
+      breed_code: SPECIES.includes(post?.species) ? clean(post?.breed_code) : '',
       species: SPECIES.includes(post?.species) ? post.species : '',
       lost_date: lostDate,
       description: lines.join('\n').slice(0, 1000),

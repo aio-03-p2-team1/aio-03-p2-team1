@@ -285,3 +285,83 @@ async def test_kinds_are_name_sorted_on_database_and_existing_cache(repository):
     await repository.redis.set('meet-again:kinds:dog', json.dumps(records), ex=86400)
     repository._rows = AsyncMock(side_effect=AssertionError('must use existing cache'))
     assert [r['name'] for r in await repository.lookup('dog')] == ['골든 리트리버', '말티즈', '푸들']
+
+
+def test_board_stores_validated_code_and_handoff_fields(repository):
+    from fastapi.testclient import TestClient
+
+    from backend.main import create_app
+    from backend.tests.conftest import ORIGIN, build_ctx, signup
+    from backend.tests.test_posts import body
+
+    ctx = build_ctx()
+    ctx.kinds = repository
+    with TestClient(create_app(ctx), headers={'Origin': ORIGIN}) as client:
+        signup(client)
+        created = client.post('/api/v1/posts', json=body(breed_code='1', breed='偽品종')).json()
+        assert created['breed_code'] == '1' and created['breed'] == '푸들'
+        stored = client.portal.call(ctx.store.get, 'board', 'post', created['id'])
+        assert stored['breed_code'] == '1'
+        for path in ('/api/v1/posts', '/api/v1/posts/mine'):
+            assert client.get(path).json()['items'][0]['breed_code'] == '1'
+        assert client.get('/api/v1/posts/' + created['id']).json()['breed_code'] == '1'
+        for code in ('2', 'unknown'):
+            invalid = client.post('/api/v1/posts', json=body(breed_code=code))
+            assert invalid.status_code == 422
+            assert invalid.json()['detail']['code'] == 'invalid_breed_code'
+        alias = client.post('/api/v1/posts', json=body(species='cat', breed='코숏')).json()
+        assert alias['breed_code'] == '2'
+        unknown = client.post('/api/v1/posts', json=body(breed='미확인 품종')).json()
+        assert unknown['breed_code'] == ''
+        # 저장된 예전 문서도 재등록 없이 읽을 때 코드를 제공한다.
+        stored.pop('breed_code')
+        client.portal.call(ctx.store.put, 'board', 'post', created['id'], stored)
+        assert client.get('/api/v1/posts/' + created['id']).json()['breed_code'] == '1'
+
+
+def test_lost_report_code_uses_species_scoped_reference_data(repository):
+    from fastapi.testclient import TestClient
+
+    from backend.main import create_app
+    from backend.tests.conftest import build_ctx
+
+    ctx = build_ctx()
+    ctx.kinds = repository
+    lost_id = 'lost-20261117-abcdef123456'
+    report = {'id': lost_id, 'species': 'cat', 'breed': '코숏'}
+    ctx.lost = SimpleNamespace(get=AsyncMock(return_value=report))
+    with TestClient(create_app(ctx)) as client:
+        assert client.get('/api/v1/posts/lost/' + lost_id).json()['breed_code'] == '2'
+        report['species'] = 'dog'
+        assert client.get('/api/v1/posts/lost/' + lost_id).json()['breed_code'] == ''
+        assert 'breed_code' not in report  # 원본 캐시를 변경하지 않는다.
+
+
+def test_board_kind_lookup_failure_is_not_an_unknown_breed(repository):
+    from fastapi.testclient import TestClient
+
+    from backend.main import create_app
+    from backend.storage import StorageError
+    from backend.tests.conftest import ORIGIN, build_ctx, signup
+    from backend.tests.test_posts import body
+
+    repository.rows = AsyncMock(side_effect=StorageError('kinds_unavailable'))
+    ctx = build_ctx()
+    ctx.kinds = repository
+    with TestClient(create_app(ctx), headers={'Origin': ORIGIN}) as client:
+        signup(client)
+        assert client.post('/api/v1/posts', json=body(breed_code='1')).status_code == 503
+
+
+@run_async
+async def test_board_mapping_is_unambiguous_and_reads_each_species_once():
+    from backend.routers.posts import _with_breed_codes
+
+    repository = SimpleNamespace(rows=AsyncMock(return_value=[
+        {'kind_code': '1', 'name': '품종', 'alias': None},
+        {'kind_code': '2', 'name': '품종', 'alias': None},
+    ]))
+    items = [{'species': 'dog', 'breed': '품종'}, {'species': 'dog', 'breed': '미확인'}]
+    resolved = await _with_breed_codes(items, SimpleNamespace(kinds=repository))
+    assert [item['breed_code'] for item in resolved] == ['', '']
+    repository.rows.assert_awaited_once_with('dog')

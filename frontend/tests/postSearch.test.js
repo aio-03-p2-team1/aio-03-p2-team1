@@ -6,8 +6,8 @@ const TODAY = '2026-11-16'
 
 test('member post fills species, sido, address, date and description', () => {
   const v = postToSearch({ id: 'p1', pet_name: '초코', species: 'dog', region: '서울특별시', lost_place: '서울특별시 강서구 화곡동',
-    lost_date: '2026-11-10', breed: '푸들', description: '갈색, 빨간 목줄' }, TODAY)
-  assert.deepEqual(v.form, { breed_code: '', species: 'dog', lost_date: '2026-11-10', description: '품종: 푸들\n갈색, 빨간 목줄' })
+    lost_date: '2026-11-10', breed: '푸들', breed_code: '000128', description: '갈색, 빨간 목줄' }, TODAY)
+  assert.deepEqual(v.form, { breed_code: '000128', species: 'dog', lost_date: '2026-11-10', description: '갈색, 빨간 목줄' })
   assert.deepEqual(v.location, { region: '서울특별시', address: '서울특별시 강서구 화곡동' })
   assert.equal(v.source.title, '초코')
 })
@@ -18,7 +18,7 @@ test('lost report uses first word of region, facts and last seen place; bad date
     description: '' }, TODAY)
   assert.equal(v.form.lost_date, TODAY)
   assert.deepEqual(v.location, { region: '경기도', address: '경기도 수원시' })
-  assert.equal(v.form.description, '품종: 코리안 숏헤어, 털색: 흰색, 성별: 암컷, 나이: 2024(년생)\n마지막으로 본 장소: 공원 앞')
+  assert.equal(v.form.description, '털색: 흰색, 성별: 암컷, 나이: 2024(년생)\n마지막으로 본 장소: 공원 앞')
   assert.equal(postToSearch({ species: 'bird' }, TODAY).form.species, '')
   assert.equal(postToSearch({}, TODAY).location, null)
 })
@@ -29,4 +29,13 @@ test('handoff is read once', () => {
   savePostSearch({ form: { species: 'dog' } }, storage)
   assert.deepEqual(takePostSearch(storage), { form: { species: 'dog' } })
   assert.equal(takePostSearch(storage), null)
+})
+
+
+test('breed code is passed without rewriting description or inventing a code', () => {
+  const source = { species: 'cat', breed: '코리안 숏헤어', breed_code: '000116', description: '귀 끝이 접힘' }
+  assert.equal(postToSearch(source, TODAY).form.breed_code, '000116')
+  assert.equal(postToSearch(source, TODAY).form.description, '귀 끝이 접힘')
+  assert.equal(postToSearch({ ...source, breed_code: undefined }, TODAY).form.breed_code, '')
+  assert.equal(postToSearch({ ...source, species: 'bird' }, TODAY).form.breed_code, '')
 })
