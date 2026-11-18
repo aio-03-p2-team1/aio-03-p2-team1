@@ -16,6 +16,7 @@ import { photoAnalysisError, photoErrorMessage, photoSelectionError, photoTraitL
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 import { takePostSearch } from '../lib/postSearch.js'
+import runningRaccoon from '../assets/running-raccoon.png'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 const initialForm = () => ({ breed_code: '', species: '', lost_date: today(), description: '' })
@@ -357,7 +358,7 @@ export default function SearchPage() {
 
   function onSubmit(event) {
     event.preventDefault()
-    if (busy || refining) return
+    if (busy || refining || photoAnalyzing) return
     // 질문에 답하는 중이거나 에이전트 요청이 있던 검색이면 같은 대화로 이어서 찾는다.
     const followUp = run?.status === 'awaiting_input' || run?.agent_request
     submit(buildCriteria(form, answers), followUp ? run.thread_id : undefined)
@@ -395,7 +396,8 @@ export default function SearchPage() {
   }
 
   return (
-    <main className="page-main search-page">
+    <>
+    <main className="page-main search-page" inert={photoAnalyzing} aria-busy={photoAnalyzing}>
       <div className="page-heading">
         <h1>우리 아이를 알려주세요</h1>
         <p>반려동물의 정보와 실종 지역을 입력하면 비슷한 공고를 찾아드려요.</p>
@@ -410,7 +412,6 @@ export default function SearchPage() {
               <input ref={photoInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={onPhoto} />
             <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '찾을 동물이 중심에 선명하게 보이는 사진 (JPG, PNG 또는 WEBP · 최대 8MB)'}</span>
               {photo && <img src={photo} alt="올린 반려동물 사진" referrerPolicy="no-referrer" />}
-              {photoAnalyzing && <span className="photo-analyzing">사진 특징을 살펴보고 있어요…</span>}
             </label>
             {photoMessage && <p className="photo-analysis-message" role="status">{photoMessage}</p>}
           </div>
@@ -468,7 +469,7 @@ export default function SearchPage() {
             <div className="search-description">
               <div className="search-description-head">
                 <label htmlFor="search-description-input">특징과 상황</label>
-                <button type="button" className="refine-button" disabled={refining || busy}
+                <button type="button" className="refine-button" disabled={refining || busy || photoAnalyzing}
                   onClick={() => refineText()} aria-label="텍스트 다듬기">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M13.5 5.5l5 5L9 20H4v-5L13.5 5.5ZM4 3v4M2 5h4M18 14v6M15 17h6" /></svg>
                   {refining ? '다듬는 중…' : '텍스트 다듬기'}
@@ -476,7 +477,7 @@ export default function SearchPage() {
               </div>
               <div className={`description-wrap${refining ? ' is-refining' : ''}`}>
                 <textarea id="search-description-input" ref={descriptionRef} rows={5} maxLength={1000}
-                  value={form.description} onChange={set('description')} disabled={refining}
+                  value={form.description} onChange={set('description')} disabled={refining || photoAnalyzing}
                   aria-describedby={questionNotes.length ? 'form-questions' : undefined}
                   placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털, 빨간 목줄. 품종은 위 목록에서 선택해 주세요." />
                 {refining && <span className="refine-shimmer" aria-hidden="true" />}
@@ -506,7 +507,7 @@ export default function SearchPage() {
             사진을 살펴보고 확인된 특징을 입력란에 적어드려요. 사진은 저장하지 않으며, 입력된 특징은 직접 고칠 수 있어요.
             빈 칸이 있으면 검색 전에 먼저 물어볼게요.
           </p>
-          <button className="primary-button" type="submit" disabled={busy || refining}>{busy ? '찾는 중…' : '후보 찾아보기'}</button>
+          <button className="primary-button" type="submit" disabled={busy || refining || photoAnalyzing}>{busy ? '찾는 중…' : '후보 찾아보기'}</button>
         </div>
       </form>
       <RegionPicker
@@ -557,6 +558,20 @@ export default function SearchPage() {
         </div>
       </section>
     </main>
+    {photoAnalyzing && (
+      <div className="photo-loading-overlay" role="status" aria-live="polite">
+        <div className="photo-loading-content">
+          <div className="photo-loading-motion" aria-hidden="true">
+            <span className="photo-loading-trail" />
+            <img src={runningRaccoon} alt="" />
+            <span className="photo-loading-shadow" />
+          </div>
+          <p>우리 아이를 만나러 가는 중…</p>
+          <span className="photo-loading-dots" aria-hidden="true"><i /><i /><i /></span>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 
