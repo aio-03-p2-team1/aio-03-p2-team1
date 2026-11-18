@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,7 +13,8 @@ from fastapi.responses import JSONResponse
 from backend.config import SUPABASE_POST_AUDIO_BUCKET, Settings, get_settings
 from backend.deps import AppContext
 from backend.errors import ApiError
-from backend.routers import auth, comments, memory, posters, posts, public, searches
+from backend import admin_log
+from backend.routers import admin, auth, comments, memory, posters, posts, public, searches
 from backend.storage import StorageError
 
 log = logging.getLogger("dasimanna")
@@ -104,6 +106,20 @@ def build_context(settings: Settings) -> AppContext:
     )
 
 
+# 관리자 로그 화면을 여는 요청 자체와 상태 확인은 기록하지 않는다(로그가 자기 자신으로 채워지지 않게).
+_QUIET_PATHS = (API_PREFIX + "/health", API_PREFIX + "/admin/logs")
+
+
+def _record_request(request: Request, status: int, started: float) -> None:
+    path = request.url.path  # 쿼리 문자열은 남기지 않는다
+    if not path.startswith(API_PREFIX) or path in _QUIET_PATHS:
+        return
+    level = "ERROR" if status >= 500 else "WARNING" if status >= 400 else "INFO"
+    ms = round((time.perf_counter() - started) * 1000)
+    admin_log.LOG_BUFFER.add(level, "request", f"{request.method} {path[len(API_PREFIX):] or '/'} {status} {ms}ms",
+                             method=request.method, path=path[len(API_PREFIX):], status=status, ms=ms)
+
+
 def create_app(ctx: AppContext | None = None) -> FastAPI:
     settings = ctx.settings if ctx else get_settings()
     _configure_langsmith(settings)
@@ -140,9 +156,15 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
                 )
                 response.headers["Cache-Control"] = "no-store"
                 return response
-        response = await call_next(request)
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            _record_request(request, 500, started)
+            raise
         if request.url.path.startswith(API_PREFIX):
             response.headers["Cache-Control"] = "no-store"
+            _record_request(request, response.status_code, started)
         return response
 
     app.add_middleware(
@@ -174,7 +196,9 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     async def api_error(request: Request, exc: ApiError):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    for router in (public.router, auth.router, searches.router, memory.router, posts.router, comments.router, posters.router):
+    admin_log.install()
+    for router in (public.router, auth.router, searches.router, memory.router, posts.router, comments.router, posters.router,
+                   admin.router):
         app.include_router(router, prefix=API_PREFIX)
     return app
 

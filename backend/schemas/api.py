@@ -70,6 +70,7 @@ class LoginBody(BaseModel):
 class UserOut(BaseModel):
     name: str
     email: str
+    is_admin: bool = False  # 화면에서 관리자 메뉴를 보일지만 정한다. 권한은 서버가 요청마다 다시 확인한다
 
 
 class SavedSearchBody(BaseModel):

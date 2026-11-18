@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.storage import check_kind
+from backend.storage import check_fields, check_kind
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS documents (
@@ -111,5 +111,25 @@ class SqliteStore:
             )
             self._conn.commit()
             return cur.rowcount > 0
+
+        return await self._run(q)
+
+    async def list_kind(self, kind, limit=100, offset=0, fields=None):
+        check_kind(kind)
+        fields = check_fields(fields)
+
+        def q():
+            rows = self._conn.execute(
+                "SELECT owner, id, data, updated_at FROM documents WHERE kind=? "
+                "ORDER BY updated_at DESC LIMIT ? OFFSET ?",
+                (kind, limit, offset),
+            ).fetchall()
+            out = []
+            for owner, doc_id, raw, updated_at in rows:
+                data = json.loads(raw)
+                if fields is not None:
+                    data = {f: data.get(f) for f in fields}
+                out.append({"owner": owner, "id": doc_id, "data": data, "updated_at": updated_at})
+            return out
 
         return await self._run(q)
