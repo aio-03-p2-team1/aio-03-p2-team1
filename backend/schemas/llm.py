@@ -40,6 +40,29 @@ class FeatureExtractionResult(StrictSchema):
     prompt_version: str
 
 
+class RefinedDescriptionModelResponse(StrictSchema):
+    """Template fields and searchable facts, extracted from one text/photo request."""
+
+    fur_color: str
+    features: str
+    situation: str
+    other: str
+    text_colors: list[Color]
+    text_sex: Sex
+    text_marks: list[str]
+    photo_suitable: bool
+    photo_colors: list[Color]
+    photo_sex: Sex
+    photo_marks: list[str]
+
+
+class RefinedDescriptionResult(StrictSchema):
+    description: str
+    features: dict[str, object]
+    photo_features: dict[str, object] | None
+    prompt_version: str
+
+
 class PhotoConfidence(StrictSchema):
     animal_present: float
     identifiable: float
