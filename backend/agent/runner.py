@@ -56,8 +56,10 @@ def agent_history(thread: dict[str, Any], declined: list[str] | None,
         "sex": criteria.get("sex") == RELAX_VALUE,
     }
     confirmed = set(history.get("confirmed_fields") or []) | {f for f in asked if changed.get(f)}
-    # 입력 검토가 글·사진 모순을 한 번 물었으면 같은 대화에서는 다시 묻지 않는다.
-    history["review_asked"] = bool(history.get("review_asked")) or "input_review" in asked
+    # 입력 검토의 글·사진 모순 질문은 대화의 첫 검색에서만 한다. 첫 검색에서 묻지 않고 찾았거나 이미 물었으면,
+    # 넓히기·답하기처럼 같은 대화로 이어 찾을 때는 다시 묻지 않고 글을 기준으로 찾는다.
+    history["review_asked"] = (bool(history.get("review_asked")) or "input_review" in asked
+                               or bool(thread.get("last_run_id")))
     relaxed = set(history.get("relaxed_fields") or [])
     if criteria.get("sex") == RELAX_VALUE:
         relaxed.add("sex")
