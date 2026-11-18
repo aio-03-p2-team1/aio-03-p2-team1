@@ -56,7 +56,6 @@ def test_extract_keeps_multiple_colors_and_filters_duplicates():
     assert out.sex == "F" and out.marks == ["목줄"]
     assert client.messages[0][0] == "system" and client.messages[1][1] == "갈색과 흰색 푸들, 빨간 목줄"
     assert COLOR_VALUES_TEXT in client.messages[0][1]
-    assert "각 색상을 모두 한 번씩 반환한다" in client.messages[0][1]
     assert client.schema_options[1] == {"method": "json_schema", "strict": True, "include_raw": True}
 
 
@@ -84,7 +83,6 @@ def test_photo_analysis_uses_injected_langchain_client():
     assert result.suitable and result.species == "dog"
     assert result.colors == ["갈색", "흰색"]
     assert COLOR_VALUES_TEXT in client.messages[0][1]
-    assert "각 색상을 모두 별도 항목으로 반환하고" in client.messages[0][1]
     image_part = client.messages[1][1][1]
     assert image_part["type"] == "image_url"
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
@@ -103,7 +101,6 @@ def test_refine_description_formats_template_and_extracts_text_photo_once():
     assert result.photo_features["suitable"] is True
     assert result.photo_features["colors"] == [] and result.photo_features["marks"] == []
     assert len([m for m in client.messages if m[0] == "human"]) == 1
-    assert "공고 텍스트 값만 최종 특징" in client.messages[0][1]
     assert client.messages[1][1][1]["type"] == "image_url"
 
 

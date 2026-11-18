@@ -48,7 +48,13 @@ def page_result(run, page=1, page_size=20):
 @router.post("/searches")
 async def create_search(body: SearchBody, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     refinement = await refinement_store.load(ctx.sessions._redis, user.owner, body.refinement_id)
-    if body.refinement_id and (not refinement or refinement.get("description") != body.criteria.description):
+    # 넓히기(지역·반경)처럼 바뀐 조건만 보내는 이어 찾기는 설명 글이 없고 이전 대화의 글을 그대로 쓴다.
+    # 그때는 같은 사용자의 대화(thread)에 저장된 글과 비교한다.
+    description = body.criteria.description
+    if description is None and body.thread_id:
+        thread = await ctx.store.get(user.owner, "thread", body.thread_id) or {}
+        description = (thread.get("criteria") or {}).get("description")
+    if body.refinement_id and (not refinement or refinement.get("description") != description):
         raise ApiError(422, "invalid_refinement", "다듬은 내용이 만료되었거나 검색 입력과 달라요. 다시 다듬어 주세요.")
     request = {
         "criteria": body.criteria.model_dump(exclude_none=True),
