@@ -110,7 +110,8 @@ async def login(body: LoginBody, request: Request, response: Response, ctx: AppC
 @router.get("/me", response_model=UserOut)
 async def me(user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
     account = await ctx.store.get(user.owner, "identity", "account") or {}
-    return UserOut(name=user.name, email=user.email, is_admin=account.get("role") == "admin")
+    # 세션 이름은 계정 문서가 수정된 뒤에도 이전 값일 수 있다.
+    return UserOut(name=account.get("name") or user.name, email=user.email, is_admin=account.get("role") == "admin")
 
 
 @router.post("/logout", status_code=204)
