@@ -16,9 +16,12 @@ export function useSearchScroll(key, ready) {
   const { scrolls } = useContext(SearchViewContext)
   useLayoutEffect(() => {
     if (!ready) return
-    const frame = requestAnimationFrame(() => window.scrollTo(0, scrolls.current.get(key) || 0))
+    // 이 화면에서 저장해 둔 위치가 있을 때만(상세에서 돌아온 경우) 되돌린다.
+    // 새 검색·새 페이지는 저장값이 없으니 맨 위로 보내지 않고, 검색 결과로 이동하는 쪽 동작을 그대로 둔다.
+    const saved = scrolls.current.get(key)
+    const frame = saved === undefined ? 0 : requestAnimationFrame(() => window.scrollTo(0, saved))
     return () => {
-      cancelAnimationFrame(frame)
+      if (frame) cancelAnimationFrame(frame)
       scrolls.current.set(key, window.scrollY)
       if (scrolls.current.size > 45) scrolls.current.delete(scrolls.current.keys().next().value)
     }
