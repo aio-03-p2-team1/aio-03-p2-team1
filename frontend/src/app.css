@@ -18,9 +18,11 @@
 .board-page .board-heading .filters{grid-area:filters;justify-self:end;flex-wrap:nowrap}
 .board-page .board-heading .primary-button{grid-area:action;justify-self:end;white-space:nowrap}
 .board-page .board-list-section{margin-top:0}
-.board-page .board-title{grid-area:title;min-width:0}
-.board-page .board-title p{margin:7px 0 0;color:#7d756c;font-size:14px;line-height:1.6}
-.post-board-page .board-heading h1{font-size:clamp(31px,3.7vw,49px)}
+/* 실종 정보 게시판: 버튼·필터 배치는 전체 공고와 같게, 제목 글꼴·설명은 우리 아이 찾기와 같게 */
+.board-page.post-board-page .board-heading{grid-template-areas:'. action' 'title filters' 'desc .'}
+.board-page.post-board-page .board-heading h1{font-size:clamp(31px,3.7vw,49px);line-height:normal}
+.board-page.post-board-page .board-desc{grid-area:desc;margin:-9px 0 0;color:#7d756c;font-size:14px;line-height:1.6}
+@media(max-width:760px){.board-page.post-board-page .board-heading{grid-template-areas:'action' 'title' 'desc' 'filters'}}
 .board-data-note{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:48px;padding-top:13px;border-top:1px solid #eee8df;color:#857d72;font-size:12px;line-height:1.5}
 @media(max-width:760px){.board-page .home-story{margin-bottom:44px}.board-page .board-heading{grid-template-columns:1fr;grid-template-areas:'action' 'title' 'filters';row-gap:12px}.board-page .board-heading .primary-button{margin-bottom:26px}.board-page .board-heading h1{white-space:normal}.board-page .board-heading .filters{width:100%}}
 
