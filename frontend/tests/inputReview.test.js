@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { inputReviewView, kindCheckText } from '../src/lib/inputReview.js'
+import { applyPhotoValue, conflictChoices, inputReviewView, kindCheckText } from '../src/lib/inputReview.js'
 
 const review = {
   action: 'search',
@@ -44,4 +44,25 @@ test('kind check summary explains what was kept and dropped', () => {
   assert.equal(kindCheckText({ target: '새', checked: 4, kept: 0, kept_by_text: 0, kept_by_photo: 0, other_kind: 4, unknown: 0 }),
     '기타 동물 4건 중 새로 확인된 공고 0건 · 제외: 다른 동물 4건')
   assert.equal(kindCheckText(null), '')
+})
+
+test('a generic text value is filled in with the photo detail', () => {
+  const text = '[털색]: 기타\n[특징]: 목 깃털 물결무늬'
+  const conflict = { item: '털색', text_value: '기타', photo_value: '회색, 검정, 빨강' }
+  assert.equal(applyPhotoValue(text, conflict), '[털색]: 기타: 회색, 검정, 빨강\n[특징]: 목 깃털 물결무늬')
+  assert.deepEqual(conflictChoices(conflict).map((c) => c.label), ['예, 사진 값 넣기 (기타: 회색, 검정, 빨강)', '아니오, 기타'])
+})
+
+test('a different text value offers text or photo and replaces the line', () => {
+  const conflict = { item: '털색', text_value: '갈색', photo_value: '흰색' }
+  assert.equal(applyPhotoValue('[털색]: 갈색', conflict), '[털색]: 흰색')
+  assert.deepEqual(conflictChoices(conflict).map((c) => c.side), ['text', 'photo'])
+})
+
+test('a missing item line is appended once', () => {
+  const conflict = { item: '성별', text_value: '수컷', photo_value: '암컷' }
+  assert.equal(applyPhotoValue('[털색]: 흰색\n', conflict), '[털색]: 흰색\n[성별]: 암컷')
+  assert.equal(applyPhotoValue('', conflict), '[성별]: 암컷')
+  assert.equal(applyPhotoValue('그대로', { item: '털색', photo_value: '' }), '그대로')
+  assert.deepEqual(conflictChoices({ item: '털색', text_value: '기타', photo_value: '' }), [])
 })
