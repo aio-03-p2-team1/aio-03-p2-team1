@@ -244,12 +244,23 @@ def test_empty_radius_can_be_widened_by_agent():
     assert run["agent_decision"]["reruns"] == 1 and len(d["animal"].calls) == 1
 
 
-def test_agent_may_finish_empty_result_without_unresolved_issue():
+def test_agent_finish_on_empty_result_falls_back_to_widen_question():
+    """결과 0건에서 LLM 이 finish 만 고르면 사용자가 다음 행동을 모른다 → 기존 성찰 질문(지역 넓히기)으로 넘긴다."""
     d, _ = agent_deps()
     d["animal"] = FakeAnimal(pages=[[]])
     run = search(d, {**SUFFICIENT, "region": "경기도"})
+    assert run["status"] == "awaiting_input" and run["questions"][0]["field"] == "region"
+    assert tools_used(run) == ["finish"] and run["agent_decision"]["empty_fallback"] == "empty_narrow"
+    assert "reflect" in run["trace"] and run["criteria"]["region"] == "경기도"  # 동의 전에는 지역을 바꾸지 않는다
+
+
+def test_agent_finish_on_empty_result_without_wider_scope_completes():
+    """더 넓힐 범위가 없으면(지역 전체) 0건으로 끝내고 질문하지 않는다."""
+    d, _ = agent_deps()
+    d["animal"] = FakeAnimal(pages=[[]])
+    run = search(d, {**SUFFICIENT, "region": "전체"})
     assert run["status"] == "completed" and run["end_reason"] == "empty_result"
-    assert run["issues"] == [] and tools_used(run) == ["finish"]
+    assert "empty_fallback" not in (run["agent_decision"] or {})
 
 
 def test_empty_result_falls_back_to_existing_question_when_agent_fails():
@@ -278,10 +289,12 @@ def test_cached_sufficient_result_gets_fresh_review_without_new_retrieval():
         first = await run_search(d, "owner", {"criteria": SUFFICIENT})
         second = await run_search(d, "owner", {"criteria": SUFFICIENT})
         assert not first["cache_hit"] and second["cache_hit"]
-        assert len(client.calls) == 2 and second["agent_decision"]["source"] == "llm"
+        # 같은 조회 결과 + 같은 대화 맥락이면 에이전트 판단도 캐시에서 꺼낸다(LLM 재호출 없음).
+        assert len(client.calls) == 1 and second["review_cache_hit"] and not first["review_cache_hit"]
+        assert second["agent_decision"]["source"] == "llm" and second["agent_decision"]["cached"] is True
         assert len(d["animal"].calls) == len(d["embedder"].calls) == 1
-        assert second["candidates"] == first["candidates"] and second["tool_call_count"] == 1
-        assert second["trace"][0] == "cache_hit" and "agent" in second["trace"]
+        assert second["candidates"] == first["candidates"] and second["tool_call_count"] == 0
+        assert second["trace"] == ["cache_hit", "review_cache_hit"]
         assert "raw_items" not in second and "semantic_scores" not in second
         snapshot = await d["search_cache"].get(first["cache_key"])
         assert "agent_request" not in snapshot and "agent_decision" not in snapshot
@@ -315,9 +328,12 @@ def test_agent_changes_do_not_pollute_cached_base_result():
         assert first["criteria"]["color"] == "흰색"
         thread = await d["store"].get("owner", "thread", first["thread_id"])
         assert thread["criteria"]["color"] == "갈색"  # 자동 수정은 사용자가 확인한 조건으로 저장하지 않는다.
-        assert second["cache_hit"] and second["criteria"]["color"] == "갈색"
-        assert second["agent_decision"]["reruns"] == 0
-        assert len(client.calls) == 3 and len(d["animal"].calls) == 1
+        # 기본 조회 캐시는 에이전트 수정 전 조건 그대로다. 검토 결과는 같은 맥락이라 캐시에서 꺼낸다.
+        base = await d["search_cache"].get(first["cache_key"])
+        assert base["criteria"]["color"] == "갈색"
+        assert second["cache_hit"] and second["review_cache_hit"]
+        assert second["criteria"]["color"] == first["criteria"]["color"]
+        assert len(client.calls) == 2 and len(d["animal"].calls) == 1
     asyncio.run(scenario())
 
 
@@ -329,7 +345,8 @@ def test_parallel_cached_searches_each_get_review_and_fetch_only_once():
         runs = await asyncio.gather(*(run_search(d, "owner", {"criteria": SUFFICIENT}) for _ in range(3)))
         assert sum(r["cache_hit"] for r in runs) == 2
         assert all(r["agent_decision"]["source"] == "llm" for r in runs)
-        assert len(client.calls) == 3 and len(d["animal"].calls) == len(d["embedder"].calls) == 1
+        # 동시에 들어오면 검토 캐시가 채워지기 전일 수 있다. 조회는 한 번, LLM 검토는 최대 요청 수만큼.
+        assert 1 <= len(client.calls) <= 3 and len(d["animal"].calls) == len(d["embedder"].calls) == 1
         assert len({r["thread_id"] for r in runs}) == 3
     asyncio.run(scenario())
 

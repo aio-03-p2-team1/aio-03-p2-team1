@@ -593,9 +593,16 @@ async def agent_tools_node(state: SearchState, config) -> dict:
     if result["next"] in ("rank", "radius", "research"):
         update["agent_rerun_pending"] = True
     if result["done"]:
+        empty = [i for i in state.get("issues") or [] if i["type"] in EMPTY_ISSUES]
+        if name == "finish" and empty and not state.get("candidates"):
+            # 결과 0건에서 LLM 이 그냥 끝내면 사용자는 다음에 할 일을 모른다.
+            # 이 경우 판단을 기록만 하고, 검증을 다시 거쳐 기존 성찰 질문(지역·반경 넓히기 동의)으로 넘긴다.
+            update.update(agent_done=True, agent_request=None, agent_next="validate",
+                          agent_decision={**_agent_decision({**state, **update}, "llm", name, log_),
+                                          "empty_fallback": empty[0]["type"]})
+            return update
         update.update(agent_done=True, agent_request=result["request"],
-                      # 에이전트가 빈 결과를 검토하고 요청 또는 종료를 선택했다.
-                      # 빈 결과 자체는 미해결 데이터 오류가 아니다.
+                      # 에이전트가 빈 결과를 검토하고 요청을 선택했다. 빈 결과 자체는 미해결 데이터 오류가 아니다.
                       issues=[i for i in state.get("issues") or [] if i["type"] not in EMPTY_ISSUES],
                       agent_decision=_agent_decision({**state, **update}, "llm", name, log_))
     return update
@@ -606,8 +613,8 @@ def route_after_agent(state: SearchState) -> str:
 
 
 def route_after_agent_tools(state: SearchState) -> str:
-    if state.get("agent_next") == "ask":
-        return "ask"
+    if state.get("agent_next") in ("ask", "validate"):
+        return state["agent_next"]
     if state.get("agent_done"):
         return "locate"
     return state.get("agent_next") or "agent"
@@ -700,7 +707,7 @@ def build_graph(entry: str = "analyze"):
     g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "validate": "validate"})
     g.add_conditional_edges("agent_tools", route_after_agent_tools,
                             {"agent": "agent", "rank": "rank", "radius": "radius", "research": "research",
-                             "ask": "ask", "locate": "locate"})
+                             "ask": "ask", "validate": "validate", "locate": "locate"})
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()

@@ -210,7 +210,8 @@ def test_cache_keeps_original_query_and_resets_research_budget_for_each_request(
             second = await run_search(d, OWNER, request)
             assert not first["cache_hit"] and second["cache_hit"]
             assert first["agent_decision"]["researches"] == second["agent_decision"]["researches"] == 1
-            assert [q.get("kind") for q in queries] == ["poodle-code", None, None]
+            # 두 번째는 같은 맥락의 검토 결과를 캐시에서 꺼내 재조회 API 도 다시 부르지 않는다.
+            assert second["review_cache_hit"] and [q.get("kind") for q in queries] == ["poodle-code", None]
             snapshot = await d["search_cache"].get(first["cache_key"])
             assert snapshot["search_query"]["kind"] == "poodle-code"
             assert snapshot["criteria"]["breed_code"] == "poodle-code" and snapshot["raw_items"] == []

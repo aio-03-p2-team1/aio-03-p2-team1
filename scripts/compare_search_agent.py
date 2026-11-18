@@ -153,7 +153,8 @@ async def worker(args):
                 run = await run_search(deps, "isolated-comparison", {"criteria": case["criteria"],
                                                                    "photo": case.get("photo")})
                 row.update(status=run["status"], error_code=(run.get("error") or {}).get("code"),
-                           cache_hit=run["cache_hit"], candidate_count=len(run.get("candidates") or []),
+                           cache_hit=run["cache_hit"], review_cache_hit=run.get("review_cache_hit"),
+                           candidate_count=len(run.get("candidates") or []),
                            top_id=(run.get("candidates") or [{}])[0].get("id") if run.get("candidates") else None,
                            decision=run.get("agent_decision"), confidence=run.get("confidence"),
                            questions=[q.get("field") for q in run.get("questions") or []],

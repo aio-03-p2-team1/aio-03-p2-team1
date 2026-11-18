@@ -85,7 +85,7 @@ flowchart TD
 
 `validate` 이후: 중복·조건 위반·지역 매핑 오류는 기존 성찰 경로로 처리한다. 성찰이 꺼져 있거나 `reflection_count ≥ MAX_REFLECTIONS`이면 수정하지 않고 `finalize`한다. 조회·정렬이 정상 완료되면 LLM이 설정된 모든 검색(빈 결과 포함)을 `agent`가 검토한다. 빈 결과의 `empty_narrow`/`empty_radius`는 LLM의 종료 선택 시 해소하고, LLM 없음·실패·한도 초과 시 기존 성찰/넓히기 질문으로 돌아간다. 도구 오류와 입력 누락은 검토하지 않는다. `reflection_enabled`는 규칙 성찰의 비교 변수이며 LLM 검토 여부를 끄는 설정은 아니다.
 
-조건 캐시 사용 시 `GRAPH`는 `_defer_agent` 내부 설정으로 검토 직전 `validate`에서 일단 종료한다. 조회 상태를 캐시하고 잠금을 해제한 뒤 `REVIEW_GRAPH`가 `validate`부터 실행한다. 캐시 적중도 같은 경로로 현재 대화의 이력으로 검토하며, 두 단계의 실행 시간 합계는 요청당 120초 이내다.
+조건 캐시 사용 시 `GRAPH`는 `_defer_agent` 내부 설정으로 검토 직전 `validate`에서 일단 종료한다. 조회 상태를 캐시하고 잠금을 해제한 뒤 `REVIEW_GRAPH`가 `validate`부터 실행한다. 캐시 적중도 같은 경로로 현재 대화의 이력으로 검토하며, 두 단계의 실행 시간 합계는 요청당 120초 이내다. 검토 결과는 `조건 캐시 키 + 대화 맥락(agent_history: 이미 한 사진·정보 요청과 거절, 사진 분석)` 키(`review_cache_key`)로 같은 TTL 동안 따로 캐시한다. 같은 조회 결과에 같은 맥락이면 LLM·재조회 없이 이전 판단을 돌려주고(`review_cache_hit=true`, `agent_decision.cached=true`, trace `[cache_hit, review_cache_hit]`), 사진을 요청한 뒤처럼 맥락이 바뀌면 키가 달라져 새로 판단한다.
 
 ## 3. 도구 선택 정책
 
@@ -99,6 +99,7 @@ flowchart TD
 | 품종 코드 선택 | 코드 목록에서 품종명을 검증하고 공공 API에 `kind=<breed_code>` 전달, 응답 품종명도 확인 | `criteria.breed_code`, `kind` |
 | live 모드 + 자유 서술 있음 | LangChain `ChatOpenAI` 기반 `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
 | LLM 설정 + 정상 조회·정렬 완료(빈 결과·캐시 적중 포함) | `agent`가 결과 검토 후 수정·질문·확정 선택. 확신 충분이면 사진·정보 요청은 서버가 거부 | `agent_decision`, `tool_calls[].agent_*` |
+| 결과 0건 + 에이전트가 `finish` + 더 넓힐 지역·반경이 있음(`empty_narrow`·`empty_radius`) | 판단을 기록하고 `validate`로 돌아가 기존 성찰 질문(지역·반경 넓히기 동의)으로 끝낸다. 지역 전체처럼 넓힐 범위가 없으면 0건 완료 | `agent_decision.empty_fallback`, `questions` |
 | 실종 위치(`lost_place`) + 카카오 키 + 실종 14일 이내 | `kakao_geocode_regions`: 실종 위치(좌표가 없을 때)·공고 관할 시군구·구조 장소 읍면동 좌표(성공만 캐시, 검색당 신규 80건 상한) | 반경 km·요청·캐시 수 |
 | 검증 통과 + 카카오 키 + 주소 | 상위 3개만 `kakao_geocode` | 후보 ID |
 | 로그인 사용자가 사진 선택 | `photo_analyze` (Pillow 검증 후 LangChain `ChatOpenAI` 비전) | 적합성 판정·특징 JSON |

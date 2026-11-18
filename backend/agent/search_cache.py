@@ -20,6 +20,14 @@ def condition_key(owner, criteria, *, source, model, reflection=True):
     return "meet-again:search:" + digest
 
 
+def review_cache_key(base_key, history, photo):
+    """조회 캐시 키 + 에이전트가 판단에 쓰는 대화 맥락(요청·거절 이력, 사진 분석) → 검토 결과 캐시 키."""
+    payload = {"history": history or {}, "photo": photo or None}
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                                       default=str).encode()).hexdigest()
+    return f"{base_key}:review:{digest}"
+
+
 class SearchCache:
     def __init__(self, redis):
         self.redis = redis

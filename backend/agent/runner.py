@@ -16,7 +16,7 @@ from typing import Any
 
 from backend.agent.graph import GRAPH, REVIEW_GRAPH
 from backend.agent import criteria as crit
-from backend.agent.search_cache import condition_key
+from backend.agent.search_cache import condition_key, review_cache_key
 from backend.agent.embeddings import DIMENSIONS
 from backend.agent.llm import PROMPT_VERSION
 from backend.agent.radius import RADIUS_VERSION
@@ -142,16 +142,35 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         result["memory_used"] = {k: normalized[k] for k, source in origins.items() if source == "memory" and k in normalized}
         # 캐시의 과거 호출·성찰은 이번 실행의 호출 수에 포함하지 않는다.
         result.update(tool_calls=[], reflection_count=0, reflections=[], retry_count=0, trace=["cache_hit"])
+    review_cache_hit = False
     if ready:
-        # 잠금을 놓은 뒤 검토한다. 동일 조건도 매 대화의 입력·사진·거절·질문 이력으로 새로 판단한다.
-        result = await execute(REVIEW_GRAPH, {**result, "run_id": run_id, "thread_id": thread_id,
-                                             "owner": owner, "request": state["request"],
-                                             "agent_history": history, "photo_features": state["photo_features"]})
+        # 같은 조회 결과(캐시)에 같은 대화 맥락(이미 한 요청·거절·사진)이면 에이전트 판단도 같으므로
+        # 검토 결과를 맥락별로 캐시해 LLM 을 다시 부르지 않는다. 맥락이 바뀌면(사진 요청 후 등) 키가 달라져 새로 판단한다.
+        review_key = review_cache_key(key, history, state["photo_features"]) if cache else None
+        reviewed = await cache.get(review_key) if cache_hit and review_key else None
+        if reviewed is not None:
+            result = {**result, **reviewed}
+            decision = dict(result.get("agent_decision") or {})
+            if decision:
+                result["agent_decision"] = {**decision, "cached": True}
+            result["trace"] = ["cache_hit", "review_cache_hit"]
+            review_cache_hit = True
+        else:
+            # 잠금을 놓은 뒤 검토한다. 동일 조건도 매 대화의 입력·사진·거절·질문 이력으로 새로 판단한다.
+            result = await execute(REVIEW_GRAPH, {**result, "run_id": run_id, "thread_id": thread_id,
+                                                 "owner": owner, "request": state["request"],
+                                                 "agent_history": history, "photo_features": state["photo_features"]})
+            if review_key and not result.get("error") and result.get("status") in ("completed", "partial", "awaiting_input"):
+                await cache.put(review_key, {k: result.get(k) for k in (*RUN_FIELDS, *AGENT_FIELDS)
+                                             if k not in ("run_id", "thread_id", "cache_key", "cache_hit",
+                                                          "tool_calls", "trace", "reflections", "reflection_count",
+                                                          "retry_count", "context_summary", "memory_used")})
     run = {k: result.get(k) for k in RUN_FIELDS}
     run["run_id"] = run_id
     run["thread_id"] = thread_id
     run["cache_key"] = key if cache else None
     run["cache_hit"] = cache_hit
+    run["review_cache_hit"] = review_cache_hit
     run["data_source"] = result.get("data_source") or deps["animal"].source
     run["created_at"] = _now()
     run["elapsed_ms"] = round((time.perf_counter() - started) * 1000)
