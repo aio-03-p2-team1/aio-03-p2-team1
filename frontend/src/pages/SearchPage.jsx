@@ -16,7 +16,7 @@ import { photoAnalysisError, photoErrorMessage, photoSelectionError, photoTraitL
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 import { takePostSearch } from '../lib/postSearch.js'
-import { inputReviewView } from '../lib/inputReview.js'
+import { inputReviewView, kindCheckText } from '../lib/inputReview.js'
 import runningRaccoon from '../assets/running-raccoon.png'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
@@ -577,6 +577,7 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
         <div className="panel question-panel" role="status">
           <strong>조금만 더 알려 주세요</strong>
           <ul>{run.questions?.map((q) => <li key={q.field + q.message}>{q.message}</li>)}</ul>
+          {kindCheckText(run.kind_check) && <p className="fineprint">{kindCheckText(run.kind_check)}</p>}
           <p className="fineprint">위 입력란에 내용을 추가한 뒤 다시 검색해 주세요.</p>
           {widenRadiusStep && (
             <button type="button" className="primary-button" onClick={() => onWidenRadius(widenRadiusStep.step)}>
@@ -606,6 +607,7 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
       )}
       {/* 검색 범위 지도는 실종 지역 선택 창 하나로 통일하고, 결과 위에는 한 줄 요약만 둔다. */}
       {radius && <p className="radius-summary">{radiusText(radius)}</p>}
+      {kindCheckText(run.kind_check) && <p className="radius-summary">{kindCheckText(run.kind_check)}</p>}
       {run.status !== 'failed' && candidates.length === 0 && (
         <p className="empty-results">
           이 조건에서는 닮은 후보를 찾지 못했어요. 보호 중인 동물이 없다는 뜻은 아니에요. 지역·기간을 바꿔 다시 찾아보세요.

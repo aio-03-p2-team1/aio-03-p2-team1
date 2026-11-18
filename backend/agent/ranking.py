@@ -164,16 +164,53 @@ def _date_gap(item: dict[str, Any], lost_date: str | None) -> int:
         return 10**6
 
 
+# 품종 계열: '토이 푸들'·'미니어쳐 푸들'·'푸들'은 같은 푸들 계열로 본다(크기 접두어만 뗀다).
+SIZE_PREFIXES = ("토이", "미니어쳐", "미니어처", "미디엄", "스탠다드", "스탠더드", "미니")
+MIX_WORDS = ("믹스", "혼종", "잡종")
+
+
+def _compact(text: str | None) -> str:
+    return "".join((text or "").split()).casefold()
+
+
+def breed_family(name: str | None) -> str:
+    key = _compact(name)
+    for prefix in SIZE_PREFIXES:
+        if key.startswith(prefix) and len(key) > len(prefix):
+            return key[len(prefix):]
+    return key
+
+
+def breed_matches(item: dict[str, Any], breed: str | None) -> bool:
+    """품종을 지정한 검색에서 이 공고를 남길지. 0건이 되더라도 엉뚱한 품종은 확실히 뺀다.
+
+    - 같은 계열(크기 접두어 차이)은 남긴다.
+    - 믹스 공고는 공고 품종이나 특이사항에 찾는 품종 계열 이름이 있을 때만 남긴다(예: 특이사항 '푸들 믹스').
+    - 품종이 기타·미상인 공고는 뺀다.
+    """
+    target = breed_family(breed)
+    if not target:
+        return True
+    name = _compact(item.get("breed"))
+    if breed_family(name) == target:
+        return True
+    if any(word in target for word in MIX_WORDS):  # 믹스견 자체를 찾는 검색은 같은 이름만
+        return False
+    if any(word in name for word in MIX_WORDS):
+        return target in name or target in _compact(item.get("special_mark"))
+    return False
+
+
 def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     lost_date = criteria.get("lost_date") or criteria.get("start_date")
-    # 구조동물 API는 품종 코드를 검색 파라미터로 받지 않으므로, 조회한 공고의
-    # 품종명과 코드 목록에서 확인한 이름을 대조해 RRF 전에 후보를 좁힌다.
-    breed = "".join((criteria.get("breed") or "").split()).casefold()
+    # 구조동물 API는 품종 코드를 검색 파라미터로 받지 않을 수 있으므로(글에서 찾은 품종·조회 실패 후 재조회),
+    # 조회한 공고의 품종명을 품종 계열로 대조해 RRF 전에 후보를 확실히 좁힌다.
+    breed = criteria.get("breed")
     out = []
     for item in items:
         if in_scope(item, criteria):
             continue
-        if breed and "".join((item.get("breed") or "").split()).casefold() != breed:
+        if breed and not breed_matches(item, breed):
             continue
         evidence = score(item, criteria, features)
         out.append({**item, "evidence": evidence, "score": evidence["score"]})
