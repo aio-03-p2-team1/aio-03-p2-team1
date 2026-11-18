@@ -1,0 +1,4167 @@
+{
+  "measured_at": "2026-11-18T15:34:31.263082+09:00",
+  "before_revision": "bc828ceed6a7e6f87963640e4826e3398df30aa2",
+  "after_revision": "55771ab00fa6b26f32fa3800d392bb3997c922de",
+  "model": "gpt-6-luna",
+  "snapshot_sha256": "0352b6340ccd123d06637063adb3719d819f42ba2617969937291125d4b62902",
+  "inputs": {
+    "captured_at": "2026-11-18T06:34:31.263082+00:00",
+    "model": "gpt-6-luna",
+    "public_total_count": 5,
+    "public_snapshot_count": 5,
+    "regions": [
+      {
+        "code": "6110000",
+        "name": "서울특별시"
+      }
+    ],
+    "cases": [
+      {
+        "id": "public_notices",
+        "origin": "fixed_public_snapshot",
+        "criteria": {
+          "species": "dog",
+          "region": "서울특별시",
+          "lost_date": "2026-11-16",
+          "description": "갈색 곱슬털 암컷 소형견"
+        },
+        "items": [
+          {
+            "id": "411324202600665",
+            "species": "dog",
+            "breed": "웰시 코기 펨브로크",
+            "color": "갈색&흰색",
+            "sex": "F",
+            "size": null,
+            "weight": "14(Kg)",
+            "age": "2017(년생)",
+            "special_mark": "소유주 확인됨",
+            "happen_date": "2026-11-18",
+            "care": {}
+          },
+          {
+            "id": "411320202600588",
+            "species": "dog",
+            "breed": "스피츠",
+            "color": "흰색",
+            "sex": "M",
+            "size": null,
+            "weight": "8(Kg)",
+            "age": "2024(년생)",
+            "special_mark": "온순함",
+            "happen_date": "2026-11-17",
+            "care": {}
+          },
+          {
+            "id": "411311202600667",
+            "species": "dog",
+            "breed": "믹스견",
+            "color": "흰색&황갈색",
+            "sex": "M",
+            "size": null,
+            "weight": "5.6(Kg)",
+            "age": "2018(년생)",
+            "special_mark": "겁. 경계. 약간의 방어적 입질. 일체형 검정 목줄+리드줄. 꼬리 단미 안됨. 털 상태 양호. ",
+            "happen_date": "2026-11-16",
+            "care": {}
+          },
+          {
+            "id": "411316202600857",
+            "species": "dog",
+            "breed": "믹스견",
+            "color": "흰색",
+            "sex": "F",
+            "size": null,
+            "weight": "5.2(Kg)",
+            "age": "2026(년생)",
+            "special_mark": "온순. 얌전. 친화적. 배꼽 탈장. 오른쪽 눈꺼풀 상처. 꼬리 단미 안됨. 털 상태 양호. ",
+            "happen_date": "2026-11-16",
+            "care": {}
+          },
+          {
+            "id": "411316202600856",
+            "species": "dog",
+            "breed": "푸들",
+            "color": "검정색",
+            "sex": "M",
+            "size": null,
+            "weight": "3.3(Kg)",
+            "age": "2022(년생)",
+            "special_mark": "겁. 경계. 방어적 입질. 치석. 피부 각질. 꼬리 단미 안됨. 털 약간 때탐. 칩 있음.",
+            "happen_date": "2026-11-16",
+            "care": {}
+          }
+        ]
+      },
+      {
+        "id": "ambiguous",
+        "origin": "synthetic_fixture",
+        "criteria": {
+          "species": "dog",
+          "region": "서울특별시",
+          "lost_date": "2026-11-16",
+          "description": "믹스견 흰색"
+        },
+        "items": [
+          {
+            "id": "synthetic-0",
+            "species": "dog",
+            "breed": "믹스견",
+            "color": "흰색",
+            "sex": "Q",
+            "happen_date": "2026-11-18",
+            "special_mark": "흰색 믹스견",
+            "care": {}
+          },
+          {
+            "id": "synthetic-1",
+            "species": "dog",
+            "breed": "믹스견",
+            "color": "흰색",
+            "sex": "Q",
+            "happen_date": "2026-11-18",
+            "special_mark": "흰색 믹스견",
+            "care": {}
+          },
+          {
+            "id": "synthetic-2",
+            "species": "dog",
+            "breed": "믹스견",
+            "color": "흰색",
+            "sex": "Q",
+            "happen_date": "2026-11-18",
+            "special_mark": "흰색 믹스견",
+            "care": {}
+          }
+        ]
+      },
+      {
+        "id": "empty",
+        "origin": "synthetic_fixture",
+        "criteria": {
+          "species": "dog",
+          "region": "서울특별시",
+          "lost_date": "2026-11-16",
+          "description": "갈색 곱슬털 암컷",
+          "color": "갈색",
+          "sex": "F",
+          "size": "소형"
+        },
+        "items": [],
+        "photo": {
+          "suitable": true,
+          "species": "dog",
+          "colors": [
+            "갈색"
+          ]
+        }
+      }
+    ]
+  },
+  "public_snapshot_count": 5,
+  "public_total_count": 5,
+  "scope": "real feature LLM, embeddings and agent; frozen identical notices; no public HTTP, Kakao, browser or production storage latency",
+  "repeats": 3,
+  "max_agent_calls": 60,
+  "dependencies": {
+    "langgraph": "1.2.20",
+    "langchain-openai": "1.7.4",
+    "openai": "3.49.0",
+    "fakeredis": "2.40.0"
+  },
+  "rows": [
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 1,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 2,
+        "reruns": 1,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "update_features",
+            "args": {
+              "colors": [
+                "갈색"
+              ],
+              "sex": "F",
+              "marks": null,
+              "reason": "원문에 나온 갈색 털과 암컷 조건이 검색에 빠져 있어 반영하겠습니다."
+            },
+            "ok": true
+          },
+          {
+            "step": "rerun_result",
+            "low": false,
+            "reasons": [],
+            "candidates": 5,
+            "top_similarity": 0.665,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 2,
+            "tool": "request_photo",
+            "args": {
+              "reason": "갈색과 암컷 조건은 맞지만 곱슬털과 소형 여부를 후보만으로 확인하기 어려워 사진을 보내 주세요."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": false,
+        "reasons": [],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.665,
+          "similarity_gap": 0.06,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 14089.85,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 3549.68
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 703.7
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1710,
+            "output_tokens": 137,
+            "total_tokens": 1847,
+            "input_token_details": {
+              "cache_creation": 1584,
+              "cache_read": 0
+            },
+            "output_token_details": {
+              "reasoning": 80
+            }
+          },
+          "elapsed_ms": 4997.25
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 189.0
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2709,
+            "output_tokens": 183,
+            "total_tokens": 2892,
+            "input_token_details": {
+              "cache_creation": 999,
+              "cache_read": 1584
+            },
+            "output_token_details": {
+              "reasoning": 133
+            }
+          },
+          "elapsed_ms": 4525.1
+        }
+      ],
+      "agent_calls": 2,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 1,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 2,
+        "reruns": 1,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "update_features",
+            "args": {
+              "colors": [
+                "갈색"
+              ],
+              "sex": "F",
+              "marks": [
+                "곱슬털",
+                "소형견"
+              ],
+              "reason": "원문에 나온 갈색 털과 암컷, 곱슬털·소형견 조건을 검색에 반영하겠습니다."
+            },
+            "ok": true
+          },
+          {
+            "step": "rerun_result",
+            "low": false,
+            "reasons": [],
+            "candidates": 5,
+            "top_similarity": 0.664,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 2,
+            "tool": "request_photo",
+            "args": {
+              "reason": "상위 후보에서 곱슬털 여부를 확인하기 어려워 사진을 보내 주시면 더 정확히 비교하겠습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": false,
+        "reasons": [],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.664,
+          "similarity_gap": 0.06,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 12036.1,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2959.31
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 197.15
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1710,
+            "output_tokens": 138,
+            "total_tokens": 1848,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1584
+            },
+            "output_token_details": {
+              "reasoning": 67
+            }
+          },
+          "elapsed_ms": 3680.01
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 164.77
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2725,
+            "output_tokens": 227,
+            "total_tokens": 2952,
+            "input_token_details": {
+              "cache_creation": 1015,
+              "cache_read": 1584
+            },
+            "output_token_details": {
+              "reasoning": 182
+            }
+          },
+          "elapsed_ms": 4940.66
+        }
+      ],
+      "agent_calls": 2,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 1,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "털의 곱슬 정도와 후보의 외형을 비교할 수 있도록 사진을 보내 주세요."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.565,
+          "similarity_gap": 0.009,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 8645.29,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2445.1
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 348.89
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2452,
+            "output_tokens": 264,
+            "total_tokens": 2716,
+            "input_token_details": {
+              "cache_creation": 906,
+              "cache_read": 1420
+            },
+            "output_token_details": {
+              "reasoning": 224
+            }
+          },
+          "elapsed_ms": 5814.85
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 1,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "털의 곱슬 정도와 후보의 외형을 비교할 수 있도록 사진을 보내 주세요."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.565,
+          "similarity_gap": 0.009,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 1.82,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "믹스견은 글만으로 구분하기 어려워 사진을 보내 주시면 더 정확히 찾아볼게요."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 6419.51,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2091.2
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 287.98
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1404,
+            "output_tokens": 113,
+            "total_tokens": 1517,
+            "input_token_details": {
+              "cache_creation": 1278,
+              "cache_read": 0
+            },
+            "output_token_details": {
+              "reasoning": 68
+            }
+          },
+          "elapsed_ms": 4013.96
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "믹스견 후보들이 설명만으로 구분되지 않아 사진을 보내 주시면 더 정확히 찾아보겠습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 4990.29,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2105.23
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 189.54
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1404,
+            "output_tokens": 73,
+            "total_tokens": 1477,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1278
+            },
+            "output_token_details": {
+              "reasoning": 29
+            }
+          },
+          "elapsed_ms": 2676.54
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "믹스견 후보들이 서로 비슷해 사진으로 외형을 비교하면 구분에 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 5265.28,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2207.27
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 336.64
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2137,
+            "output_tokens": 103,
+            "total_tokens": 2240,
+            "input_token_details": {
+              "cache_creation": 591,
+              "cache_read": 1420
+            },
+            "output_token_details": {
+              "reasoning": 61
+            }
+          },
+          "elapsed_ms": 2693.89
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "믹스견 후보들이 서로 비슷해 사진으로 외형을 비교하면 구분에 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 1.83,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": null,
+      "confidence": null,
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "reflect",
+        "ask"
+      ],
+      "elapsed_ms": 3044.57,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 3027.58
+        }
+      ],
+      "agent_calls": 0,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": null,
+      "confidence": null,
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "reflect",
+        "ask"
+      ],
+      "elapsed_ms": 1910.51,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1899.34
+        }
+      ],
+      "agent_calls": 0,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "empty_result"
+            ],
+            "candidates": 0,
+            "top_similarity": null,
+            "top_id": null,
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 지역에서 조회된 공고가 없어 다른 지역까지 검색해도 괜찮으실까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "empty_result"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": true,
+          "marks_given": true,
+          "photo_given": true,
+          "feature_count": 4,
+          "candidates": 0,
+          "top_similarity": null,
+          "similarity_gap": null,
+          "top_matched": 0,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "ask"
+      ],
+      "elapsed_ms": 5785.6,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2144.28
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1885,
+            "output_tokens": 122,
+            "total_tokens": 2007,
+            "input_token_details": {
+              "cache_creation": 339,
+              "cache_read": 1420
+            },
+            "output_token_details": {
+              "reasoning": 74
+            }
+          },
+          "elapsed_ms": 3619.09
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 1,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "empty_result"
+            ],
+            "candidates": 0,
+            "top_similarity": null,
+            "top_id": null,
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 지역에서 조회된 공고가 없어 다른 지역까지 검색해도 괜찮으실까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "empty_result"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": true,
+          "marks_given": true,
+          "photo_given": true,
+          "feature_count": 4,
+          "candidates": 0,
+          "top_similarity": null,
+          "similarity_gap": null,
+          "top_matched": 0,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 1.66,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 2,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 후보에서 곱슬털과 갈색 암컷에 잘 맞는 공고가 없어 다른 지역까지 찾아볼까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.565,
+          "similarity_gap": 0.009,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "ask"
+      ],
+      "elapsed_ms": 9110.35,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 3045.14
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 305.86
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2462,
+            "output_tokens": 278,
+            "total_tokens": 2740,
+            "input_token_details": {
+              "cache_creation": 916,
+              "cache_read": 1420
+            },
+            "output_token_details": {
+              "reasoning": 224
+            }
+          },
+          "elapsed_ms": 5719.59
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 2,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 후보에서 곱슬털과 갈색 암컷에 잘 맞는 공고가 없어 다른 지역까지 찾아볼까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.565,
+          "similarity_gap": 0.009,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 1.77,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 2,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 2,
+        "reruns": 1,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "update_features",
+            "args": {
+              "colors": [
+                "갈색"
+              ],
+              "sex": "F",
+              "marks": [
+                "곱슬털"
+              ],
+              "reason": "원문에 나온 갈색과 암컷 조건을 검색에 반영하겠습니다."
+            },
+            "ok": true
+          },
+          {
+            "step": "rerun_result",
+            "low": false,
+            "reasons": [],
+            "candidates": 5,
+            "top_similarity": 0.665,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 2,
+            "tool": "request_photo",
+            "args": {
+              "reason": "상위 후보에서 곱슬털 여부를 확인하기 어려워 사진을 보내 주시면 더 정확히 비교할 수 있습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": false,
+        "reasons": [],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.665,
+          "similarity_gap": 0.06,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 11100.39,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2312.07
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 312.85
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1705,
+            "output_tokens": 155,
+            "total_tokens": 1860,
+            "input_token_details": {
+              "cache_creation": 1579,
+              "cache_read": 0
+            },
+            "output_token_details": {
+              "reasoning": 99
+            }
+          },
+          "elapsed_ms": 4216.92
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 180.74
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2727,
+            "output_tokens": 168,
+            "total_tokens": 2895,
+            "input_token_details": {
+              "cache_creation": 1022,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 122
+            }
+          },
+          "elapsed_ms": 4032.32
+        }
+      ],
+      "agent_calls": 2,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 2,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_info",
+        "steps": 2,
+        "reruns": 1,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "update_features",
+            "args": {
+              "colors": [
+                "갈색"
+              ],
+              "sex": "F",
+              "marks": [
+                "곱슬털"
+              ],
+              "reason": "말씀하신 갈색 털과 암컷, 곱슬털을 검색 조건에 반영하겠습니다."
+            },
+            "ok": true
+          },
+          {
+            "step": "rerun_result",
+            "low": false,
+            "reasons": [],
+            "candidates": 5,
+            "top_similarity": 0.664,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 2,
+            "tool": "request_info",
+            "args": {
+              "field": "size",
+              "reason": "소형견인지 확인하면 후보를 더 정확히 가릴 수 있습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": false,
+        "reasons": [],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.664,
+          "similarity_gap": 0.06,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 9629.39,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2730.56
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 175.25
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1705,
+            "output_tokens": 119,
+            "total_tokens": 1824,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 56
+            }
+          },
+          "elapsed_ms": 2944.23
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 162.76
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2691,
+            "output_tokens": 144,
+            "total_tokens": 2835,
+            "input_token_details": {
+              "cache_creation": 986,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 105
+            }
+          },
+          "elapsed_ms": 3568.91
+        }
+      ],
+      "agent_calls": 2,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "믹스견 후보들이 서로 비슷해 사진을 보면 구분하는 데 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 6233.12,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1652.23
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 617.44
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2137,
+            "output_tokens": 68,
+            "total_tokens": 2205,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 2011
+            },
+            "output_token_details": {
+              "reasoning": 29
+            }
+          },
+          "elapsed_ms": 3934.01
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "믹스견 후보들이 서로 비슷해 사진을 보면 구분하는 데 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 1.7,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "흰색 믹스견 후보들이 설명과 모두 비슷해 사진으로 생김새를 비교하면 구분에 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 5689.45,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2183.54
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 286.61
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1404,
+            "output_tokens": 74,
+            "total_tokens": 1478,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1278
+            },
+            "output_token_details": {
+              "reasoning": 26
+            }
+          },
+          "elapsed_ms": 3195.01
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "흰색 믹스견 후보들이 설명만으로 구분되지 않아 사진을 보내 주시면 더 정확히 찾아볼 수 있습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 6055.9,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1747.89
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 150.55
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1404,
+            "output_tokens": 71,
+            "total_tokens": 1475,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1278
+            },
+            "output_token_details": {
+              "reasoning": 23
+            }
+          },
+          "elapsed_ms": 4136.83
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "empty_result"
+            ],
+            "candidates": 0,
+            "top_similarity": null,
+            "top_id": null,
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 지역에서 확인된 공고가 없어, 다른 지역까지 검색해도 괜찮을까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "empty_result"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": true,
+          "marks_given": true,
+          "photo_given": true,
+          "feature_count": 4,
+          "candidates": 0,
+          "top_similarity": null,
+          "similarity_gap": null,
+          "top_matched": 0,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "ask"
+      ],
+      "elapsed_ms": 5827.54,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1862.51
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1885,
+            "output_tokens": 122,
+            "total_tokens": 2007,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1759
+            },
+            "output_token_details": {
+              "reasoning": 74
+            }
+          },
+          "elapsed_ms": 3940.14
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "empty_result"
+            ],
+            "candidates": 0,
+            "top_similarity": null,
+            "top_id": null,
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 지역에서 확인된 공고가 없어, 다른 지역까지 검색해도 괜찮을까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "empty_result"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": true,
+          "marks_given": true,
+          "photo_given": true,
+          "feature_count": 4,
+          "candidates": 0,
+          "top_similarity": null,
+          "similarity_gap": null,
+          "top_matched": 0,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 2.03,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": null,
+      "confidence": null,
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "reflect",
+        "ask"
+      ],
+      "elapsed_ms": 2006.95,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1986.77
+        }
+      ],
+      "agent_calls": 0,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 2,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": null,
+      "confidence": null,
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "reflect",
+        "ask"
+      ],
+      "elapsed_ms": 2206.71,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2196.79
+        }
+      ],
+      "agent_calls": 0,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 3,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 2,
+        "reruns": 1,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "update_features",
+            "args": {
+              "colors": [
+                "갈색"
+              ],
+              "sex": "F",
+              "marks": [
+                "곱슬털"
+              ],
+              "reason": "원문에 있는 갈색 털과 암컷 조건을 검색에 반영하고 곱슬털 특징도 명시하겠습니다."
+            },
+            "ok": true
+          },
+          {
+            "step": "rerun_result",
+            "low": false,
+            "reasons": [],
+            "candidates": 5,
+            "top_similarity": 0.664,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 2,
+            "tool": "request_photo",
+            "args": {
+              "reason": "상위 후보가 원문의 곱슬털과 소형견 특징에 맞는지 사진으로 확인하면 구분에 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": false,
+        "reasons": [],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.664,
+          "similarity_gap": 0.06,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 12858.62,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2701.02
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 401.2
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1705,
+            "output_tokens": 136,
+            "total_tokens": 1841,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 69
+            }
+          },
+          "elapsed_ms": 5412.35
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 224.04
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2708,
+            "output_tokens": 161,
+            "total_tokens": 2869,
+            "input_token_details": {
+              "cache_creation": 1003,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 113
+            }
+          },
+          "elapsed_ms": 4048.9
+        }
+      ],
+      "agent_calls": 2,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 3,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 2,
+        "reruns": 1,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "update_features",
+            "args": {
+              "colors": [
+                "갈색"
+              ],
+              "sex": "F",
+              "marks": [
+                "곱슬털"
+              ],
+              "reason": "원문에 나온 갈색과 암컷 조건이 검색에 반영되지 않아 추가하겠습니다."
+            },
+            "ok": true
+          },
+          {
+            "step": "rerun_result",
+            "low": false,
+            "reasons": [],
+            "candidates": 5,
+            "top_similarity": 0.665,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 2,
+            "tool": "request_photo",
+            "args": {
+              "reason": "상위 후보의 곱슬털 여부와 체형이 설명과 맞는지 사진으로 확인하고 싶습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": false,
+        "reasons": [],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.665,
+          "similarity_gap": 0.06,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 15651.54,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1916.4
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 176.89
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1705,
+            "output_tokens": 200,
+            "total_tokens": 1905,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 141
+            }
+          },
+          "elapsed_ms": 7077.99
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 463.82
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2772,
+            "output_tokens": 281,
+            "total_tokens": 3053,
+            "input_token_details": {
+              "cache_creation": 1067,
+              "cache_read": 1579
+            },
+            "output_token_details": {
+              "reasoning": 237
+            }
+          },
+          "elapsed_ms": 5977.02
+        }
+      ],
+      "agent_calls": 2,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 3,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "곱슬털과 체구를 공고만으로 확인하기 어려워 사진을 보내주시면 더 정확히 찾을 수 있습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.565,
+          "similarity_gap": 0.009,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 8864.04,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 3069.37
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 315.79
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2462,
+            "output_tokens": 370,
+            "total_tokens": 2832,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 2336
+            },
+            "output_token_details": {
+              "reasoning": 322
+            }
+          },
+          "elapsed_ms": 5443.58
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 3,
+      "input_origin": "fixed_public_snapshot",
+      "input_sha256": "a2ab017db5b17d50fc9b1be65d5836d522a9e5dc40ae547d3cc379e9750c825e",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 5,
+      "top_id": "411324202600665",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "flat_top"
+            ],
+            "candidates": 5,
+            "top_similarity": 0.565,
+            "top_id": "411324202600665",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "곱슬털과 체구를 공고만으로 확인하기 어려워 사진을 보내주시면 더 정확히 찾을 수 있습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 3,
+          "candidates": 5,
+          "top_similarity": 0.565,
+          "similarity_gap": 0.009,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 2.35,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "흰색 믹스견 후보들이 글만으로는 구분하기 어려워 사진을 보내 주시면 다시 비교해 보겠습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 8162.05,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2974.64
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 339.26
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1404,
+            "output_tokens": 79,
+            "total_tokens": 1483,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1278
+            },
+            "output_token_details": {
+              "reasoning": 31
+            }
+          },
+          "elapsed_ms": 4823.07
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "흰색 믹스견 후보들이 설명만으로 구분되지 않아 사진을 보내주시면 더 정확히 비교할 수 있습니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v2",
+        "confidence_version": "conf-v1(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v1(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 5749.4,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1853.78
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 192.16
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1404,
+            "output_tokens": 81,
+            "total_tokens": 1485,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1278
+            },
+            "output_token_details": {
+              "reasoning": 33
+            }
+          },
+          "elapsed_ms": 3686.8
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "후보들이 모두 흰색 믹스견으로 비슷해 사진을 보면 구분에 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "locate",
+        "finalize"
+      ],
+      "elapsed_ms": 7002.22,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2015.03
+        },
+        {
+          "category": "embedding",
+          "ok": true,
+          "elapsed_ms": 282.94
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 2137,
+            "output_tokens": 109,
+            "total_tokens": 2246,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 2011
+            },
+            "output_token_details": {
+              "reasoning": 66
+            }
+          },
+          "elapsed_ms": 4677.38
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "9e3ea1f4d63f62fdc17fb13038308f5b35d8d1075dcba7abf2ce95580dfb79d8",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "completed",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 3,
+      "top_id": "synthetic-0",
+      "decision": {
+        "source": "llm",
+        "final_tool": "request_photo",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "mixed_breed",
+              "flat_top"
+            ],
+            "candidates": 3,
+            "top_similarity": 0.822,
+            "top_id": "synthetic-0",
+            "top_matched": 2
+          },
+          {
+            "step": 1,
+            "tool": "request_photo",
+            "args": {
+              "reason": "후보들이 모두 흰색 믹스견으로 비슷해 사진을 보면 구분에 도움이 됩니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "mixed_breed",
+          "flat_top"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": true,
+          "color_given": true,
+          "sex_given": false,
+          "size_given": false,
+          "marks_given": true,
+          "photo_given": false,
+          "feature_count": 2,
+          "candidates": 3,
+          "top_similarity": 0.822,
+          "similarity_gap": 0.0,
+          "top_matched": 2,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 1.64,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "before",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": null,
+      "confidence": null,
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "reflect",
+        "ask"
+      ],
+      "elapsed_ms": 2196.56,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 2178.3
+        }
+      ],
+      "agent_calls": 0,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "before",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v2",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": null,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": null,
+      "confidence": null,
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "reflect",
+        "ask"
+      ],
+      "elapsed_ms": 1508.63,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1492.9
+        }
+      ],
+      "agent_calls": 0,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "after",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": false,
+      "review_cache_hit": false,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "empty_result"
+            ],
+            "candidates": 0,
+            "top_similarity": null,
+            "top_id": null,
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "조회된 공고가 없어 다른 지역까지 넓혀 찾아봐도 될까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "empty_result"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": true,
+          "marks_given": true,
+          "photo_given": true,
+          "feature_count": 4,
+          "candidates": 0,
+          "top_similarity": null,
+          "similarity_gap": null,
+          "top_matched": 0,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "analyze",
+        "context",
+        "breed",
+        "plan",
+        "execute",
+        "radius",
+        "rank",
+        "validate",
+        "validate",
+        "agent",
+        "agent_tools",
+        "ask"
+      ],
+      "elapsed_ms": 5380.97,
+      "events": [
+        {
+          "category": "features",
+          "ok": true,
+          "elapsed_ms": 1675.74
+        },
+        {
+          "category": "agent",
+          "ok": true,
+          "usage": {
+            "input_tokens": 1885,
+            "output_tokens": 135,
+            "total_tokens": 2020,
+            "input_token_details": {
+              "cache_creation": 0,
+              "cache_read": 1759
+            },
+            "output_token_details": {
+              "reasoning": 91
+            }
+          },
+          "elapsed_ms": 3670.95
+        }
+      ],
+      "agent_calls": 1,
+      "snapshot_reads": 1,
+      "valid_measurement": true
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "after",
+      "repeat": 3,
+      "input_origin": "synthetic_fixture",
+      "input_sha256": "dff366def0dde9746e63826f8cdf89f8725a0ed1d08ed0e4666680e5c74b504d",
+      "public_api_http_calls": 0,
+      "model": "gpt-6-luna",
+      "feature_prompt": "feature-extract-v6",
+      "agent_prompt": "search-agent-v4",
+      "status": "awaiting_input",
+      "error_code": null,
+      "cache_hit": true,
+      "review_cache_hit": true,
+      "candidate_count": 0,
+      "top_id": null,
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "empty_result"
+            ],
+            "candidates": 0,
+            "top_similarity": null,
+            "top_id": null,
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "조회된 공고가 없어 다른 지역까지 넓혀 찾아봐도 될까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)",
+        "cached": true
+      },
+      "confidence": {
+        "low": true,
+        "reasons": [
+          "empty_result"
+        ],
+        "signals": {
+          "breed_given": false,
+          "breed_mixed": false,
+          "color_given": true,
+          "sex_given": true,
+          "size_given": true,
+          "marks_given": true,
+          "photo_given": true,
+          "feature_count": 4,
+          "candidates": 0,
+          "top_similarity": null,
+          "similarity_gap": null,
+          "top_matched": 0,
+          "top_unknown": 0
+        },
+        "version": "conf-v2(임시 기준)"
+      },
+      "questions": [
+        "region"
+      ],
+      "trace": [
+        "cache_hit",
+        "review_cache_hit"
+      ],
+      "elapsed_ms": 2.1,
+      "events": [],
+      "agent_calls": 0,
+      "snapshot_reads": 0,
+      "valid_measurement": true
+    }
+  ],
+  "summary": [
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "after",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 6166.87,
+      "median_ms": 6233.12,
+      "min_ms": 5265.28,
+      "max_ms": 7002.22,
+      "agent_calls": 3,
+      "cache_hits": 0,
+      "statuses": [
+        "completed"
+      ]
+    },
+    {
+      "case": "ambiguous",
+      "phase": "cold",
+      "variant": "before",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 6757.0,
+      "median_ms": 6419.51,
+      "min_ms": 5689.45,
+      "max_ms": 8162.05,
+      "agent_calls": 3,
+      "cache_hits": 0,
+      "statuses": [
+        "completed"
+      ]
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "after",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 1.72,
+      "median_ms": 1.7,
+      "min_ms": 1.64,
+      "max_ms": 1.83,
+      "agent_calls": 0,
+      "cache_hits": 3,
+      "statuses": [
+        "completed"
+      ]
+    },
+    {
+      "case": "ambiguous",
+      "phase": "warm",
+      "variant": "before",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 5598.53,
+      "median_ms": 5749.4,
+      "min_ms": 4990.29,
+      "max_ms": 6055.9,
+      "agent_calls": 3,
+      "cache_hits": 0,
+      "statuses": [
+        "completed"
+      ]
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "after",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 5664.7,
+      "median_ms": 5785.6,
+      "min_ms": 5380.97,
+      "max_ms": 5827.54,
+      "agent_calls": 3,
+      "cache_hits": 0,
+      "statuses": [
+        "awaiting_input"
+      ]
+    },
+    {
+      "case": "empty",
+      "phase": "cold",
+      "variant": "before",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 2416.03,
+      "median_ms": 2196.56,
+      "min_ms": 2006.95,
+      "max_ms": 3044.57,
+      "agent_calls": 0,
+      "cache_hits": 0,
+      "statuses": [
+        "awaiting_input"
+      ]
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "after",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 1.93,
+      "median_ms": 2.03,
+      "min_ms": 1.66,
+      "max_ms": 2.1,
+      "agent_calls": 0,
+      "cache_hits": 3,
+      "statuses": [
+        "awaiting_input"
+      ]
+    },
+    {
+      "case": "empty",
+      "phase": "warm",
+      "variant": "before",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 1875.28,
+      "median_ms": 1910.51,
+      "min_ms": 1508.63,
+      "max_ms": 2206.71,
+      "agent_calls": 0,
+      "cache_hits": 0,
+      "statuses": [
+        "awaiting_input"
+      ]
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "after",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 8873.23,
+      "median_ms": 8864.04,
+      "min_ms": 8645.29,
+      "max_ms": 9110.35,
+      "agent_calls": 3,
+      "cache_hits": 0,
+      "statuses": [
+        "awaiting_input",
+        "completed"
+      ]
+    },
+    {
+      "case": "public_notices",
+      "phase": "cold",
+      "variant": "before",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 12682.95,
+      "median_ms": 12858.62,
+      "min_ms": 11100.39,
+      "max_ms": 14089.85,
+      "agent_calls": 6,
+      "cache_hits": 0,
+      "statuses": [
+        "completed"
+      ]
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "after",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 1.98,
+      "median_ms": 1.82,
+      "min_ms": 1.77,
+      "max_ms": 2.35,
+      "agent_calls": 0,
+      "cache_hits": 3,
+      "statuses": [
+        "awaiting_input",
+        "completed"
+      ]
+    },
+    {
+      "case": "public_notices",
+      "phase": "warm",
+      "variant": "before",
+      "runs": 3,
+      "valid_runs": 3,
+      "mean_ms": 12439.01,
+      "median_ms": 12036.1,
+      "min_ms": 9629.39,
+      "max_ms": 15651.54,
+      "agent_calls": 6,
+      "cache_hits": 0,
+      "statuses": [
+        "completed"
+      ]
+    }
+  ]
+}
