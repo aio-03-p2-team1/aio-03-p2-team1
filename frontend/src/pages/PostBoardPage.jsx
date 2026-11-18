@@ -76,19 +76,34 @@ export default function PostBoardPage() {
   }, [user])
 
   return (
-    <main className="page-main">
-      <div className="breadcrumb">
-        <Link to="/">메인</Link><span aria-hidden="true">›</span><span>실종 정보 게시판</span>
-      </div>
+    <main className="page-main board-page">
       <div className="page-heading board-heading">
-        <div>
-          <span className="eyebrow">함께 찾는 공간</span>
-          <h1>실종 정보 게시판</h1>
-          <p>잃어버린 반려동물의 정보를 등록하고, 회원 글과 공공데이터 분실 신고를 함께 살펴보세요.</p>
-        </div>
+        <h1>실종 정보 게시판</h1>
         <button type="button" className="primary-button" onClick={openForm} aria-expanded={formOpen}>
           실종 정보 등록
         </button>
+        <div className="filters">
+          <label>
+            동물 종류
+            <select value={species} onChange={changeFilter(setSpecies)}>
+              <option value="all">전체</option>
+              {POST_SPECIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+          <label>
+            지역
+            <select value={region} onChange={changeFilter(setRegion)} disabled={!regions.list.length}>
+              <option value="">전체 지역</option>
+              {regions.list.map((r) => <option key={r.code} value={r.name}>{r.name}</option>)}
+            </select>
+          </label>
+          <label>
+            기간
+            <select value={days} onChange={changeFilter((v) => setDays(Number(v)))}>
+              {BOARD_PERIODS.map((d) => <option key={d} value={d}>최근 {d}일</option>)}
+            </select>
+          </label>
+        </div>
       </div>
 
       {formOpen && user && (
@@ -103,38 +118,7 @@ export default function PostBoardPage() {
         />
       )}
 
-      <section className="board-list-section" aria-labelledby="posts-title">
-        <div className="section-head">
-          <div>
-            <h2 id="posts-title">등록된 실종 정보</h2>
-            <p>
-              게시글을 선택하면 상세 페이지로 이동합니다.
-              {data && ` ${boardSummary(data)}`}
-            </p>
-          </div>
-          <div className="filters">
-            <label>
-              동물 종류
-              <select value={species} onChange={changeFilter(setSpecies)}>
-                <option value="all">전체</option>
-                {POST_SPECIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-            </label>
-            <label>
-              지역
-              <select value={region} onChange={changeFilter(setRegion)} disabled={!regions.list.length}>
-                <option value="">전체 지역</option>
-                {regions.list.map((r) => <option key={r.code} value={r.name}>{r.name}</option>)}
-              </select>
-            </label>
-            <label>
-              기간
-              <select value={days} onChange={changeFilter((v) => setDays(Number(v)))}>
-                {BOARD_PERIODS.map((d) => <option key={d} value={d}>최근 {d}일</option>)}
-              </select>
-            </label>
-          </div>
-        </div>
+      <section className="board-list-section" aria-label="실종 정보 게시글 목록">
         {/* 분실 신고를 못 불러왔으면 회원 글만 보이는 이유를 알린다(빈 결과와 구분) */}
         {status === 'ready' && ['unavailable', 'loading'].includes(data.lost?.status) && (
           <p className="fineprint" role="status">{data.lost.message}</p>
@@ -172,6 +156,12 @@ export default function PostBoardPage() {
           <Pagination page={data.page} pages={data.pages} onChange={(n) => { setPage(n); window.scrollTo(0, 0) }} />
         )}
       </section>
+      {status === 'ready' && (
+        <div className="board-data-note" aria-label="게시판 조회 정보">
+          <span>회원 글과 공공데이터 분실 신고를 함께 보여 줘요</span>
+          <span>{boardSummary(data)}</span>
+        </div>
+      )}
     </main>
   )
 }
