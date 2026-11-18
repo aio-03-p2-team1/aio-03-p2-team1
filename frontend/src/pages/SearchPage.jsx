@@ -60,6 +60,9 @@ export default function SearchPage() {
   const [history, setHistory] = useState([])
   // 에이전트 요청(사진·추가 정보)에 대한 답. 설명 글을 고치지 않고 칩으로 따로 보관해 검색 조건에 합친다.
   const [answers, setAnswers] = useSearchViewState('answers', {})
+  // 입력 검토 질문(글·사진 모순)에 항목별로 고른 값. 새 검색 결과가 오면 비운다.
+  const [reviewPicks, setReviewPicks] = useState({})
+  useEffect(() => { setReviewPicks({}) }, [run?.run_id])
   const [declined, setDeclined] = useSearchViewState('declined', []) // '잘 모르겠어요'한 항목(같은 대화에서 다시 묻지 않음)
   const descriptionRef = useRef(null)
   const photoInputRef = useRef(null)
@@ -333,8 +336,14 @@ export default function SearchPage() {
   // 요청 카드의 보기를 고르면 칩으로 남기고 같은 대화로 바로 다시 찾는다.
   // 입력 검토가 물은 글·사진 모순에 답한다. 사진 값을 고르면 정리한 글의 그 항목 줄을 바꾸고,
   // 글을 고르면 그대로 두고, 같은 대화로 바로 다시 찾는다(같은 대화에서는 다시 묻지 않는다).
+  // 물은 항목이 여럿이면 모두 고른 뒤에 한 번에 반영하고 찾는다(하나만 눌렀을 때 바로 검색하지 않음).
   function chooseReviewValue(conflict, side) {
-    const description = side === 'photo' ? applyPhotoValue(form.description, conflict) : form.description
+    const asked = (run?.input_review?.conflicts || []).filter((c) => conflictChoices(c).length)
+    const picks = { ...reviewPicks, [conflict.item]: side }
+    setReviewPicks(picks)
+    if (asked.some((c) => !picks[c.item])) return
+    const description = asked.reduce(
+      (text, c) => (picks[c.item] === 'photo' ? applyPhotoValue(text, c) : text), form.description)
     if (description !== form.description) {
       setForm((current) => ({ ...current, description }))
       setPhotoFeatureText('')
@@ -455,7 +464,7 @@ export default function SearchPage() {
               </div>
             )}
             {/* 검색 에이전트의 입력 검토 멘트는 특징과 상황 입력란 바로 위에 보여 준다. */}
-            {!busy && <InputReview review={run?.input_review} awaiting={run?.status === 'awaiting_input'} onChoose={chooseReviewValue} />}
+            {!busy && <InputReview review={run?.input_review} awaiting={run?.status === 'awaiting_input'} picks={reviewPicks} onChoose={chooseReviewValue} />}
             <div className="search-description">
               <div className="search-description-head">
                 <label htmlFor="search-description-input">특징과 상황</label>
@@ -646,7 +655,7 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
 }
 
 // 검색 에이전트의 입력 검토: 글과 사진 특징에서 무엇을 합치고 무엇이 어긋났는지, 어떻게 찾을지 보여 준다.
-function InputReview({ review, awaiting, onChoose }) {
+function InputReview({ review, awaiting, picks = {}, onChoose }) {
   const view = inputReviewView(review)
   if (!view) return null
   // 모순을 물은 상태면 항목마다 버튼 두 개를 둔다. 글 값이 '기타'처럼 뭉뚱그린 값이면 '예(사진 값 넣기)/아니오',
@@ -659,12 +668,19 @@ function InputReview({ review, awaiting, onChoose }) {
       {choices.length > 0 && (
         <div className="input-review-choices">
           {choices.map((c) => (
-            <div key={c.item} className="input-review-choice">
+            <div key={c.item} className="input-review-choice" role="group" aria-label={`${c.item} 고르기`}>
               {conflictChoices(c).map((choice) => (
-                <button key={choice.side} type="button" className="secondary-button" onClick={() => onChoose(c, choice.side)}>{choice.label}</button>
+                <button key={choice.side} type="button" aria-pressed={picks[c.item] === choice.side}
+                  className={`secondary-button${picks[c.item] === choice.side ? ' is-picked' : ''}`}
+                  onClick={() => onChoose(c, choice.side)}>{choice.label}</button>
               ))}
             </div>
           ))}
+          {choices.length > 1 && (
+            <p className="input-review-progress">
+              {choices.length}개 항목을 모두 고르면 바로 찾아요 ({choices.filter((c) => picks[c.item]).length}/{choices.length})
+            </p>
+          )}
         </div>
       )}
       {view.lines.length > 0 && <ul>{view.lines.map((line) => <li key={line}>{line}</li>)}</ul>}

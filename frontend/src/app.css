@@ -91,6 +91,8 @@ button[disabled]{opacity:.65;cursor:progress}
 .input-review-question{margin:6px 0 0;font-weight:700;color:#8a4b2a}
 .input-review-choices{display:flex;flex-direction:column;gap:8px;margin-top:10px}
 .input-review-choice{display:flex;flex-wrap:wrap;gap:8px}
+.input-review-choice .is-picked{border-color:#b9892f;background:#fbefd2;color:#5e4413;font-weight:800}
+.input-review-progress{margin:0;color:#7d756c;font-size:13px}
 .input-review ul{margin:6px 0 0;padding-left:18px;color:#6a6358;font-size:13px}
 .field-block{display:flex;flex-direction:column;gap:6px;min-width:0}
 .field-label{color:#59554e;font-size:12px;font-weight:700}
