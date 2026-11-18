@@ -154,6 +154,19 @@ def test_input_review_asks_before_search_once_per_thread():
     assert len(animal.calls) == 1
 
 
+def test_widen_follow_up_without_description_reuses_the_thread_text():
+    """넓히기 버튼은 바뀐 조건만 보낸다. 같은 대화의 글로 다시 검토하고 오류 없이 이어 찾는다(기존 다듬기 422 회귀)."""
+    reviewer = FakeReviewer("search")
+    animal = FakeAnimal(pages=[[api_item(1)]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    first = search(d, {"species": "dog", "region": "경기도", "lost_date": START, "description": "흰색 강아지, 빨간 목줄"})
+    second = search(d, {"region": "전체", "radius_step": 3}, thread_id=first["thread_id"])
+    assert second["status"] == "completed" and not second.get("error")
+    assert second["criteria"]["description"] == "흰색 강아지, 빨간 목줄"
+    assert reviewer.calls[-1][0] == "흰색 강아지, 빨간 목줄"
+
+
 def test_input_review_failure_is_reported_not_hidden():
     d = deps(FakeAnimal(pages=[[api_item(1)]]))
     d["llm"] = FakeReviewer(error="llm_timeout")
