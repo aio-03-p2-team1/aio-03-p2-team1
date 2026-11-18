@@ -150,7 +150,7 @@ class FakeTextRefiner:
             description="[털색]: 흰색\n[특징]: 빨간 목줄\n[상황]: 서울에서 실종",
             features={"colors": ["흰색"], "sex": "", "marks": ["빨간 목줄"]},
             photo_features=None,
-            prompt_version="feature-refine-v1",
+            prompt_version="feature-refine-v2",
         )
 
 
