@@ -3,6 +3,7 @@
 .account-area{margin-left:auto;display:flex;align-items:center;gap:10px}
 .account-area .account-link{margin-left:0;cursor:pointer;font:inherit;font-size:13px;font-weight:800}
 .account-name{color:#6f5730;font-size:13px;font-weight:700;white-space:nowrap}
+.account-name,.profile-name{font-family:'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',system-ui,sans-serif}
 .site-header>a.account-link{margin-left:auto}
 
 .state-box{padding:22px;border:1px solid #eee8df;border-radius:12px;background:#fff;color:#6e665b;font-size:14px;line-height:1.6}
