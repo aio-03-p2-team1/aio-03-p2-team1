@@ -62,6 +62,30 @@ def test_breed_code_filters_candidates_before_ranking():
     assert animal.calls[0]["rows"] == 1000
 
 
+def test_breed_code_rejected_by_api_retries_without_breed_and_filters_results():
+    async def resolve_code(species, code):
+        return {"kind_code": code, "name": "페르시안"}
+
+    # 첫 호출(품종 코드 포함)은 응답 오류, 품종 없이 다시 부르면 정상 응답
+    animal = FakeAnimal(pages=[[api_item(1, kindNm="페르시안"), api_item(2, kindNm="코리안숏헤어")]], errors=["animal_response"])
+    d = deps(animal)
+    d["breed_normalizer"] = type("Normalizer", (), {"resolve_code": staticmethod(resolve_code)})()
+    run = search(d, {"species": "dog", "region": "전체", "lost_date": START, "breed_code": "00214"})
+    assert run["status"] == "completed" and not run.get("error")
+    assert [c["kind"] for c in animal.calls] == ["00214", None]
+    searches = [c for c in run["tool_calls"] if c["tool"] == "animal_search"]
+    assert [c["outcome"] for c in searches] == ["animal_response", "ok"]
+    assert "품종 조건 없이" in searches[1]["reason"]
+    assert [candidate["breed"] for candidate in run["candidates"]] == ["페르시안"]
+
+
+def test_api_response_error_without_breed_code_still_fails():
+    animal = FakeAnimal(pages=[[api_item(1)]], errors=["animal_response"])
+    run = search(deps(animal), {"species": "dog", "region": "전체", "lost_date": START})
+    assert run["status"] == "failed" and run["error"]["code"] == "animal_response"
+    assert len(animal.calls) == 1
+
+
 def test_invalid_dates_detected():
     d = deps()
     future = (date.today() + timedelta(days=3)).isoformat()
