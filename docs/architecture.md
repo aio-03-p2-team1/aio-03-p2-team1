@@ -33,7 +33,7 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/notices/:id` 공고 상세 | `img/dasimanna-cards-detail.html` | `GET /notices/{id}` 또는 `GET /runs/{run_id}` + 위치 API. '구조 위치' 옆 🗺️ 버튼은 구조 위치 글(`happen_place`)을 브라우저 카카오 SDK(주소 검색 → 장소 검색)로 찾아 작은 지도 창에 표시(좌표 저장 안 함, 못 찾으면 카카오맵 링크만). 창 밖 클릭·Esc 로 닫힘 |
 | `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches/refine`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 텍스트 다듬기는 원문과 선택 사진을 한 번에 모델에 전달하고 템플릿 설명·검색 특징을 사용자별 Redis 임시 저장소에 둔다. 다음 검색은 `refinement_id`를 보내 그래프의 특징 재추출 호출을 건너뛴다. 게시판에서 넘어온 글은 다듬은 텍스트로 자동 검색한다. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
 | `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다, `GET /posters`(내가 만든 전단지, 누르면 `/posters/{id}` 상세) |
-| `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 20건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
+| `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 21건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
 | `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET/PATCH /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자). 본문 아래 음성(최대 3개)과 댓글: 음성 `POST/GET/DELETE /posts/{id}/voices...`, 댓글 `GET/POST /posts/{id}/comments`, `DELETE /posts/{id}/comments/{comment_id}` |
 | `/board/lost/:lostId` 분실 신고 상세 | 위와 같은 화면 | `GET /posts/lost/{id}`(공공데이터 분실 신고, 개인정보 제외). 삭제 없음. 댓글은 계산된 분실 신고 ID(`lost-YYYYMMDD-해시`)로 같은 댓글 API 사용 |
 | `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST /poster/assets/from-post`(게시판 글 사진 복사), `POST/GET/PUT/DELETE /posters/{id}`. 저장 후에는 편집기에 머물며 '저장되었습니다.'만 안내한다(새 전단지는 주소만 `?edit={id}` 로 바꿔 다음 저장이 수정이 되게 함) |
@@ -212,6 +212,7 @@ flowchart LR
 ```
 
 - 통신 실패(타임아웃·네트워크·서버 오류·호출 제한)는 `execute` 안에서 0.5초·1초 백오프로 최대 2회 재시도하고 `retry_count` 로 센다. 판단 오류 수정은 `reflection_count` 로 따로 센다.
+- 품종 코드(`kind`)를 넣은 조회가 응답 오류(`animal_response`)로 끝나면 `execute` 안에서 품종 조건만 빼고 한 번 다시 조회한다. 품종은 `rank` 에서 공고 품종명과 대조해 거른다. 두 호출 모두 `tool_calls` 에 남기고, 실패 호출에는 API 결과 코드(`result_code`)를 함께 기록한다. 품종 코드 없이 난 응답 오류는 그대로 실패로 끝낸다.
 - 인증 오류는 재시도하지 않는다. 실패를 샘플 데이터로 덮지 않는다.
 - 조건을 조용히 완화하지 않는다. 빈 결과에서 지역 확대는 사용자 확인을 받는다.
 

@@ -252,6 +252,7 @@ async def execute(state: SearchState, config) -> dict:
         "species": criteria["species"],
         "kind": criteria.get("breed_code"),
     }
+    reason = "공고 조회"
     while page <= 1:
         attempt = 0
         while True:
@@ -270,7 +271,14 @@ async def execute(state: SearchState, config) -> dict:
                     rows=ROWS_PER_PAGE,
                 )
             except AnimalApiError as exc:
-                calls.append(_call("animal_search", args, exc.code, "공고 조회", attempt=attempt))
+                calls.append(_call("animal_search", args, exc.code, reason, attempt=attempt, result_code=exc.result_code))
+                # 공공데이터가 일부 품종 코드(예: 5자리 코드)를 받지 못하고 오류를 돌려주는 경우가 있다.
+                # 검색 전체를 실패시키지 않고 품종 조건만 빼고 한 번 다시 조회한다. 품종은 받은 결과에서 거른다.
+                if exc.code == "animal_response" and args_base.get("kind"):
+                    args_base = {**args_base, "kind": None}
+                    reason = "품종 코드로 조회 실패: 품종 조건 없이 다시 조회(품종은 결과에서 거름)"
+                    attempt = 0
+                    continue
                 if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
                     await sleep(RETRY_BACKOFF_SECONDS[attempt])
                     attempt += 1
@@ -278,7 +286,7 @@ async def execute(state: SearchState, config) -> dict:
                     continue
                 error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code), "page": page}
                 break
-            calls.append(_call("animal_search", args, "ok", "공고 조회", count=len(result.items), attempt=attempt))
+            calls.append(_call("animal_search", args, "ok", reason, count=len(result.items), attempt=attempt))
             items.extend(result.items[:ROWS_PER_PAGE])
             total = result.total_count
             fetched_at = result.fetched_at
