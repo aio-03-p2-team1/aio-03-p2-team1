@@ -28,7 +28,9 @@ PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
 
 def _deps(ctx: AppContext) -> dict[str, Any]:
     return {"settings": ctx.settings, "store": ctx.store, "animal": ctx.animal, "kakao": ctx.kakao, "llm": ctx.llm,
-            "embedder": ctx.embedder, "search_cache": ctx.search_cache, "search_agent": ctx.search_agent, "breed_normalizer": ctx.breed_normalizer}
+            "embedder": ctx.embedder, "search_cache": ctx.search_cache, "search_agent": ctx.search_agent, "breed_normalizer": ctx.breed_normalizer,
+            # 기타 동물 공고 사진으로 동물 종류를 확인할 때 쓰는 사진 모델(키만 있으면 로컬 모드에서도 있음)
+            "photo_llm": ctx.photo_llm}
 
 
 def page_result(run, page=1, page_size=20):

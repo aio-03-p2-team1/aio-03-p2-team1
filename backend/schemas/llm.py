@@ -6,7 +6,11 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from backend.normalization.animal_kind import KIND_NAMES, UNKNOWN
 from backend.schemas.common import Color, MAX_IMAGE_BYTES, PhotoAnalysisReason, Sex, Species, StrictSchema
+
+AnimalKind = Literal[*KIND_NAMES, ""]
+AnimalKindLabel = Literal[*KIND_NAMES, UNKNOWN]
 
 
 class FeatureExtractionRequest(StrictSchema):
@@ -63,6 +67,8 @@ class InputReviewModelResponse(StrictSchema):
     action: Literal["search", "ask"]
     question: str
     message: str
+    breed_mention: str  # 글에 적힌 품종 이름(원문 그대로). 없으면 빈 문자열
+    animal_kind: AnimalKind  # 기타 동물일 때 글이 말하는 동물 종류. 아니면 빈 문자열
 
 
 class InputReviewResult(StrictSchema):
@@ -73,7 +79,20 @@ class InputReviewResult(StrictSchema):
     action: Literal["search", "ask"]
     question: str
     message: str
+    breed_mention: str = ""
+    animal_kind: str = ""
     prompt_version: str
+
+
+class AnimalKindVote(StrictSchema):
+    index: int
+    kind: AnimalKindLabel
+
+
+class AnimalKindModelResponse(StrictSchema):
+    """기타 동물 공고 사진 여러 장의 동물 종류를 한 번에 판단한다(사진 순서 번호 기준)."""
+
+    labels: list[AnimalKindVote]
 
 
 class PhotoConfidence(StrictSchema):

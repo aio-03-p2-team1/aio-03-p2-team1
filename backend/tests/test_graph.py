@@ -91,12 +91,14 @@ class FakeReviewer:
 
     model = "fake-review"
 
-    def __init__(self, *actions, error=None):
+    def __init__(self, *actions, error=None, breed_mention="", animal_kind=""):
         self.actions = list(actions) or ["search"]
         self.error = error
+        self.breed_mention = breed_mention
+        self.animal_kind = animal_kind
         self.calls = []
 
-    async def review_input(self, description, photo=None):
+    async def review_input(self, description, photo=None, species=""):
         from backend.agent.llm import LlmError
         from backend.schemas.llm import InputReviewResult
 
@@ -112,7 +114,9 @@ class FakeReviewer:
             action=action,
             question="글에는 흰색, 사진에는 갈색으로 보여요. 어느 쪽이 맞나요?" if action == "ask" else "",
             message="흰색이 글과 사진에 겹쳐 하나로 합쳤어요.",
-            prompt_version="input-review-v1",
+            breed_mention=self.breed_mention,
+            animal_kind=self.animal_kind,
+            prompt_version="input-review-v2",
         )
 
 
@@ -165,6 +169,74 @@ def test_widen_follow_up_without_description_reuses_the_thread_text():
     assert second["status"] == "completed" and not second.get("error")
     assert second["criteria"]["description"] == "흰색 강아지, 빨간 목줄"
     assert reviewer.calls[-1][0] == "흰색 강아지, 빨간 목줄"
+
+
+def test_breed_written_in_text_filters_strictly_even_to_zero():
+    """글에만 '푸들'을 적어도 푸들 계열만 남긴다. 리트리버·품종 미상·푸들이 아닌 믹스는 뺀다."""
+    reviewer = FakeReviewer("search", breed_mention="푸들")
+    animal = FakeAnimal(pages=[[
+        api_item(1, kindNm="토이 푸들"), api_item(2, kindNm="골든 리트리버"), api_item(3, kindNm="기타"),
+        api_item(4, kindNm="믹스견", specialMark="푸들 믹스로 보임"), api_item(5, kindNm="믹스견", specialMark="갈색 단모"),
+    ]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    run = search(d, {"species": "dog", "region": "전체", "lost_date": START, "description": "푸들, 갈색 곱슬털"})
+    assert run["status"] == "completed"
+    assert sorted(c["breed"] for c in run["candidates"]) == ["믹스견", "토이 푸들"]
+    assert run["criteria"]["breed"] == "푸들" and not run["criteria"].get("breed_code")
+    assert animal.calls[0]["kind"] is None  # 글에서 찾은 품종은 API 품종 코드로 좁히지 않고 계열로 거른다
+    assert "푸들 계열만" in run["input_review"]["filters"][0]
+
+    only_retriever = FakeAnimal(pages=[[api_item(1, kindNm="골든 리트리버")]])
+    d2 = deps(only_retriever)
+    d2["llm"] = FakeReviewer("search", breed_mention="푸들")
+    empty = search(d2, {"species": "dog", "region": "전체", "lost_date": START, "description": "푸들"})
+    assert empty["candidates"] == []  # 엉뚱한 품종을 보여 주느니 0건
+
+
+class FakeKindClassifier:
+    model = "fake-vision"
+
+    def __init__(self, kinds):
+        self.kinds = list(kinds)
+        self.batches = []
+
+    async def classify_animal_photos(self, images):
+        self.batches.append(len(images))
+        return [self.kinds.pop(0) for _ in images]
+
+
+def test_etc_animal_kind_is_checked_by_text_then_photo(monkeypatch):
+    from io import BytesIO
+    from PIL import Image
+    from backend.tools import remote_photo
+
+    buffer = BytesIO()
+    Image.new("RGB", (40, 40), (200, 200, 200)).save(buffer, format="PNG")
+
+    async def fake_fetch(url, **_):
+        return buffer.getvalue()
+
+    monkeypatch.setattr(remote_photo, "fetch_photo", fake_fetch)
+    etc = {"upKindCd": "429900", "upKindNm": "기타", "kindNm": "기타축종"}
+    animal = FakeAnimal(pages=[[
+        api_item(1, specialMark="사랑앵무 초록색", **etc),           # 글로 새
+        api_item(2, specialMark="송아지 생후 2개월", **etc),          # 글로 소 → 제외
+        api_item(3, specialMark="없음", **etc),                    # 사진으로 새
+        api_item(4, specialMark="귀여운 아이", **etc),               # 사진으로 토끼 → 제외
+        api_item(5, specialMark="없음", popfile1="", popfile2="", **etc),  # 사진 없음 → 모름 → 제외
+    ]])
+    classifier = FakeKindClassifier(["새", "토끼"])
+    d = deps(animal)
+    d["llm"] = FakeReviewer("search", animal_kind="새")
+    d["photo_llm"] = classifier
+    run = search(d, {"species": "etc", "region": "전체", "lost_date": START, "description": "초록색 앵무새"})
+    assert run["status"] == "completed"
+    assert sorted(c["id"] for c in run["candidates"]) == ["448000000001", "448000000003"]
+    assert classifier.batches == [2]  # 글로 모르는 공고만 사진으로, 한 번에
+    assert run["kind_check"] == {"target": "새", "checked": 5, "kept": 2, "kept_by_text": 1, "kept_by_photo": 1,
+                                 "other_kind": 2, "unknown": 1}
+    assert [c["outcome"] for c in run["tool_calls"] if c["tool"] == "animal_kind_photo"] == ["ok"]
 
 
 def test_input_review_failure_is_reported_not_hidden():

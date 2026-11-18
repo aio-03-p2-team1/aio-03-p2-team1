@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
 import time
 from datetime import date, datetime, timezone
@@ -13,6 +14,9 @@ from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
 from backend.agent import assess as assess_rules
 from backend.agent import photo_store
+from backend.agent.photo import decode_and_validate, shrink_for_analysis
+from backend.normalization.animal_kind import UNKNOWN as KIND_UNKNOWN, kind_from_text
+from backend.tools import remote_photo
 from backend.agent import search_agent as agent_mod
 from backend.agent.ranking import TOP_K, confidence_signals, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
@@ -141,7 +145,7 @@ async def context(state: SearchState, config) -> dict:
         # 검색 에이전트의 입력 검토: 글과 사진 분석 특징의 중복·모순·문맥을 정리하고, 바로 찾을지 먼저 물을지 정한다.
         started = time.perf_counter()
         try:
-            review = await llm.review_input(criteria.get("description") or "", photo)
+            review = await llm.review_input(criteria.get("description") or "", photo, criteria.get("species") or "")
         except LlmError as exc:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("input_review", {"model": llm.model}, exc.code, "글·사진 특징 검토")]
@@ -167,6 +171,19 @@ async def context(state: SearchState, config) -> dict:
             "photo_used": usable_photo,
             "prompt_version": review.prompt_version,
         }
+        # 글에 적힌 품종·동물 종류는 고른 조건과 같이 확실히 거른다(0건이 되더라도). 고른 품종이 있으면 그것을 쓴다.
+        filters = []
+        mention = (review.breed_mention or "").strip()
+        if mention and criteria.get("species") in ("dog", "cat") and not criteria.get("breed_code") and not criteria.get("breed"):
+            criteria["breed"] = mention
+            criteria["breed_source"] = "text"
+            origin["breed"] = "review"
+            filters.append(f"글에 '{mention}'이(가) 있어 {mention} 계열만 찾아요.")
+        if criteria.get("species") == "etc" and review.animal_kind:
+            criteria["animal_kind"] = review.animal_kind
+            filters.append(f"글에 적힌 동물({review.animal_kind})만 공고 글과 사진으로 확인해 찾아요.")
+        update["input_review"]["filters"] = filters
+        update["context_summary"]["origin"] = origin
         if action == "ask":
             update["questions"] = [{"field": "input_review", "message": review.question}]
         update["tool_calls"] = [_call("input_review", {"model": llm.model}, "ok", "글·사진 특징 검토", ms=ms,
@@ -234,6 +251,10 @@ async def normalize_breed(state: SearchState, config) -> dict:
             return {"criteria": criteria, "trace": ["breed"], "error": {"code": "breed_normalization_failed", "message": "품종을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."}}
         if row:
             criteria.update(breed=row["name"], breed_code=row["kind_code"])
+    if criteria.get("breed_source") == "text":
+        # 글에서 찾은 품종은 공고 API 품종 코드로 좁히지 않고(같은 계열 '푸들'·'토이 푸들'을 모두 받기 위해)
+        # 조회한 공고의 품종명을 계열로 대조해 거른다(rank).
+        criteria["breed_code"] = None
     if code and not criteria.get("breed_code"):
         return {"criteria": criteria, "trace": ["breed"], "error": {
             "code": "invalid_breed_code", "message": "선택한 축종의 품종 코드를 확인해 주세요."}}
@@ -410,8 +431,11 @@ async def rank_node(state: SearchState, config) -> dict:
             seen.add(item["id"])
             unique.append(item)
         items = unique
-    candidates = rank(items, state["criteria"], state.get("llm_features"))
     deps = _deps(config)
+    kind_update: dict[str, Any] = {}
+    if state["criteria"].get("species") == "etc" and state["criteria"].get("animal_kind"):
+        items, kind_update = await _filter_animal_kind(items, state, deps)
+    candidates = rank(items, state["criteria"], state.get("llm_features"))
     embedder = deps.get("embedder")
     scores = state.get("semantic_scores")
     calls = []
@@ -432,8 +456,69 @@ async def rank_node(state: SearchState, config) -> dict:
         except (LlmError, ValueError) as exc:
             code = exc.code if isinstance(exc, LlmError) else "llm_response"
             return {"candidates": [], "error": {"code": code, "message": ERROR_MESSAGES.get(code, code)}, "trace": ["rank"]}
+    calls = [*kind_update.pop("tool_calls", []), *calls]
     return {"candidates": candidates, "semantic_scores": scores, "ranking_method": "rrf" if embedder else "sample_lexical",
-            "tool_calls": calls, "pending_fix": None, "trace": ["rank"]}
+            "tool_calls": calls, "pending_fix": None, "trace": ["rank"], **kind_update}
+
+
+KIND_PHOTO_LIMIT = 24  # 한 검색에서 사진으로 확인할 기타 동물 공고 수 상한(시간·비용 제한)
+KIND_PHOTO_BATCH = 8   # 한 번의 모델 호출에 넣는 사진 수
+KIND_PHOTO_SIDE = 512  # 종류 판별용 사진 크기(긴 변)
+
+
+async def _filter_animal_kind(items: list[dict[str, Any]], state: SearchState, deps: dict[str, Any]):
+    """기타 동물 검색: 공고 글(특이사항)로 먼저 동물 종류를 가리고, 글로 모르는 공고만 사진으로 판단한다.
+
+    찾는 종류로 확인된 공고만 남긴다. 글·사진 모두 모르면 뺀다(확실히 거른다, 0건이 될 수 있음).
+    판단 결과는 공고 번호별로 보관해 다시 정렬할 때 다시 부르지 않는다.
+    """
+    target = state["criteria"]["animal_kind"]
+    labels: dict[str, dict[str, str]] = dict(state.get("kind_labels") or {})
+    for item in items:
+        if item["id"] not in labels:
+            kind = kind_from_text(" ".join(str(item.get(k) or "") for k in ("special_mark", "description", "breed")))
+            if kind != KIND_UNKNOWN:
+                labels[item["id"]] = {"kind": kind, "by": "text"}
+    llm = deps.get("photo_llm") or deps.get("llm")
+    pending = [item for item in items if item["id"] not in labels and item.get("photos")][:KIND_PHOTO_LIMIT]
+    calls: list[dict[str, Any]] = []
+    if pending and llm is not None and hasattr(llm, "classify_animal_photos"):
+        started = time.perf_counter()
+
+        async def load(item):
+            try:
+                raw = await remote_photo.fetch_photo(item["photos"][0])
+                data, mime = decode_and_validate(base64.b64encode(raw).decode("ascii"))
+                return shrink_for_analysis(data, mime, max_side=KIND_PHOTO_SIDE)
+            except Exception:  # 사진을 못 받거나 이미지가 아니면 그 공고는 '모름'(빠짐)
+                return None
+
+        loaded = await asyncio.gather(*(load(item) for item in pending))
+        ready = [(item, image) for item, image in zip(pending, loaded) if image is not None]
+        outcome = "ok"
+        for start in range(0, len(ready), KIND_PHOTO_BATCH):
+            batch = ready[start:start + KIND_PHOTO_BATCH]
+            try:
+                kinds = await llm.classify_animal_photos([image for _, image in batch])
+            except LlmError as exc:
+                outcome = exc.code
+                break
+            for (item, _), kind in zip(batch, kinds):
+                labels[item["id"]] = {"kind": kind, "by": "photo"}
+        calls.append(_call("animal_kind_photo", {"photos": len(ready), "requested": len(pending)}, outcome,
+                           "기타 동물 공고 사진으로 동물 종류 확인", ms=round((time.perf_counter() - started) * 1000)))
+    kept = [item for item in items if (labels.get(item["id"]) or {}).get("kind") == target]
+    by = [(labels.get(item["id"]) or {}).get("by") for item in kept]
+    summary = {
+        "target": target,
+        "checked": len(items),
+        "kept": len(kept),
+        "kept_by_text": by.count("text"),
+        "kept_by_photo": by.count("photo"),
+        "other_kind": sum(1 for item in items if (labels.get(item["id"]) or {}).get("kind") not in (None, target, KIND_UNKNOWN)),
+        "unknown": sum(1 for item in items if (labels.get(item["id"]) or {}).get("kind") in (None, KIND_UNKNOWN)),
+    }
+    return kept, {"kind_labels": labels, "kind_check": summary, "tool_calls": calls}
 
 
 async def validate(state: SearchState, config) -> dict:

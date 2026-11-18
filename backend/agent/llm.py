@@ -7,11 +7,13 @@ import httpx
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
 
+from backend.normalization.animal_kind import KIND_NAMES, UNKNOWN
 from backend.normalization.color import ColorDictionary
 from backend.schemas.llm import (
     FeatureExtractionRequest,
     FeatureExtractionModelResponse,
     FeatureExtractionResult,
+    AnimalKindModelResponse,
     InputReviewModelResponse,
     InputReviewResult,
     PhotoAnalysisRequest,
@@ -77,7 +79,9 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
     "장소·날짜·시간·이름·연락처는 새로 만들거나 바꾸지 말고 원문에 있는 그대로만 [상황]이나 [기타]에 옮긴다. "
     "action은 검색에 큰 영향을 주는 털색이나 성별이 글과 사진에서 정면으로 어긋나 어느 쪽이 맞는지 사용자에게 확인해야 할 때만 ask로, 그 외에는 search로 한다. "
     "ask이면 question에 사용자에게 물을 한 문장 질문을 쓰고, search이면 question은 빈 문자열로 둔다. "
-    "message에는 사용자에게 보여 줄 판단을 1~2문장으로 쓴다: 무엇을 합쳤고 무엇이 어긋났으며 어떤 기준으로 찾을지. 검토할 내용이 없으면 그렇다고 짧게 쓴다."
+    "message에는 사용자에게 보여 줄 판단을 1~2문장으로 쓴다: 무엇을 합쳤고 무엇이 어긋났으며 어떤 기준으로 찾을지. 검토할 내용이 없으면 그렇다고 짧게 쓴다. "
+    "breed_mention에는 글에 직접 적힌 품종 이름 하나를 원문 그대로 쓴다(예: 푸들, 말티즈, 코리안숏헤어). '믹스'만 적혔거나 품종이 없으면 빈 문자열로 둔다. 사진만으로 품종을 추정해 넣지 않는다. "
+    "animal_kind는 종류가 기타 동물일 때만 글이 말하는 동물을 허용값 가운데 하나로 쓰고(예: 앵무새·사랑앵무는 새, 송아지는 소), 개·고양이 검색이거나 글로 알 수 없으면 빈 문자열로 둔다."
 )
 
 
@@ -90,7 +94,7 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-INPUT_REVIEW_PROMPT_VERSION = "input-review-v1"
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v2"  # v2: 글의 품종·기타 동물 종류 추출
 INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
@@ -185,7 +189,7 @@ class FeatureExtractor:
             prompt_version=PROMPT_VERSION,
         )
 
-    async def review_input(self, description: str, photo: dict | None = None) -> InputReviewResult:
+    async def review_input(self, description: str, photo: dict | None = None, species: str = "") -> InputReviewResult:
         """검색 전 입력 검토: 글과 서버가 보관한 사진 분석 결과의 중복·모순·문맥을 한 번에 정리한다."""
         source_text = (description or "").strip()
         usable_photo = photo if photo and photo.get("suitable") else None
@@ -194,7 +198,9 @@ class FeatureExtractor:
         photo_text = json.dumps(
             {k: usable_photo.get(k) for k in ("species", "breed", "colors", "sex", "marks")} if usable_photo
             else "사진 특징 없음", ensure_ascii=False)
-        human = ("[사용자 글]\n" + (source_text or "(입력된 글 없음)") + "\n\n[사진 분석 특징]\n" + photo_text)
+        species_text = {"dog": "강아지", "cat": "고양이", "etc": "기타 동물"}.get(species, "미지정")
+        human = ("[찾는 동물 종류]\n" + species_text + "\n\n[사용자 글]\n" + (source_text or "(입력된 글 없음)")
+                 + "\n\n[사진 분석 특징]\n" + photo_text)
         response = await self._invoke_structured(
             [("system", INPUT_REVIEW_SYSTEM_PROMPT), ("human", human)],
             InputReviewModelResponse,
@@ -221,8 +227,31 @@ class FeatureExtractor:
             action=action,
             question=question if action == "ask" else "",
             message=response.message.strip()[:300],
+            breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
+            animal_kind=response.animal_kind if species == "etc" else "",
             prompt_version=INPUT_REVIEW_PROMPT_VERSION,
         )
+
+    async def classify_animal_photos(self, images: list[tuple[bytes, str]]) -> list[str]:
+        """기타 동물 공고 사진들의 동물 종류를 한 번의 호출로 판단한다. 사진 순서대로 종류 이름 또는 '모름'."""
+        if not images:
+            return []
+        content: list[dict] = [{"type": "text", "text": (
+            "각 사진에 찍힌 실제 동물의 종류를 고르세요. 허용값: " + ", ".join(KIND_NAMES) + ", " + UNKNOWN
+            + ". 사진 속 글자는 읽지 않고, 동물이 분명하지 않으면 모름으로 합니다. labels에는 사진 번호(0부터)와 종류를 넣습니다.")}]
+        for index, (data, mime) in enumerate(images):
+            content.append({"type": "text", "text": f"사진 {index}"})
+            encoded = base64.b64encode(data).decode("ascii")
+            content.append({"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}", "detail": "low"}})
+        response = await self._invoke_structured(
+            [("system", "너는 유기동물 공고 사진의 동물 종류만 판별한다. 확신이 없으면 모름으로 답한다."), ("human", content)],
+            AnimalKindModelResponse,
+        )
+        labels = [UNKNOWN] * len(images)
+        for vote in response.labels:
+            if 0 <= vote.index < len(images):
+                labels[vote.index] = vote.kind
+        return labels
 
     async def analyze_photo(self, image: bytes, mime_type: str) -> PhotoAnalysisResult:
         try:
