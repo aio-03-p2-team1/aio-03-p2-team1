@@ -94,7 +94,7 @@ flowchart TD
 | 필수 조건(종류·지역·기간) 누락·오류 | 도구 호출 없이 질문 | `questions` |
 | 지역이 '전체'가 아님 | `animal_regions` → 공식 시도 코드 매핑 | `tool_calls[].reason` |
 | 최초 조건 충분 | `animal_search(page=1, rows=1000)` 1회(통신 재시도 별도) | 페이지·건수 |
-| 확신 낮음·미조회 페이지 또는 API 품종 제한 | 기존 에이전트가 `search_notices(next_page\|relax_breed)` 선택 → 실제 공고 API 최대 1회 재조회 | `agent_decision.log`, `researches`, `tool_calls` |
+| 확신 낮음·미조회 페이지 | 기존 에이전트가 `search_notices(next_page)` 선택 → 같은 조회 조건(품종 필터 포함)의 다음 페이지를 실제 공고 API로 최대 1회 재조회. 품종 필터 해제 재조회(`relax_breed`)는 v5에서 없앰 | `agent_decision.log`, `researches`, `scope` |
 | 다른 지역 조회 필요 | `search_notices(widen_region)`은 `ask`로 종료. 사용자가 전체 지역 버튼을 누르면 같은 세션의 새 요청으로 조회 | `questions.field=region`, 사용자 후속 `criteria.region=all` |
 | 품종 코드 선택 | 코드 목록에서 품종명을 검증하고 공공 API에 `kind=<breed_code>` 전달, 응답 품종명도 확인 | `criteria.breed_code`, `kind` |
 | live 모드 + 자유 서술 있음 | LangChain `ChatOpenAI` 기반 `llm_feature_extract` (특징만 구조화) | 모델·프롬프트 버전 |
@@ -270,6 +270,12 @@ flowchart LR
 
 Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해야 한다. 새 DB는 `scripts/bootstrap_schema.sql`을 사용하고, 기존 DB는 그 파일 끝의 2026-11-17 ALTER 주석을 적용한다. 이미지 자르기는 종횡비를 유지하는 프레임 채우기와 확대·가로/세로 위치 조절로 제공하며, 회전·투명도도 속성 패널에서 바꾼다. PDF/인쇄는 이미지를 원래 비율로 A4 용지 중앙에 맞춘 뒤 브라우저 인쇄 대화상자를 연다(사용자가 PDF로 저장 가능).
 
+**검색 조건 변경 원칙 (search-agent-v5)**
+- 사용자가 고르거나 질문에 답한 검색 조건(종류·지역·기간·품종·털색·성별·크기·반경)은 에이전트가 바꾸지 않는다. 바꿔야 할 것 같으면 질문(`questions`)으로 끝내고, 사용자가 화면 버튼으로 동의한 다음 요청에서 바뀐다(지역: `widen_region`, 반경: `widen_radius`, 성별: `relax_condition(sex)`).
+- 품종은 질문 대상에서도 뺀다. 에이전트는 품종을 풀거나 바꾸자고 하지 않는다.
+- 질문에 답한 값은 다음 검색에 이렇게 반영된다: 조건(`criteria`) ← 요청 값, 추출 특징(`llm_features`) ← 사용자가 고른 성별로 덮어쓰기·성별 빼기에 동의했으면 추정 성별 제거(`graph.user_answer_features`), 에이전트 상황(`read_criteria`) ← `사용자가_고른_조건`, `재질문_답변`(대화 이력 `confirmed_fields`·`relaxed_fields`·`asked_fields`).
+- 성별 빼기에 동의한 대화는 결과가 달라지므로 조건 캐시 키에 `relaxed`를 넣는다.
+
 **관리자** (`backend/routers/admin.py`, `backend/admin_log.py`, `frontend/src/pages/AdminPage.jsx`)
 - 권한: 계정 문서(`kind=identity`, `id=account`)의 `role=admin`. 회원가입 API 로는 줄 수 없고 `uv run python -m scripts.create_admin --email <이메일>` 로만 붙인다(비밀번호는 실행 시 입력, `.env` 의 저장소에 기록). `require_admin` 이 요청마다 저장소에서 역할을 다시 읽는다. `GET /auth/me`·로그인 응답의 `is_admin` 은 메뉴 표시용이다.
 - 정지: `PATCH /admin/users/{owner}` `{disabled}` → 계정 문서 `disabled=true`. 비밀번호가 맞는 로그인만 `403 account_disabled` 로 알린다. 이미 발급된 세션은 TTL 까지 유지된다(세션 강제 만료 미구현). 관리자 계정은 정지할 수 없다.
@@ -352,10 +358,10 @@ LLM이 설정된 정상 검색 전체에서 **도구 호출(function calling)로
 
 | 구분 | 도구 | 인자 | 서버 처리 |
 | --- | --- | --- | --- |
-| 수정 | `update_features` | `colors`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값만 반영 → 유사도 다시 계산(rank) |
-| 수정 | `relax_condition` | `field ∈ breed·sex`, `reason` | 로컬 조건 제거 → rank. 실제 API 품종 필터가 있으면 품종 로컬 완화는 거부하고 실제 재조회 도구를 안내 |
-| 수정 | `widen_radius` | `reason` | 반경 적용 중이고 최대 단계가 아니면 `radius_step+1` → radius(공고 API 재호출 없음) |
-| 재검색 | `search_notices` | `action ∈ next_page·relax_breed·widen_region`, `reason` | 다음 페이지·API 품종 필터 해제는 `research`에서 실제 조회. 지역 확대는 사용자 확인 질문으로 종료 |
+| 수정 | `update_features` | `colors`, `sex`, `marks`, `reason` | 원문 근거 검증(털색: 원문 색 표현과 같은 색, 특징: 원문에 있는 말, 성별: 원문에 수컷/암컷 표현). 받은 값은 **추출 특징(`llm_features`)에만** 더하고 검색 조건(`criteria`)은 바꾸지 않는다. 사용자가 고른 성별과 다른 값은 거부 → rank |
+| 질문 | `relax_condition` | `field = sex`, `reason` | 사용자가 고른 성별이면 바꾸지 않고 질문(`questions: [{field: sex, action: relax}]`)으로 끝남. 화면 '성별 조건 빼고 찾기' → 다음 요청 `sex=any` → 조건에서 빠지고 같은 대화 `relaxed_fields`에 남아 추출 성별 특징도 쓰지 않음. 설명에서 추출만 된 성별은 특징에서만 빼고 rank. **품종은 거부**(풀지도 묻지도 않음) |
+| 질문 | `widen_radius` | `reason` | 반경 적용 중이고 최대 단계가 아니면 바꾸지 않고 질문(`questions: [{field: radius, next_step}]`)으로 끝남. 화면 '넓혀 찾기' 버튼 → 다음 요청 `radius_step` |
+| 재검색 | `search_notices` | `action ∈ next_page·widen_region`, `reason` | 다음 페이지는 같은 조건으로 `research`에서 실제 조회. 지역 확대는 사용자 확인 질문으로 끝남 |
 | 종료 | `request_photo` | `reason` | 대화당 1회, 서버가 보관한 쓸 만한 사진 분석 결과가 있거나(`photo_features`) '모르겠어요'면 거부 |
 | 종료 | `request_info` | `field ∈ color·size·sex·marks`, `reason` | 보기는 서버 목록(털색 9종, 소형/중형/대형, 수컷/암컷, 특징 7종), 대화당 2회, 이미 받은 정보·이미 물은 항목·'모르겠어요' 거부 |
 | 종료 | `finish` | `note` | 지금 결과로 확정 |

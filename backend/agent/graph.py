@@ -153,7 +153,25 @@ async def context(state: SearchState, config) -> dict:
                 ms=round((time.perf_counter() - started) * 1000),
             )
         ]
+    update["llm_features"] = user_answer_features(update.get("llm_features", state.get("llm_features")), criteria,
+                                                  state.get("agent_history") or {})
     return update
+
+
+def user_answer_features(features: dict[str, Any] | None, criteria: dict[str, Any], history: dict[str, Any]) -> dict[str, Any] | None:
+    """사용자가 고르거나 질문에 답한 값을 추출 특징에도 반영한다(설명 추출·사진 추정보다 우선).
+
+    - 성별을 골랐으면 특징의 성별도 그 값으로 맞춘다.
+    - 성별 조건 빼기에 동의했으면(relaxed_fields) 설명·사진에서 추정한 성별 특징도 쓰지 않는다.
+    """
+    if features is None and not criteria.get("sex"):
+        return features
+    out = dict(features or {})
+    if criteria.get("sex") in ("M", "F"):
+        out["sex"] = criteria["sex"]
+    elif "sex" in (history.get("relaxed_fields") or []):
+        out.pop("sex", None)
+    return out
 
 
 def route_after_context(state: SearchState) -> str:

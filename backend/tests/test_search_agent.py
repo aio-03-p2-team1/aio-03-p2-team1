@@ -92,7 +92,9 @@ def test_agent_reads_updates_reruns_and_finishes():
     assert "사용자 원문" in first and "상위 후보" in first  # 읽을거리는 처음 메시지에 미리 들어 있음
     decision = run["agent_decision"]
     assert decision["source"] == "llm" and decision["final_tool"] == "finish" and decision["reruns"] == 1
-    assert run["criteria"]["color"] == "흰색"
+    # 검색 조건은 바꾸지 않고 추출 특징만 보강한다.
+    assert run["criteria"].get("color") == search(deps(), MIXED)["criteria"].get("color")
+    assert "흰색" in run["llm_features"]["colors"] and "얼룩" in run["llm_features"]["marks"]
     base = search(deps(), MIXED)["trace"].count("rank")
     assert run["trace"].count("rank") == base + 1  # 수정 후 한 번 더 정렬
     assert any(e["step"] == "rerun_result" for e in decision["log"])
@@ -164,11 +166,30 @@ def test_update_features_schema_and_runtime_exclude_breed():
     assert run['agent_decision']['reruns'] == 0
 
 
-def test_relaxing_breed_clears_code_together():
+def test_breed_relaxation_is_rejected():
     state = {'criteria': {'species': 'dog', 'breed': '푸들', 'breed_code': '1'}}
     result = SA.execute_tool('relax_condition', {'field': 'breed'}, state, {})
-    assert 'breed' not in result['update']['criteria']
-    assert 'breed_code' not in result['update']['criteria']
+    assert result['content']['ok'] is False and result['update'] == {} and not result['done']
+
+
+def test_user_sex_relaxation_becomes_question():
+    state = {'criteria': {'species': 'dog', 'sex': 'F'}, 'llm_features': {'sex': 'F'}}
+    result = SA.execute_tool('relax_condition', {'field': 'sex', 'reason': '성별 기록이 다를 수 있어요.'}, state, {})
+    assert result['done'] and result['next'] == 'ask' and 'criteria' not in result['update']
+    q = result['update']['questions'][0]
+    assert q['field'] == 'sex' and q['action'] == 'relax' and '암컷' in q['message']
+
+
+def test_extracted_sex_feature_can_be_dropped_without_question():
+    state = {'criteria': {'species': 'dog'}, 'llm_features': {'sex': 'F'}}
+    result = SA.execute_tool('relax_condition', {'field': 'sex'}, state, {})
+    assert result['next'] == 'rank' and 'sex' not in result['update']['llm_features']
+
+
+def test_update_features_never_overrides_user_sex():
+    state = {'criteria': {'species': 'dog', 'sex': 'F', 'description': '수컷 같아요'}}
+    result = SA.execute_tool('update_features', {'sex': 'M'}, state, {})
+    assert result['content']['ok'] is False and 'criteria' not in result['update']
 
 
 def test_stored_photo_features_stop_photo_request_and_feed_ranking():
@@ -220,28 +241,29 @@ def test_empty_api_result_is_reviewed_with_input_signals(region):
     assert len(d["animal"].calls) == 1
 
 
-def test_empty_breed_filter_can_be_relaxed_and_reviewed_again():
+def test_empty_breed_filter_is_kept_when_agent_tries_to_relax():
     d, client = agent_deps([("RelaxCondition", {"field": "breed", "reason": "품종 표기가 다를 수 있어요."})])
     d["animal"] = FakeAnimal(pages=[[api_item(1, kindNm="말티즈")]])
     run = search(d, {**SUFFICIENT, "region": "경기도", "breed": "푸들"})
-    assert run["status"] == "completed" and len(run["candidates"]) == 1
-    assert tools_used(run) == ["relax_condition", "finish"]
-    assert run["agent_decision"]["reruns"] == 1 and "breed" not in run["criteria"]
-    assert "조건_필터" in client.calls[0][1].content
-    assert run["issues"] == [] and len(d["animal"].calls) == 1
+    assert run["criteria"]["breed"] == "푸들" and not run["candidates"]
+    assert tools_used(run)[0] == "relax_condition" and run["agent_decision"]["log"][1]["ok"] is False
+    assert "조건_필터" in client.calls[0][1].content and len(d["animal"].calls) == 1
+    # 품종은 묻지 않는다. 0건이면 기존 지역 넓히기 질문으로 끝난다.
+    assert all(q["field"] != "breed" for q in run["questions"] or [])
 
 
-def test_empty_radius_can_be_widened_by_agent():
+def test_empty_radius_widening_becomes_question():
     from .test_radius import base, items, kakao
 
     d, client = agent_deps([("WidenRadius", {"reason": "조회된 공고를 더 넓은 반경에서 확인해요."})])
     d["animal"] = FakeAnimal(pages=[items("서울특별시 노원구")])
     d["kakao"] = kakao()
     run = search(d, base(days=2))
-    assert run["status"] == "completed" and run["candidates"]
-    assert tools_used(run) == ["widen_radius", "finish"]
-    assert "반경_필터" in client.calls[0][1].content
-    assert run["agent_decision"]["reruns"] == 1 and len(d["animal"].calls) == 1
+    # 반경은 사용자가 고른 범위다. 에이전트는 넓히지 않고 넓힐지 묻는다(화면의 '넓혀 찾기' 버튼).
+    assert run["status"] == "awaiting_input" and run["questions"][0]["field"] == "radius"
+    assert run["questions"][0]["next_step"] == (run["radius"]["step"] + 1)
+    assert tools_used(run) == ["widen_radius"] and run["agent_decision"]["reruns"] == 0
+    assert "반경_필터" in client.calls[0][1].content and len(d["animal"].calls) == 1
 
 
 def test_agent_finish_on_empty_result_falls_back_to_widen_question():
@@ -325,7 +347,7 @@ def test_agent_changes_do_not_pollute_cached_base_result():
         criteria = {**MIXED, "color": "갈색"}
         first = await run_search(d, "owner", {"criteria": criteria})
         second = await run_search(d, "owner", {"criteria": criteria})
-        assert first["criteria"]["color"] == "흰색"
+        assert first["criteria"]["color"] == "갈색" and "흰색" in first["llm_features"]["colors"]
         thread = await d["store"].get("owner", "thread", first["thread_id"])
         assert thread["criteria"]["color"] == "갈색"  # 자동 수정은 사용자가 확인한 조건으로 저장하지 않는다.
         # 기본 조회 캐시는 에이전트 수정 전 조건 그대로다. 검토 결과는 같은 맥락이라 캐시에서 꺼낸다.
@@ -356,3 +378,36 @@ def test_search_summary_exposes_only_stage_counts():
                                  "radius_items": [], "candidates": []})
     assert summary["빈_결과_원인"] == "반경_필터"
     assert "secret" not in json.dumps(summary)
+
+
+def test_answers_to_agent_questions_flow_into_conditions_features_and_context():
+    """재질문에 답한 값(성별 빼기 동의, 반경 넓히기 동의)은 다음 검색의 조건·특징·에이전트 상황에 반영된다."""
+    from .test_radius import base, items, kakao
+
+    async def scenario():
+        # 1) 반경: 에이전트가 넓힐지 묻고, 사용자가 버튼으로 동의하면 다음 검색에서 그 단계로 찾는다.
+        d, client = agent_deps([("WidenRadius", {"reason": "더 넓게 찾아봐요."}), ("Finish", {"note": "확인했어요."})])
+        d["animal"] = FakeAnimal(pages=[items("서울특별시 노원구"), items("서울특별시 노원구")])
+        d["kakao"] = kakao()
+        criteria = {**base(days=2), "sex": "F"}
+        first = await run_search(d, "owner", {"criteria": criteria})
+        assert first["status"] == "awaiting_input" and first["questions"][0]["field"] == "radius"
+        step = first["questions"][0]["next_step"]
+        second = await run_search(d, "owner", {"criteria": {**criteria, "radius_step": step},
+                                               "thread_id": first["thread_id"]})
+        assert second["radius"]["step"] == step
+        assert second["llm_features"]["sex"] == "F"  # 사용자가 고른 성별은 특징에도 반영
+        assert '"재질문_답변": {"radius_step"' in client.calls[-1][1].content
+
+        # 2) 성별: 에이전트는 묻기만 하고, 사용자가 '성별 조건 빼고 찾기'(sex=any)에 동의하면 조건·특징에서 모두 빠진다.
+        d2, _ = agent_deps([("RelaxCondition", {"field": "sex", "reason": "성별 기록이 다를 수 있어요."})])
+        d2["animal"] = FakeAnimal(pages=[[api_item(1)], [api_item(1)]])
+        req = {**SUFFICIENT, "sex": "F"}
+        asked = await run_search(d2, "owner", {"criteria": req})
+        assert asked["status"] == "awaiting_input" and asked["questions"][0]["field"] == "sex"
+        assert asked["criteria"]["sex"] == "F"  # 동의 전에는 바꾸지 않음
+        agreed = await run_search(d2, "owner", {"criteria": {**req, "sex": "any"}, "thread_id": asked["thread_id"]})
+        assert "sex" not in agreed["criteria"] and not (agreed["llm_features"] or {}).get("sex")
+        thread = await d2["store"].get("owner", "thread", asked["thread_id"])
+        assert "sex" in thread["agent"]["relaxed_fields"] and "sex" not in thread["criteria"]
+    asyncio.run(scenario())

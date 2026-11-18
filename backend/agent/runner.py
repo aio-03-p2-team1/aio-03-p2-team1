@@ -38,16 +38,42 @@ AGENT_FIELDS = ("agent_request", "agent_decision")
 REVIEW_FIELDS = ("raw_items", "radius_items", "semantic_scores", "total_count", "pages_fetched", "fetched_at", "search_query")
 
 
-def agent_history(thread: dict[str, Any], declined: list[str] | None) -> dict[str, Any]:
-    """같은 대화에서 이미 한 요청과 사용자가 '모르겠어요'한 항목을 모은다(반복 요청 방지)."""
+def agent_history(thread: dict[str, Any], declined: list[str] | None,
+                  criteria: dict[str, Any] | None = None) -> dict[str, Any]:
+    """같은 대화에서 이미 한 요청과 사용자가 '모르겠어요'한 항목을 모은다(반복 요청 방지).
+
+    지난 검색이 범위·조건 변경을 물었고(questions) 이번 요청이 그 값을 바꿨으면 사용자가 동의한 것으로
+    confirmed_fields 에 남긴다. 성별 조건 빼기에 동의(sex='any')하면 relaxed_fields 에 남겨, 같은 대화에서는
+    설명에서 추출한 성별 특징도 쓰지 않는다.
+    """
     history = dict(thread.get("agent") or {})
     history["declined"] = sorted(set(history.get("declined") or []) | set(declined or []))
+    criteria = criteria or {}
+    asked = {q.get("field") for q in thread.get("questions") or [] if isinstance(q, dict)}
+    changed = {
+        "radius": criteria.get("radius_step") not in (None, ""),
+        "region": criteria.get("region") not in (None, "") and criteria.get("region") != (thread.get("criteria") or {}).get("region"),
+        "sex": criteria.get("sex") == RELAX_VALUE,
+    }
+    confirmed = set(history.get("confirmed_fields") or []) | {f for f in asked if changed.get(f)}
+    relaxed = set(history.get("relaxed_fields") or [])
+    if criteria.get("sex") == RELAX_VALUE:
+        relaxed.add("sex")
+    elif criteria.get("sex"):
+        relaxed.discard("sex")  # 사용자가 성별을 다시 고르면 그 값을 쓴다
+    history["confirmed_fields"] = sorted(confirmed)
+    history["relaxed_fields"] = sorted(relaxed)
     return history
+
+
+RELAX_VALUE = "any"  # 화면이 '이 조건 빼고 찾기'에 동의했을 때 보내는 값(정규화에서 조건이 빠진다)
 
 
 def next_history(history: dict[str, Any], request: dict[str, Any] | None) -> dict[str, Any]:
     history = {"photo_requests": history.get("photo_requests", 0), "info_requests": history.get("info_requests", 0),
-               "asked_fields": list(history.get("asked_fields") or []), "declined": list(history.get("declined") or [])}
+               "asked_fields": list(history.get("asked_fields") or []), "declined": list(history.get("declined") or []),
+               "confirmed_fields": list(history.get("confirmed_fields") or []),
+               "relaxed_fields": list(history.get("relaxed_fields") or [])}
     if request and request["type"] == "photo":
         history["photo_requests"] += 1
     elif request and request["type"] == "info":
@@ -65,7 +91,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     thread_id = request.get("thread_id") or uuid.uuid4().hex
     thread = await store.get(owner, "thread", thread_id) or {}
     session_criteria = thread.get("criteria")
-    history = agent_history(thread, request.get("declined"))
+    history = agent_history(thread, request.get("declined"), request.get("criteria"))
     profile = (await store.get(owner, "memory", request["profile_id"]) or {}) if request.get("profile_id") else None
     merged, origins = crit.merge_conditions(request.get("criteria", {}), session_criteria, (profile or {}).get("confirmed"))
     normalized, missing, errors = crit.normalize(merged)
@@ -93,6 +119,8 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
                                "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION,
                                "review": AGENT_PROMPT_VERSION if deps.get("search_agent") else None,
+                               # 성별 조건 빼기에 동의한 대화는 설명의 성별 특징도 쓰지 않아 결과가 다르다.
+                               "relaxed": history.get("relaxed_fields") or [],
                                # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
                                "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off",
                                # 사진 특징이 다르면 결과가 달라지므로 캐시 키에 넣는다.

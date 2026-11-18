@@ -236,10 +236,12 @@ export default function SearchPage() {
   const pending = run?.status === 'awaiting_input' ? run.questions || [] : []
   const questionNotes = pending.map((q) => ({
     ...q,
-    blocking: !(q.field === 'radius' || (q.field === 'region' && run?.scope)),
+    blocking: !(q.field === 'radius' || (q.field === 'region' && run?.scope) || (q.field === 'sex' && q.action === 'relax')),
   }))
   const widenStep = run?.status === 'awaiting_input' ? widenRadiusAction(run.questions, run.radius || run.scope?.radius) : null
   const canWidenRegion = pending.some((q) => q.field === 'region' && run?.scope)
+  // 에이전트는 사용자가 고른 성별을 바꾸지 않고 묻는다. 동의하면 성별 조건을 빼고 같은 대화로 다시 찾는다.
+  const canRelaxSex = pending.some((q) => q.field === 'sex' && q.action === 'relax')
   const agentRequest = visibleRequest(run, answers, declined)
   const chips = answerChips(answers)
 
@@ -329,6 +331,14 @@ export default function SearchPage() {
     submit({ region: '전체', radius_step: 3 }, run.thread_id)
   }
 
+  // 성별 조건 빼기: 사용자가 동의한 경우에만. 'any' 를 보내면 서버가 조건에서 빼고 같은 대화의 특징에서도 성별을 쓰지 않는다.
+  function relaxSex() {
+    const next = { ...answers }
+    delete next.sex
+    setAnswers(next)
+    submit({ ...buildCriteria(form, next), sex: 'any' }, run.thread_id)
+  }
+
   // 반경 넓히기: 사용자가 버튼을 눌러 동의한 경우에만 다음 단계로 같은 세션에서 다시 찾는다.
   function widenRadius(step) {
     submit({ radius_step: step }, run.thread_id)
@@ -387,11 +397,14 @@ export default function SearchPage() {
               <div className="form-questions" role="status" aria-live="polite" id="form-questions">
                 {questionNotes.map((q) => (
                   <p key={q.field + q.message} className={q.blocking ? 'form-question blocking' : 'form-question'}>
-                    <strong>{q.blocking ? '확인 필요' : '범위 넓히기'}</strong> {q.message}
+                    <strong>{q.blocking ? '확인 필요' : q.field === 'sex' ? '조건 확인' : '범위 넓히기'}</strong> {q.message}
                   </p>
                 ))}
-                {(widenStep || canWidenRegion) && (
+                {(widenStep || canWidenRegion || canRelaxSex) && (
                   <div className="form-question-actions">
+                    {canRelaxSex && (
+                      <button type="button" className="secondary-button" disabled={busy} onClick={relaxSex}>성별 조건 빼고 찾기</button>
+                    )}
                     {widenStep && (
                       <button type="button" className="secondary-button" disabled={busy} onClick={() => widenRadius(widenStep.step)}>
                         {widenStep.label}
@@ -472,7 +485,7 @@ export default function SearchPage() {
             {run?.scope && <p>{scopeText(run.scope)}</p>}
           </div>
         </div>
-        <Results run={run} busy={busy} error={error} onWiden={widenRegion} onWidenRadius={widenRadius} />
+        <Results run={run} busy={busy} error={error} onWiden={widenRegion} onWidenRadius={widenRadius} onRelaxSex={relaxSex} />
         {!error && run?.pagination && (
           <Pagination page={run.pagination.page} pages={run.pagination.pages} disabled={busy}
             onChange={openPage} />
@@ -511,7 +524,7 @@ function readAsBase64(file) {
 }
 
 
-function Results({ run, busy, error, onWiden, onWidenRadius }) {
+function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
   if (busy) return <p className="state-box">공고를 조회하고 후보를 비교하고 있어요…</p>
   if (error) {
     return (
@@ -539,6 +552,9 @@ function Results({ run, busy, error, onWiden, onWidenRadius }) {
             </button>
           )}
           {widen && <button type="button" className="primary-button" onClick={onWiden}>전체 지역으로 넓혀 찾기</button>}
+          {run.questions?.some((q) => q.field === 'sex' && q.action === 'relax') && (
+            <button type="button" className="primary-button" onClick={onRelaxSex}>성별 조건 빼고 찾기</button>
+          )}
         </div>
       </>
     )

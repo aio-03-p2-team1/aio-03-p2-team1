@@ -27,8 +27,10 @@ class ColorEmbedder(FakeEmbedder):
         return [[0., 1.] if "흰색" in text else [1., 0.] for text in texts]
 
 
-@pytest.mark.parametrize("relax_locally_first", [False, True])
-def test_breed_research_changes_actual_api_filter_and_recovers(relax_locally_first):
+@pytest.mark.parametrize("tool", [("RelaxCondition", {"field": "breed", "reason": "품종을 풀어요."}),
+                                  ("SearchNotices", {"action": "relax_breed", "reason": "API 품종 필터를 풀어요."})])
+def test_user_breed_is_never_relaxed_or_requeried(tool):
+    """사용자가 고른 품종은 에이전트가 풀거나 다시 조회하지 않는다(질문 대상도 아님)."""
     async def scenario():
         queries = []
 
@@ -37,24 +39,18 @@ def test_breed_research_changes_actual_api_filter_and_recovers(relax_locally_fir
             raws = [] if request.url.params.get("kind") else [api_item(3, kindNm="믹스견", colorCd="흰색")]
             return httpx.Response(200, json=ok_body(raws))
 
-        script = [("RelaxCondition", {"field": "breed", "reason": "품종을 풀어요."})] if relax_locally_first else []
-        script.append(("SearchNotices", {"action": "relax_breed", "reason": "API 품종 필터 때문에 공고가 없어요."}))
-        d, client = agent_deps(script)
+        d, client = agent_deps([tool])
         d["animal"] = animal = api(handler)
         d["breed_normalizer"] = type("Normalizer", (), {"resolve_code": staticmethod(resolve_code)})()
         try:
             run = await run_search(d, OWNER, {"criteria": {**MIXED, "breed_code": "poodle-code"}})
-            assert run["status"] == "completed" and run["candidates"][0]["breed"] == "믹스견"
-            assert [q.get("kind") for q in queries] == ["poodle-code", None]
-            for key in ("upkind", "bgnde", "endde", "upr_cd"):
-                assert queries[0].get(key) == queries[1].get(key)
-            assert run["agent_decision"]["researches"] == 1
-            assert len(client.calls) == (3 if relax_locally_first else 2)
-            assert "breed_code" not in run["criteria"] and "breed" not in run["criteria"]
-            thread = await d["store"].get(OWNER, "thread", run["thread_id"])
-            assert thread["criteria"]["breed_code"] == "poodle-code"
-            assert any(x.get("step") == "research_result" and x["ok"] for x in run["agent_decision"]["log"])
-            assert "선택_가능_재검색" in client.calls[0][1].content
+            assert [q.get("kind") for q in queries] == ["poodle-code"]  # 품종 없는 재조회 없음
+            assert run["criteria"]["breed_code"] == "poodle-code" and run["criteria"]["breed"] == "푸들"
+            assert not any(c.get("breed") == "믹스견" for c in run.get("candidates") or [])
+            first = run["agent_decision"]["log"][1]
+            assert first["ok"] is False
+            assert all(q.get("field") != "breed" for q in run.get("questions") or [])
+            assert "relax_breed" not in client.calls[0][1].content.split("선택_가능_재검색")[1][:80]
         finally:
             await animal.aclose()
     asyncio.run(scenario())
@@ -133,27 +129,6 @@ def test_failed_research_keeps_previous_candidates_and_scope(monkeypatch, error,
     assert len(client.calls) == 1  # 실패를 분석하는 별도 성찰 LLM을 부르지 않는다.
 
 
-def test_failed_breed_research_keeps_original_query_and_conditions():
-    async def scenario():
-        seen = []
-
-        def handler(request):
-            seen.append(dict(request.url.params))
-            return httpx.Response(200, json=ok_body([])) if len(seen) == 1 else httpx.Response(403)
-
-        d, _ = agent_deps([("SearchNotices", {"action": "relax_breed", "reason": "품종 필터를 풀어요."})])
-        d["animal"] = animal = api(handler)
-        d["breed_normalizer"] = type("Normalizer", (), {"resolve_code": staticmethod(resolve_code)})()
-        try:
-            run = await run_search(d, OWNER, {"criteria": {**MIXED, "breed_code": "poodle-code"}})
-            assert run["status"] == "failed" and run["error"]["code"] == "animal_auth"
-            assert run["criteria"]["breed_code"] == "poodle-code" and run["criteria"]["breed"] == "푸들"
-            assert run["candidates"] == [] and run["end_reason"] != "empty_result"
-        finally:
-            await animal.aclose()
-    asyncio.run(scenario())
-
-
 def query_state():
     criteria = {"region": "서울특별시", "species": "dog", "start_date": START, "end_date": START,
                 "breed": "푸들", "breed_code": "poodle-code"}
@@ -162,18 +137,25 @@ def query_state():
             "search_query": {"region_code": "6110000", "species": "dog", "start": START, "end": START, "kind": "poodle-code"}}
 
 
-def test_llm_cannot_supply_dates_region_species_or_page_to_api():
+def paged_state():
     state = query_state()
+    state.update(raw_items=[{"id": "a"}], total_count=5)
+    return state
+
+
+def test_llm_cannot_supply_dates_region_species_or_page_to_api():
+    state = paged_state()
     original = deepcopy(state)
-    out = SA.execute_tool("search_notices", {"action": "relax_breed", "region_code": "evil", "start": "1900-01-01",
-                                           "end": "2999-01-01", "species": "cat", "page": 999, "approved": True}, state, {})
+    out = SA.execute_tool("search_notices", {"action": "next_page", "region_code": "evil", "start": "1900-01-01",
+                                           "end": "2999-01-01", "species": "cat", "page": 999, "kind": None,
+                                           "approved": True}, state, {})
     query = out["update"]["agent_search_plan"]["query"]
-    assert query == {**state["search_query"], "kind": None}
-    assert out["update"]["agent_search_plan"]["page"] == 1 and state == original
+    assert query == state["search_query"]  # 품종 필터(kind)를 포함해 조회 조건은 그대로
+    assert out["update"]["agent_search_plan"]["page"] == 2 and state == original
     assert set(SA.SearchNotices.model_fields) == {"action", "reason"}
 
 
-@pytest.mark.parametrize("action", ["next_page", "widen_period", "unknown"])
+@pytest.mark.parametrize("action", ["next_page", "relax_breed", "widen_period", "unknown"])
 def test_unavailable_or_unknown_research_actions_are_rejected(action):
     out = SA.execute_tool("search_notices", {"action": action}, query_state(), {})
     assert out["content"]["ok"] is False and out["next"] is None and not out["update"]
@@ -181,43 +163,34 @@ def test_unavailable_or_unknown_research_actions_are_rejected(action):
 
 def test_research_obeys_global_tool_budget_without_calling_api():
     d = deps(FakeAnimal(), max_tool_calls=10)
-    state = query_state()
-    queued = SA.execute_tool("search_notices", {"action": "relax_breed"}, state, {})["update"]
+    state = paged_state()
+    queued = SA.execute_tool("search_notices", {"action": "next_page"}, state, {})["update"]
     state.update(queued, tool_calls=[{}] * 10)
     out = asyncio.run(graph.research(state, {"configurable": d}))
     assert out["error"]["code"] == "tool_budget" and d["animal"].calls == []
     assert "criteria" not in out and "raw_items" not in out
 
 
-def test_cache_keeps_original_query_and_resets_research_budget_for_each_request():
+def test_cache_keeps_original_query_and_review_result(monkeypatch):
+    monkeypatch.setattr(graph, "ROWS_PER_PAGE", 2)
+
     async def scenario():
-        queries = []
-
-        def handler(request):
-            queries.append(dict(request.url.params))
-            items = [] if request.url.params.get("kind") else [api_item(3, kindNm="믹스견")]
-            return httpx.Response(200, json=ok_body(items))
-
-        research = ("SearchNotices", {"action": "relax_breed", "reason": "API 품종 필터를 풀어요."})
+        research = ("SearchNotices", {"action": "next_page", "reason": "아직 조회하지 않은 공고가 있어요."})
         finish = ("Finish", {"note": "후보를 확인했습니다."})
-        d, _ = agent_deps([research, finish, research, finish])
-        d["animal"] = animal = api(handler)
-        d["breed_normalizer"] = type("Normalizer", (), {"resolve_code": staticmethod(resolve_code)})()
+        d, _ = agent_deps([research, finish])
+        d["animal"] = FakeAnimal(pages=[[api_item(1), api_item(2), api_item(3, colorCd="흰색")]])
+        d["embedder"] = ColorEmbedder()
         d["search_cache"] = SearchCache(fakeredis.FakeAsyncRedis())
-        request = {"criteria": {**MIXED, "breed_code": "poodle-code"}}
-        try:
-            first = await run_search(d, OWNER, request)
-            second = await run_search(d, OWNER, request)
-            assert not first["cache_hit"] and second["cache_hit"]
-            assert first["agent_decision"]["researches"] == second["agent_decision"]["researches"] == 1
-            # 두 번째는 같은 맥락의 검토 결과를 캐시에서 꺼내 재조회 API 도 다시 부르지 않는다.
-            assert second["review_cache_hit"] and [q.get("kind") for q in queries] == ["poodle-code", None]
-            snapshot = await d["search_cache"].get(first["cache_key"])
-            assert snapshot["search_query"]["kind"] == "poodle-code"
-            assert snapshot["criteria"]["breed_code"] == "poodle-code" and snapshot["raw_items"] == []
-            assert "agent_search_plan" not in snapshot and "agent_researches" not in snapshot
-        finally:
-            await animal.aclose()
+        request = {"criteria": {"species": "dog", "region": "전체", "lost_date": START, "description": "흰색"}}
+        first = await run_search(d, OWNER, request)
+        second = await run_search(d, OWNER, request)
+        assert not first["cache_hit"] and second["cache_hit"] and second["review_cache_hit"]
+        assert first["agent_decision"]["researches"] == 1
+        # 두 번째는 같은 맥락의 검토 결과를 캐시에서 꺼내 재조회 API 도 다시 부르지 않는다.
+        assert [q["page"] for q in d["animal"].calls] == [1, 2]
+        snapshot = await d["search_cache"].get(first["cache_key"])
+        assert snapshot["pages_fetched"] == 1  # 기본 캐시는 에이전트 재조회 전 상태
+        assert "agent_search_plan" not in snapshot and "agent_researches" not in snapshot
     asyncio.run(scenario())
 
 
@@ -229,10 +202,10 @@ def test_structural_fixes_remain_deterministic_before_agent_review():
     assert len(client.calls) == 1 and run["trace"].index("reflect") < run["trace"].index("agent")
 
 
-def test_local_relaxation_cannot_hide_an_active_api_breed_filter():
+def test_breed_relaxation_is_not_offered_or_applied():
     state = query_state()
     local = SA.execute_tool("relax_condition", {"field": "breed"}, state, {})
-    assert local["content"]["ok"] is False and not local["update"]
+    assert local["content"]["ok"] is False and not local["update"] and not local["done"]
     assert state["criteria"]["breed_code"] == "poodle-code"
     assert SA.search_summary(state)["API_품종_필터"] is True
-    assert "relax_breed" in SA.research_options(state)
+    assert "relax_breed" not in SA.research_options(state)
