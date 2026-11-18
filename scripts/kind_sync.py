@@ -12,19 +12,11 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.config import Settings  # noqa: E402
+from backend.tools.kind_aliases import ALIASES  # noqa: E402
 
 log = logging.getLogger(__name__)
 
 SPECIES = {"417000": "dog", "422400": "cat", "429900": "other"}
-ALIASES = {
-    "래브라도리트리버": ["래브라도 리트리버", "라브라도 리트리버"],
-    "저먼셰퍼드": ["저먼 셰퍼드", "독일 셰퍼드"],
-    "코리안숏헤어": ["코리안 숏헤어", "한국 고양이", "코숏"],
-    "믹스견": ["믹스", "혼종견"],
-    "토이푸들": ["푸들"],
-}
-
-
 def require_api_key(settings: Settings) -> str:
     if settings.animal_api_key is None:
         raise RuntimeError("ANIMAL_API_KEY 가 설정되지 않았습니다")
