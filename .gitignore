@@ -68,3 +68,5 @@ tempCodeRunnerFile.py
 # project results
 output/
 outputs/
+
+tmp/
