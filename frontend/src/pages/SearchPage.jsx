@@ -153,7 +153,9 @@ export default function SearchPage() {
     const original = String(description ?? '')
     if (!original.trim() && !source) return toast('다듬을 특징이나 상황을 입력하거나 사진을 올려 주세요.')
     refinementLock.current = true
+    const analyzingPhoto = Boolean(source?.file || source?.postId)
     setRefining(true)
+    if (analyzingPhoto) setPhotoAnalyzing(true)
     setError(null)
     try {
       const body = { description: original }
@@ -182,6 +184,7 @@ export default function SearchPage() {
     } finally {
       refinementLock.current = false
       setRefining(false)
+      if (analyzingPhoto) setPhotoAnalyzing(false)
     }
   }
 
