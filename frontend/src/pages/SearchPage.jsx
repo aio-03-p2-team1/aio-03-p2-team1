@@ -338,11 +338,7 @@ export default function SearchPage() {
 
   return (
     <main className="page-main search-page">
-      <div className="breadcrumb">
-        <Link to="/">메인</Link><span aria-hidden="true">›</span><span>우리 아이 찾기</span>
-      </div>
       <div className="page-heading">
-        <span className="eyebrow">사진과 설명으로 찾기</span>
         <h1>우리 아이를 알려주세요</h1>
         <p>반려동물의 정보와 실종 지역을 입력하면 비슷한 공고를 찾아드려요.</p>
       </div>
