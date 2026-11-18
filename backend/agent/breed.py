@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
 from backend.tools.kinds import normalize
+from backend.tools.kind_aliases import is_curated_alias
 
 
 class BreedNormalizer:
@@ -21,8 +22,11 @@ class BreedNormalizer:
         if not query:
             return None
         rows = await self.repository.rows(species)
-        matches = {r['kind_code']: r for r in rows if
-                   normalize(r['name']) == query or (r.get('alias') and normalize(r['alias']) == query)}
+        # DB 별칭 행이 아직 동기화되지 않은 경우에도 큐레이션 원본을 적용한다.
+        alias_matches = {r['kind_code']: r for r in rows
+                         if (r.get('alias') and normalize(r['alias']) == query)
+                         or is_curated_alias(r['name'], query)}
+        matches = alias_matches or {r['kind_code']: r for r in rows if normalize(r['name']) == query}
         if len(matches) == 1:
             return next(iter(matches.values()))
         if not query or self.client is None:

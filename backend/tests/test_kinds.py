@@ -337,6 +337,29 @@ def test_lost_report_code_uses_species_scoped_reference_data(repository):
         assert 'breed_code' not in report  # 원본 캐시를 변경하지 않는다.
 
 
+def test_lost_poodle_alias_resolves_without_synced_alias_row():
+    from fastapi.testclient import TestClient
+
+    from backend.main import create_app
+    from backend.tests.conftest import build_ctx
+
+    report = {'id': 'lost-20261118-abcdef123456', 'species': 'dog', 'breed': '푸들'}
+    rows = [
+        {'kind_code': '000107', 'name': '토이 푸들', 'species': 'dog', 'alias': None},
+        {'kind_code': '000078', 'name': '미니어쳐 푸들', 'species': 'dog', 'alias': None},
+        {'kind_code': '000074', 'name': '미디엄 푸들', 'species': 'dog', 'alias': None},
+        {'kind_code': '000105', 'name': '스탠다드 푸들', 'species': 'dog', 'alias': None},
+    ]
+    ctx = build_ctx()
+    ctx.kinds = SimpleNamespace(rows=AsyncMock(return_value=rows))
+    ctx.lost = SimpleNamespace(get=AsyncMock(return_value=report))
+
+    with TestClient(create_app(ctx)) as client:
+        result = client.get('/api/v1/posts/lost/' + report['id'])
+        assert result.status_code == 200
+        assert result.json()['breed_code'] == '000107'
+
+
 def test_board_kind_lookup_failure_is_not_an_unknown_breed(repository):
     from fastapi.testclient import TestClient
 

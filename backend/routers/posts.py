@@ -31,6 +31,7 @@ from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody, PostUpdateBody
 from backend.timeutil import kst_today  # noqa: F401  (tests 에서 posts.kst_today 로도 import)
 from backend.tools.lost_animal_api import LostAnimalApiError
 from backend.tools.kinds import normalize
+from backend.tools.kind_aliases import is_curated_alias
 
 router = APIRouter(tags=["posts"])
 
@@ -155,8 +156,12 @@ async def _with_breed_codes(items: list[dict], ctx: AppContext) -> list[dict]:
             if saved_code:
                 matches = {row["kind_code"] for row in catalogs[species] if row["kind_code"] == saved_code}
             else:
-                matches = {row["kind_code"] for row in catalogs[species]
-                           if normalize(row["name"]) == query or normalize(row.get("alias") or "") == query}
+                # DB 별칭 행이 아직 동기화되지 않은 경우에도 큐레이션 원본을 적용한다.
+                alias_matches = {row["kind_code"] for row in catalogs[species]
+                                 if normalize(row.get("alias") or "") == query
+                                 or is_curated_alias(row["name"], query)}
+                matches = alias_matches or {row["kind_code"] for row in catalogs[species]
+                                            if normalize(row["name"]) == query}
             if len(matches) == 1:
                 item["breed_code"] = matches.pop()
         result.append(item)
