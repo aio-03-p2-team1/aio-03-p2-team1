@@ -8,7 +8,7 @@ from .conftest import ORIGIN, build_ctx, signup
 
 def test_register_me_logout_flow(client):
     res = signup(client)
-    assert res.json() == {"name": "보리 보호자", "email": "bori@example.com"}
+    assert res.json() == {"name": "보리 보호자", "email": "bori@example.com", "is_admin": False}
     cookie = res.headers["set-cookie"]
     assert "meet_again_session=" in cookie and "HttpOnly" in cookie and "Path=/api/v1" in cookie
     assert "token" not in res.text

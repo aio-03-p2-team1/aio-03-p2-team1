@@ -62,3 +62,19 @@ async def current_user(request: Request) -> SessionUser:
     if user is None:
         raise ApiError(401, "not_authenticated", "로그인이 필요합니다.")
     return user
+
+
+ADMIN_ROLE = "admin"
+
+
+async def require_admin(request: Request) -> SessionUser:
+    """관리자만 통과. 역할은 세션이 아니라 저장소의 계정 문서(identity.role)에서 매번 읽는다.
+
+    역할은 가입 API 로는 줄 수 없고 `scripts/create_admin.py` 로만 붙는다.
+    """
+    user = await current_user(request)
+    ctx: AppContext = request.app.state.ctx
+    account = await ctx.store.get(user.owner, "identity", "account") or {}
+    if account.get("role") != ADMIN_ROLE or account.get("disabled"):
+        raise ApiError(403, "admin_only", "관리자만 볼 수 있어요.")
+    return user

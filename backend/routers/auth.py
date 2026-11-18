@@ -95,18 +95,22 @@ async def login(body: LoginBody, request: Request, response: Response, ctx: AppC
     # 이메일 존재 여부와 관계없이 같은 메시지 (10장)
     if not account or not hasher.verify(body.password, account["password_hash"]):
         raise ApiError(401, "invalid_credentials", INVALID_LOGIN)
+    if account.get("disabled"):
+        # 관리자가 정지한 계정. 비밀번호가 맞을 때만 알려 준다(계정 존재 여부를 흘리지 않도록).
+        raise ApiError(403, "account_disabled", "이용이 정지된 계정입니다. 운영자에게 문의해 주세요.")
     try:
         await _start_session(
             request, response, ctx, SessionUser(owner=owner, email=account["email"], name=account["name"])
         )
     except AuthUnavailable:
         raise _unavailable()
-    return UserOut(name=account["name"], email=account["email"])
+    return UserOut(name=account["name"], email=account["email"], is_admin=account.get("role") == "admin")
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: SessionUser = Depends(current_user)):
-    return UserOut(name=user.name, email=user.email)
+async def me(user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    account = await ctx.store.get(user.owner, "identity", "account") or {}
+    return UserOut(name=user.name, email=user.email, is_admin=account.get("role") == "admin")
 
 
 @router.post("/logout", status_code=204)

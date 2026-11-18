@@ -16,6 +16,7 @@ import NotFoundPage from './pages/NotFoundPage.jsx'
 
 const PosterPage = lazy(() => import('./pages/PosterPage.jsx'))
 const PosterDetailPage = lazy(() => import('./pages/PosterDetailPage.jsx'))
+const AdminPage = lazy(() => import('./pages/AdminPage.jsx'))
 
 function RequireLogin({ children }) {
   const { user, ready } = useAuth()
@@ -52,6 +53,7 @@ export default function App() {
           }
         />
         <Route path="/poster" element={<RequireLogin><Suspense fallback={<main className="page-main"><p className="state-box">전단지 편집기를 불러오고 있어요…</p></main>}><PosterPage /></Suspense></RequireLogin>} />
+        <Route path="/admin" element={<RequireLogin><Suspense fallback={<main className="page-main"><p className="state-box">관리자 화면을 불러오고 있어요…</p></main>}><AdminPage /></Suspense></RequireLogin>} />
         <Route path="/posters/:posterId" element={<RequireLogin><Suspense fallback={<main className="page-main"><p className="state-box">전단지를 불러오고 있어요…</p></main>}><PosterDetailPage /></Suspense></RequireLogin>} />
         {/* 실종 정보 게시판: 읽기는 공개, 등록은 화면 안에서 로그인 확인 */}
         <Route path="/board" element={<PostBoardPage />} />

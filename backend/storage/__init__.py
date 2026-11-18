@@ -36,6 +36,14 @@ class Store(Protocol):
 
     async def delete(self, owner: str, kind: str, doc_id: str) -> bool: ...
 
+    async def list_kind(self, kind: str, limit: int = 100, offset: int = 0,
+                        fields: tuple[str, ...] | None = None) -> list[dict[str, Any]]:
+        """관리자 화면용: 소유자와 관계없이 한 종류의 문서를 최근 순으로 읽는다.
+
+        반환 행 = {owner, id, updated_at, data}. fields 를 주면 data 에 그 최상위 키만 담는다(큰 후보 목록 제외).
+        """
+        ...
+
     async def aclose(self) -> None: ...
 
 
@@ -57,3 +65,15 @@ def build_store(settings) -> Store:
     from backend.storage.sqlite import SqliteStore
 
     return SqliteStore(settings.sqlite_path)
+
+
+FIELD_NAME = __import__("re").compile(r"^[a-z][a-z0-9_]{0,40}$")
+
+
+def check_fields(fields) -> tuple[str, ...] | None:
+    if fields is None:
+        return None
+    fields = tuple(fields)
+    if not fields or not all(FIELD_NAME.match(f) for f in fields):
+        raise ValueError("잘못된 필드 이름")
+    return fields

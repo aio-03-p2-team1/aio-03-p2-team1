@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 
-from backend.storage import StorageError, check_kind
+from backend.storage import StorageError, check_fields, check_kind
 
 
 class SupabaseStore:
@@ -109,3 +109,19 @@ class SupabaseStore:
         check_kind(kind)
         res = await self._request("DELETE", self._key(owner, kind, doc_id), prefer="return=representation")
         return bool(res.json())
+
+    async def list_kind(self, kind, limit=100, offset=0, fields=None):
+        check_kind(kind)
+        fields = check_fields(fields)
+        # fields 는 서버(PostgREST)에서 jsonb 최상위 키만 골라 받아 큰 후보 목록을 내려받지 않는다.
+        select = "owner,id,updated_at," + (",".join(f"{f}:data->{f}" for f in fields) if fields else "data")
+        res = await self._request(
+            "GET",
+            {"kind": f"eq.{kind}", "select": select, "order": "updated_at.desc",
+             "limit": str(limit), "offset": str(offset)},
+        )
+        rows = res.json()
+        if fields is None:
+            return rows
+        return [{"owner": r["owner"], "id": r["id"], "updated_at": r.get("updated_at"),
+                 "data": {f: r.get(f) for f in fields}} for r in rows]

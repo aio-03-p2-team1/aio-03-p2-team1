@@ -25,6 +25,8 @@ export default function Header() {
         <NavLink to="/board">실종 정보 게시판</NavLink>
         <NavLink to="/poster">전단지 만들기</NavLink>
         <NavLink to="/my">마이페이지</NavLink>
+        {/* 관리자 계정에만 보인다. 권한 확인은 서버가 /admin/* 요청마다 다시 한다 */}
+        {user?.is_admin && <NavLink to="/admin">관리자</NavLink>}
       </nav>
       {user ? (
         <div className="account-area">
