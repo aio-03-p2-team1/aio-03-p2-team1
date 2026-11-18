@@ -85,13 +85,11 @@ button[disabled]{opacity:.65;cursor:progress}
 .search-description-head label{color:#59554e;font-size:12px;font-weight:700}
 .description-wrap{position:relative;display:flex;flex:1;min-height:120px}
 .description-wrap textarea{flex:1}
-.input-review{margin:0 0 16px;padding:14px 16px;border:1px solid #e3dccf;border-radius:12px;background:#fbf8f1;color:#4f4940;font-size:14px;line-height:1.6}
+.input-review{margin:0;padding:14px 16px;border:1px solid #e3dccf;border-radius:12px;background:#fbf8f1;color:#4f4940;font-size:14px;line-height:1.6}
 .input-review-title{margin:0}
 .input-review-title strong{margin-right:6px;color:#7a5d1f}
 .input-review-question{margin:6px 0 0;font-weight:700;color:#8a4b2a}
 .input-review ul{margin:6px 0 0;padding-left:18px;color:#6a6358;font-size:13px}
-.input-review-organized{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-top:10px}
-.input-review-organized pre{flex:1 1 280px;margin:0;padding:10px 12px;border:1px solid #ece5d8;border-radius:9px;background:#fff;font:inherit;font-size:13px;white-space:pre-wrap}
 .field-block{display:flex;flex-direction:column;gap:6px;min-width:0}
 .field-label{color:#59554e;font-size:12px;font-weight:700}
 .search-fields-v2 .field-block>label.field-label{display:flex;flex-direction:column;gap:6px}
