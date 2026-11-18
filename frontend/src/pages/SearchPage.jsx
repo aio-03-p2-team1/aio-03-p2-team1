@@ -56,6 +56,7 @@ export default function SearchPage() {
   const [run, setRun] = useSearchViewState('run', null)
   const [pageCache, setPageCache] = useSearchViewState('pages', {})
   const [busy, setBusy] = useState(false)
+  const [searchOverlayVisible, setSearchOverlayVisible] = useState(false)
   const [error, setError] = useState(null)
   const [history, setHistory] = useState([])
   // 에이전트 요청(사진·추가 정보)에 대한 답. 설명 글을 고치지 않고 칩으로 따로 보관해 검색 조건에 합친다.
@@ -222,19 +223,19 @@ export default function SearchPage() {
           ...withPhotoBreed(form, result),
           description: [extracted, base].filter(Boolean).join('\n'),
         }
-        submit(buildCriteria(nextForm, answers), run.thread_id, { photoId: analysisId })
+        submit(buildCriteria(nextForm, answers), run.thread_id, { photoId: analysisId, continueLoading: true })
       }
     } catch (err) {
       if (requestId === photoRequestId.current) setPhotoMessage(photoErrorMessage(photoAnalysisError(err)))
     } finally {
       if (requestId === photoRequestId.current) {
-        setPhotoAnalyzing(false)
         // 게시글로 들어온 경우: 사진 분석이 실패해도 글 정보만으로 찾는다.
         // 게시글 사진을 이미 보여 줬으므로, 분석이 실패해(번호 없음) 사진을 다시 요청하는 일은 막는다.
         if (searchForm) {
           submit(buildCriteria(searchForm, {}, autoSearch.location), undefined,
-            { photoId: analysisId, extraDeclined: analysisId ? [] : ['photo'] })
+            { photoId: analysisId, extraDeclined: analysisId ? [] : ['photo'], continueLoading: true })
         }
+        setPhotoAnalyzing(false)
       }
     }
   }
@@ -271,8 +272,11 @@ export default function SearchPage() {
       ].filter(Boolean).join(' · ')
 
   // photoId: 사진 분석 번호(기본은 지금 화면의 번호. 분석 직후처럼 상태가 아직 반영되지 않았으면 직접 넘긴다).
-  // extraDeclined: 이번 검색에서 다시 묻지 않을 항목.
-  async function submit(criteria, threadId, { photoId = photoAnalysisId, extraDeclined = [] } = {}) {
+  // extraDeclined: 이번 검색에서 다시 묻지 않을 항목. continueLoading: 사진 분석에서 이어질 때 로딩 화면을 유지.
+  async function submit(criteria, threadId, { photoId = photoAnalysisId, extraDeclined = [], continueLoading = false } = {}) {
+    // 캐시 등으로 빨리 끝나는 검색에서는 로딩 화면이 잠깐 번쩍이지 않게 한다.
+    const overlayTimer = continueLoading ? null : window.setTimeout(() => setSearchOverlayVisible(true), 300)
+    if (continueLoading) setSearchOverlayVisible(true)
     setBusy(true)
     setError(null)
     try {
@@ -305,6 +309,8 @@ export default function SearchPage() {
     } catch (err) {
       setError(err)
     } finally {
+      if (overlayTimer !== null) window.clearTimeout(overlayTimer)
+      setSearchOverlayVisible(false)
       setBusy(false)
     }
   }
@@ -391,7 +397,7 @@ export default function SearchPage() {
 
   return (
     <>
-    <main className="page-main search-page" inert={photoAnalyzing} aria-busy={photoAnalyzing}>
+    <main className="page-main search-page" inert={photoAnalyzing || searchOverlayVisible} aria-busy={photoAnalyzing || busy}>
       <div className="page-heading">
         <h1>우리 아이를 알려주세요</h1>
         <p>반려동물의 정보와 실종 지역을 입력하면 비슷한 공고를 찾아드려요.</p>
@@ -551,7 +557,7 @@ export default function SearchPage() {
         </div>
       </section>
     </main>
-    {photoAnalyzing && (
+    {(photoAnalyzing || searchOverlayVisible) && (
       <div className="photo-loading-overlay" role="status" aria-live="polite">
         <div className="photo-loading-content">
           <div className="photo-loading-motion" aria-hidden="true">
@@ -559,7 +565,7 @@ export default function SearchPage() {
             <img src={runningRaccoon} alt="" />
             <span className="photo-loading-shadow" />
           </div>
-          <p>우리 아이를 만나러 가는 중…</p>
+          <p>{photoAnalyzing ? '사진을 살펴보고 있어요…' : '닮은 구조동물을 찾고 있어요…'}</p>
           <span className="photo-loading-dots" aria-hidden="true"><i /><i /><i /></span>
         </div>
       </div>
