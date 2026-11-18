@@ -41,7 +41,34 @@ class SearchBody(BaseModel):
     # 에이전트 요청에 사용자가 '잘 모르겠어요'라고 답한 항목. 같은 대화에서 다시 묻지 않는다.
     # 사진 분석 결과 번호(/photo-analysis 응답의 analysis_id). 서버가 보관한 결과를 꺼내 특징·판단에 쓴다.
     photo_analysis_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$")
+    # 서버가 다듬기 응답과 검색 특징을 저장한 소유자 한정 번호.
+    refinement_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$")
     declined: list[Literal["photo", "color", "size", "sex", "marks"]] = Field(default_factory=list, max_length=5)
+
+
+class RefineDescriptionBody(BaseModel):
+    description: str = Field(default="", max_length=1000)
+    image_base64: str | None = Field(None, min_length=1, max_length=((MAX_IMAGE_BYTES + 2) // 3) * 4)
+    post_id: str | None = Field(None, min_length=1, max_length=64)
+
+    @field_validator("description")
+    @classmethod
+    def _strip_description(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def _one_image_source(self):
+        if self.image_base64 is not None and self.post_id is not None:
+            raise ValueError("image_base64 와 post_id 를 함께 보낼 수 없습니다")
+        if not self.description and self.image_base64 is None and self.post_id is None:
+            raise ValueError("description 또는 사진이 필요합니다")
+        return self
+
+
+class RefineDescriptionResponse(StrictSchema):
+    description: str
+    refinement_id: str
+    photo_used: bool
 
 
 class PhotoAnalysisBody(BaseModel):

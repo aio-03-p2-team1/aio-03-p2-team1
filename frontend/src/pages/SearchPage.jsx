@@ -51,6 +51,10 @@ export default function SearchPage() {
   // 서버가 보관한 사진 분석 결과 번호. 검색 때 함께 보내면 서버가 사진 특징·사진 받음 여부를 이 결과로 판단한다
   // (설명 글의 '사진에서 확인한 특징' 줄은 보여 주기용이라, 사용자가 지우거나 고쳐도 판단은 바뀌지 않음).
   const [photoAnalysisId, setPhotoAnalysisId] = useSearchViewState('photoAnalysisId', '')
+  const [refinementId, setRefinementId] = useState('')
+  const [refining, setRefining] = useState(false)
+  const refinementLock = useRef(false)
+  const photoSourceRef = useRef(null)
   const [run, setRun] = useSearchViewState('run', null)
   const [pageCache, setPageCache] = useSearchViewState('pages', {})
   const [busy, setBusy] = useState(false)
@@ -72,8 +76,7 @@ export default function SearchPage() {
     loadHistory()
   }, [])
 
-  // 실종 정보 게시판의 [이 정보로 구조 공고 찾기]로 들어오면 그 글의 정보로 입력을 채우고 바로 찾는다.
-  // 이전 검색 결과·답한 값·사진은 비운다. 글에 사진이 있으면 사진 분석이 끝난 뒤(특징을 채운 뒤) 찾는다.
+  // 실종 정보 게시판의 [이 정보로 구조 공고 찾기]로 들어오면 텍스트·사진을 한 번 정리한 뒤 바로 찾는다.
   useEffect(() => {
     const prefill = takePostSearch()
     if (!prefill) return
@@ -87,11 +90,16 @@ export default function SearchPage() {
     setPhotoFeatureText('')
     setPhotoSpecies('')
     setPhotoAnalysisId('')
+    setRefinementId('')
     setParams({}, { replace: true })
     toast(`'${prefill.source?.title || '게시글'}' 정보로 찾고 있어요. 입력을 고쳐 다시 찾을 수도 있어요.`)
     const auto = { baseForm: prefill.form, location: prefill.location }
     if (prefill.photo && prefill.source?.id) {
-      analyzePhoto({ postId: prefill.source.id }, prefill.photo, { fresh: true, autoSearch: auto })
+      photoSourceRef.current = { postId: prefill.source.id }
+      setPhoto(prefill.photo)
+      refineText({ description: prefill.form.description, source: { postId: prefill.source.id }, autoSearch: auto })
+    } else if (prefill.form.description?.trim()) {
+      refineText({ description: prefill.form.description, source: null, autoSearch: auto })
     } else {
       submit(buildCriteria(prefill.form, {}, prefill.location), undefined, { photoId: '' })
     }
@@ -125,13 +133,55 @@ export default function SearchPage() {
     api('/runs?limit=8').then((body) => setHistory(body.runs)).catch(() => setHistory([]))
   }
 
-  const set = (key) => (event) => setForm((f) => ({ ...f, [key]: event.target.value }))
+  const set = (key) => (event) => {
+    if (key === 'description') setRefinementId('')
+    setForm((f) => ({ ...f, [key]: event.target.value }))
+  }
 
   async function onPhoto(event) {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
+    photoSourceRef.current = { file }
+    setRefinementId('')
     await analyzePhoto({ file }, URL.createObjectURL(file))
+  }
+
+  async function refineText({ description = form.description, source = photoSourceRef.current, autoSearch = null } = {}) {
+    if (refinementLock.current) return
+    const original = description.trim()
+    if (!original && !source) return toast('다듬을 특징이나 상황을 입력하거나 사진을 올려 주세요.')
+    refinementLock.current = true
+    setRefining(true)
+    setError(null)
+    try {
+      const body = { description: original }
+      if (source?.file) body.image_base64 = await readAsBase64(source.file)
+      else if (source?.postId) body.post_id = source.postId
+      const result = await api('/searches/refine', { method: 'POST', body })
+      const nextForm = { ...(autoSearch?.baseForm || form), description: result.description }
+      setForm((current) => ({ ...current, description: result.description }))
+      setRefinementId(result.refinement_id)
+      if (autoSearch) {
+        submit(buildCriteria(nextForm, {}, autoSearch.location), undefined, {
+          photoId: '', refinementId: result.refinement_id,
+          extraDeclined: source && !result.photo_used ? ['photo'] : [],
+        })
+      } else {
+        toast('특징과 상황을 템플릿으로 정리했어요. 내용을 확인한 뒤 찾아보세요.')
+      }
+    } catch (err) {
+      setError(err)
+      toast(errorMessage(err))
+      if (autoSearch) {
+        // 다듬기 호출 자체가 실패한 경우에도 원문으로 검색은 이어 간다.
+        submit(buildCriteria(autoSearch.baseForm, {}, autoSearch.location), undefined,
+          { photoId: '', extraDeclined: source ? ['photo'] : [] })
+      }
+    } finally {
+      refinementLock.current = false
+      setRefining(false)
+    }
   }
 
   // 사진 한 장을 보여 주고 특징을 분석해 입력에 채운다. 직접 올린 사진과 게시글 사진이 같은 흐름을 쓴다.
@@ -262,7 +312,7 @@ export default function SearchPage() {
 
   // photoId: 사진 분석 번호(기본은 지금 화면의 번호. 분석 직후처럼 상태가 아직 반영되지 않았으면 직접 넘긴다).
   // extraDeclined: 이번 검색에서 다시 묻지 않을 항목.
-  async function submit(criteria, threadId, { photoId = photoAnalysisId, extraDeclined = [] } = {}) {
+  async function submit(criteria, threadId, { photoId = photoAnalysisId, refinementId: refinedId = refinementId, extraDeclined = [] } = {}) {
     setBusy(true)
     setError(null)
     try {
@@ -270,6 +320,7 @@ export default function SearchPage() {
       if (threadId) body.thread_id = threadId
       // 같은 대화면 '모르겠어요' 항목을 함께 보내 다시 묻지 않게 한다. 새 대화면 초기화.
       if (photoId) body.photo_analysis_id = photoId
+      if (refinedId) body.refinement_id = refinedId
       const skip = [...new Set([...(threadId ? declined : []), ...extraDeclined])]
       if (skip.length) body.declined = skip
       if (!threadId) setDeclined(extraDeclined)
@@ -306,6 +357,7 @@ export default function SearchPage() {
 
   function onSubmit(event) {
     event.preventDefault()
+    if (busy || refining) return
     // 질문에 답하는 중이거나 에이전트 요청이 있던 검색이면 같은 대화로 이어서 찾는다.
     const followUp = run?.status === 'awaiting_input' || run?.agent_request
     submit(buildCriteria(form, answers), followUp ? run.thread_id : undefined)
@@ -349,7 +401,7 @@ export default function SearchPage() {
 
       <form className="panel search-form search-form-wide" onSubmit={onSubmit} noValidate>
         <div className="panel-title"><span>01</span><h2>사진과 정보 입력</h2></div>
-        <div className="search-form-grid search-form-grid-v2">
+        <fieldset className="search-form-grid search-form-grid-v2" disabled={refining}>
           <div className="photo-upload-column">
             <label className="upload-box">
               사진 올리기
@@ -411,10 +463,23 @@ export default function SearchPage() {
                 </div>
               </div>
             )}
-            <label className="search-description">
-              특징과 상황
-              <textarea ref={descriptionRef} rows={5} maxLength={1000} value={form.description} onChange={set('description')} aria-describedby={questionNotes.length ? 'form-questions' : undefined} placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털, 빨간 목줄. 품종은 위 목록에서 선택해 주세요." />
-            </label>
+            <div className="search-description">
+              <div className="search-description-head">
+                <label htmlFor="search-description-input">특징과 상황</label>
+                <button type="button" className="refine-button" disabled={refining || busy}
+                  onClick={() => refineText()} aria-label="텍스트 다듬기">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5M13.5 5.5l5 5L9 20H4v-5L13.5 5.5ZM4 3v4M2 5h4M18 14v6M15 17h6" /></svg>
+                  {refining ? '다듬는 중…' : '텍스트 다듬기'}
+                </button>
+              </div>
+              <div className={`description-wrap${refining ? ' is-refining' : ''}`}>
+                <textarea id="search-description-input" ref={descriptionRef} rows={5} maxLength={1000}
+                  value={form.description} onChange={set('description')} disabled={refining}
+                  aria-describedby={questionNotes.length ? 'form-questions' : undefined}
+                  placeholder="털 색, 크기, 성별, 목줄, 눈에 띄는 특징을 적어주세요. 예: 갈색 곱슬털, 빨간 목줄. 품종은 위 목록에서 선택해 주세요." />
+                {refining && <span className="refine-shimmer" aria-hidden="true" />}
+              </div>
+            </div>
             {chips.length > 0 && (
               <div className="answer-chips" aria-label="요청에 답한 값">
                 {chips.map((chip) => (
@@ -433,13 +498,13 @@ export default function SearchPage() {
               </button>
             </div>
           </div>
-        </div>
+        </fieldset>
         <div className="search-form-bottom">
           <p className="fineprint">
             사진을 살펴보고 확인된 특징을 입력란에 적어드려요. 사진은 저장하지 않으며, 입력된 특징은 직접 고칠 수 있어요.
             빈 칸이 있으면 검색 전에 먼저 물어볼게요.
           </p>
-          <button className="primary-button" type="submit" disabled={busy}>{busy ? '찾는 중…' : '후보 찾아보기'}</button>
+          <button className="primary-button" type="submit" disabled={busy || refining}>{busy ? '찾는 중…' : '후보 찾아보기'}</button>
         </div>
       </form>
       <RegionPicker
