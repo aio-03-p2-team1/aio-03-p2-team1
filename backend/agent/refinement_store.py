@@ -19,7 +19,7 @@ def _result_key(owner: str, refinement_id: str) -> str:
 
 
 def source_hash(text: str) -> str:
-    return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 async def begin(redis, owner: str, text: str, token: str) -> bool:

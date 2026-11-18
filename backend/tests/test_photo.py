@@ -205,6 +205,7 @@ def test_refinement_lock_uses_original_text_hash_until_task_finishes():
 
     async def scenario():
         redis = fakeredis.FakeAsyncRedis()
+        assert refinement_store.source_hash("흰 강아지") != refinement_store.source_hash(" 흰 강아지 ")
         assert await refinement_store.begin(redis, "owner", "흰 강아지", "first")
         assert not await refinement_store.begin(redis, "owner", "흰 강아지", "second")
         assert await refinement_store.begin(redis, "other-owner", "흰 강아지", "third")

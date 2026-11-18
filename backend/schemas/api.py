@@ -54,13 +54,13 @@ class RefineDescriptionBody(BaseModel):
     @field_validator("description")
     @classmethod
     def _strip_description(cls, value: str) -> str:
-        return value.strip()
+        return value
 
     @model_validator(mode="after")
     def _one_image_source(self):
         if self.image_base64 is not None and self.post_id is not None:
             raise ValueError("image_base64 와 post_id 를 함께 보낼 수 없습니다")
-        if not self.description and self.image_base64 is None and self.post_id is None:
+        if not self.description.strip() and self.image_base64 is None and self.post_id is None:
             raise ValueError("description 또는 사진이 필요합니다")
         return self
 

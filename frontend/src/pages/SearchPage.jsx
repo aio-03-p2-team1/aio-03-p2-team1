@@ -149,8 +149,8 @@ export default function SearchPage() {
 
   async function refineText({ description = form.description, source = photoSourceRef.current, autoSearch = null } = {}) {
     if (refinementLock.current) return
-    const original = description.trim()
-    if (!original && !source) return toast('다듬을 특징이나 상황을 입력하거나 사진을 올려 주세요.')
+    const original = String(description ?? '')
+    if (!original.trim() && !source) return toast('다듬을 특징이나 상황을 입력하거나 사진을 올려 주세요.')
     refinementLock.current = true
     setRefining(true)
     setError(null)
