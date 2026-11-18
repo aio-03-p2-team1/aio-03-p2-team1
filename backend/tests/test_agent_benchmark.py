@@ -7,6 +7,7 @@ import pytest
 
 from scripts.benchmark_search_agent import score_policy, summarize, timing
 from scripts.compare_search_agent import Meter, TimedService, aggregate, digest
+from scripts.benchmark_agent_quick import quick_summary
 
 
 def test_timing_uses_nearest_rank_p95_and_handles_no_measurement():
@@ -77,3 +78,16 @@ def test_comparison_budget_prevents_extra_model_call():
             await agent.step([])
         assert len(calls) == len(meter.events) == 1 and meter.events[0]["ok"]
     asyncio.run(scenario())
+
+
+def test_quick_summary_keeps_budget_incomplete_and_excludes_preflight_from_quality():
+    report = {"policy_runs": [
+        {"case": "scope", "assessment": {"pass": False, "checks": {}}, "excluded_from_quality": "no model call"},
+        {"case": "breed", "assessment": {"pass": False, "checks": {"llm_completed": False}}},
+        {"case": "scope", "assessment": {"pass": True, "checks": {}}}],
+        "live_runs": [{"error": {"code": "embedding_not_configured"}},
+                      {"error": None, "decision": {"source": "llm"}, "elapsed_ms": 3000}],
+        "budget_stop": "token_budget", "chat_usage": {"total_tokens": 18789}, "total_elapsed_ms": 35093}
+    result = quick_summary(report)
+    assert result["policy_outcomes"] == {"breed": "incomplete_budget", "scope": "pass"}
+    assert len(result["valid_speed_runs"]) == 1 and result["reduction_vs_50405_agent_tokens_percent"] > 50
