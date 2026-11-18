@@ -13,6 +13,11 @@ const backgrounds = new Map([
   ['lost-shorts', shortsBackground],
 ])
 
+// 템플릿 선택 목록의 미리보기 이미지로도 쓴다(템플릿 id 가 곧 배경 키).
+export function posterBackgroundUrl(key) {
+  return backgrounds.get(key) || null
+}
+
 function useCanvasImage(src) {
   const [loaded, setLoaded] = useState(null)
   useEffect(() => {

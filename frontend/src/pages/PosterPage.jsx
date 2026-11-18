@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Stage, Layer, Transformer } from 'react-konva'
 import { CanvasItem, PosterBackground, usePosterBackground } from '../components/PosterCanvasItem.jsx'
+import PosterTemplatePicker from '../components/PosterTemplatePicker.jsx'
 import { API_BASE, api } from '../lib/api.js'
 import { createPosterFromTemplate, POSTER_FIELDS, posterPayload, switchPosterTemplate } from '../lib/posterDocument.js'
 import { applyPosterDraft, clearPosterDraft, peekPosterDraft } from '../lib/postPoster.js'
@@ -210,10 +211,7 @@ export default function PosterPage() {
     <div className="poster-topbar">
       <div><span className="eyebrow">MISSING PET POSTER</span><h1>실종 전단지 만들기</h1></div>
       <div className="poster-top-actions">
-        <label className="poster-select-label">템플릿<select value={poster.templateId} onChange={(event) => changeTemplate(event.target.value)}>
-          {!templates.some((item) => item.id === poster.templateId) && <option value={poster.templateId}>기존 전단지</option>}
-          {templates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-        </select></label>
+        <PosterTemplatePicker templates={templates} value={poster.templateId} onChange={changeTemplate} />
         <button className="secondary-button" type="button" onClick={undo} disabled={!past.length}>실행 취소</button>
         <button className="secondary-button" type="button" onClick={redo} disabled={!future.length}>다시 실행</button>
         <button className="secondary-button" type="button" onClick={downloadPng} disabled={!background.ready}>PNG 다운로드</button>

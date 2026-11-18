@@ -337,8 +337,24 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-topbar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:18px}
 .poster-topbar h1{margin:4px 0 0;font-size:clamp(26px,3vw,38px);letter-spacing:-.055em}
 .poster-top-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
-.poster-select-label{display:flex;align-items:center;gap:8px;color:#756d61;font-size:12px;font-weight:700}
-.poster-select-label select{min-height:40px;padding:7px 30px 7px 10px;border:1px solid #e2dacd;border-radius:9px;background:#fff;color:#403a32;font:inherit;font-size:13px}
+.poster-template-picker{position:relative;display:flex;align-items:center;gap:8px;color:#756d61;font-size:12px;font-weight:700}
+.poster-template-button{display:flex;align-items:center;gap:9px;min-width:178px;min-height:40px;padding:4px 10px 4px 5px;border:1px solid #e2dacd;border-radius:9px;background:#fff;color:#403a32;font:inherit;text-align:left;cursor:pointer}
+.poster-template-button:hover:not(:disabled),.poster-template-button[aria-expanded=true]{border-color:#c9b575;background:#fffaf0}
+.poster-template-button:focus-visible{outline:2px solid #638062;outline-offset:2px}
+.poster-template-list:focus{outline:none}
+.poster-template-thumb{display:grid;place-items:center;flex:none;width:30px;height:40px;overflow:hidden;border:1px solid #e6dfd4;border-radius:5px;background:#f3efe8}
+.poster-template-thumb img{display:block;width:100%;height:100%;object-fit:contain}
+.poster-template-thumb-empty{color:#a39a8d;font-size:12px}
+.poster-template-text{display:grid;gap:1px;min-width:0;flex:1}
+.poster-template-text strong{overflow:hidden;color:#403a32;font-size:13px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.poster-template-text small{color:#8a8175;font-size:11px;font-weight:500}
+.poster-template-caret{color:#8a8175;font-size:12px}
+.poster-template-list{position:absolute;top:calc(100% + 6px);right:0;z-index:30;display:grid;gap:4px;width:max(100%,260px);max-height:min(70vh,520px);margin:0;padding:6px;overflow:auto;list-style:none;border:1px solid #e2dacd;border-radius:12px;background:#fff;box-shadow:0 14px 34px rgba(54,45,33,.16)}
+.poster-template-option{display:flex;align-items:center;gap:12px;padding:8px 10px 8px 8px;border-radius:9px;cursor:pointer}
+.poster-template-option .poster-template-thumb{width:58px;height:78px;border-radius:7px}
+.poster-template-option.active{background:#fbf5e6}
+.poster-template-option.selected strong{color:#4f6a4e}
+.poster-template-check{color:#638062;font-size:14px;font-weight:800}
 .poster-top-actions .primary-button,.poster-top-actions .secondary-button{min-height:40px;padding:9px 14px;font-size:13px}
 /* 캔버스 | 전단지 내용(이전 2열 배치 때와 같은 폭) | 선택한 요소(220px). 선택한 요소 폭만큼 캔버스가 줄어든다. */
 .poster-workspace{display:grid;grid-template-columns:minmax(0,1fr) max(300px,calc((100% - 16px) * .28)) 220px;gap:16px;align-items:start}
@@ -382,7 +398,7 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-notice{margin:14px 0 0;padding:10px 11px;border:1px solid #d5e3d0;border-radius:8px;background:#f2f7ef;color:#3d5c37;font-size:12px;line-height:1.5}
 .poster-notice.error{border-color:#ecc7bd;background:#fff7f4;color:#a34a39}
 @media(max-width:1050px){.poster-topbar{align-items:flex-start;flex-direction:column}.poster-top-actions{justify-content:flex-start}.poster-workspace{grid-template-columns:minmax(0,1fr) minmax(260px,.6fr)}.poster-canvas-panel{grid-row:span 2}}
-@media(max-width:760px){.poster-page{padding:18px 14px 50px}.poster-workspace{grid-template-columns:1fr}.poster-inspector{position:static;max-height:none;order:-1}.poster-canvas-panel{grid-row:auto}.poster-properties{position:static;max-height:none}.poster-stage-wrap{height:auto;max-height:85vh;min-height:430px}.poster-canvas-panel{padding:11px}.poster-canvas-toolbar{align-items:flex-start;flex-direction:column}.poster-top-actions{width:100%}.poster-select-label{width:100%;justify-content:space-between}.poster-select-label select{flex:1}}
+@media(max-width:760px){.poster-page{padding:18px 14px 50px}.poster-workspace{grid-template-columns:1fr}.poster-inspector{position:static;max-height:none;order:-1}.poster-canvas-panel{grid-row:auto}.poster-properties{position:static;max-height:none}.poster-stage-wrap{height:auto;max-height:85vh;min-height:430px}.poster-canvas-panel{padding:11px}.poster-canvas-toolbar{align-items:flex-start;flex-direction:column}.poster-top-actions{width:100%}.poster-template-picker{width:100%}.poster-template-button{flex:1}.poster-template-list{left:0;right:auto;width:100%}}
 
 /* 마이페이지: 내가 만든 전단지 */
 .my-posters-panel{margin-top:18px}
