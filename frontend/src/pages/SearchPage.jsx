@@ -431,7 +431,7 @@ export default function SearchPage() {
             <div className="field-block">
               <span className="field-label">종류 <em className="req">필수</em></span>
               <SpeciesPicker value={form.species} onChange={(species) => setForm((f) => withSpecies(f, species))} />
-              <label>품종 (선택)
+              <label className="field-label">품종 (선택)
                 <select aria-label="품종" value={form.breed_code || ''} onChange={set('breed_code')}
                   disabled={!form.species || form.species === 'all' || kindsLoading || !kinds.length}>
                   <option value="">{kindsLoading ? '품종 불러오는 중…' : '품종을 선택해 주세요'}</option>
