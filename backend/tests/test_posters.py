@@ -43,14 +43,41 @@ def exif_jpeg():
     return stream.getvalue()
 
 
-def test_templates_are_public_and_have_three_presets(client):
+def test_template_list_offers_a4_and_shorts_and_legacy_detail_still_works(client):
     response = client.get("/api/v1/poster/templates")
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()["items"]] == ["basic", "info", "urgent"]
+    assert [(item["id"], item["name"], item["width"], item["height"]) for item in response.json()["items"]] == [
+        ("lost-a4", "일반형", 794, 1123), ("lost-shorts", "긴급형", 720, 1280),
+    ]
     detail = client.get("/api/v1/poster/templates/basic")
     assert detail.json()["width"] == 794 and detail.json()["height"] == 1123
     assert detail.json()["components"]
     assert client.get("/api/v1/poster/templates/missing").status_code == 404
+
+
+def test_svg_templates_save_and_reload_with_their_bundled_background(client):
+    signup(client, "poster-svg@example.com")
+    required = {"title", "pet_name", "species_breed", "lost_datetime", "lost_place", "features", "extra_description", "contact"}
+    for key in ("lost-a4", "lost-shorts"):
+        template = client.get(f"/api/v1/poster/templates/{key}").json()
+        components = template["components"]
+        assert {item["fieldKey"] for item in components if item["type"] == "text"} == required
+        assert sum(item["type"] == "image" for item in components) == 1
+        for item in components:
+            assert 0 <= item["x"] < item["x"] + item["width"] <= template["width"]
+            assert 0 <= item["y"] < item["y"] + item["height"] <= template["height"]
+        body = poster_body(templateId=key, width=template["width"], height=template["height"], components=components)
+        created = client.post("/api/v1/posters", json=body)
+        assert created.status_code == 201
+        url = f"/api/v1/posters/{created.json()['id']}"
+        assert client.get(url).json()["components"] == components
+        assert client.put(url, json=body).status_code == 200
+        for invalid in (
+            components[1:],
+            [{**components[0], "backgroundKey": "https://example.test/poster.svg"}, *components[1:]],
+            [*components, {**components[0], "id": "duplicate-paper"}],
+        ):
+            assert client.put(url, json={**body, "components": invalid}).status_code == 422
 
 
 def test_poster_crud_is_scoped_to_logged_in_owner(client):

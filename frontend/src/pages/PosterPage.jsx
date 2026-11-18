@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Stage, Layer, Rect, Transformer } from 'react-konva'
-import { CanvasItem } from '../components/PosterCanvasItem.jsx'
+import { Stage, Layer, Transformer } from 'react-konva'
+import { CanvasItem, PosterBackground, usePosterBackground } from '../components/PosterCanvasItem.jsx'
 import { API_BASE, api } from '../lib/api.js'
 import { createPosterFromTemplate, POSTER_FIELDS, posterPayload, switchPosterTemplate } from '../lib/posterDocument.js'
 import { applyPosterDraft, clearPosterDraft, peekPosterDraft } from '../lib/postPoster.js'
@@ -10,10 +10,10 @@ import { usePosterStore } from '../lib/posterStore.js'
 
 const makeId = () => crypto.randomUUID().replaceAll('-', '')
 
-function ComponentCanvas({ poster, selectedId, zoom, select, update, stageRef }) {
+function ComponentCanvas({ poster, background, selectedId, zoom, select, update, stageRef }) {
   const transformRef = useRef(null)
   const nodes = useRef({})
-  const sorted = useMemo(() => [...poster.components].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)), [poster.components])
+  const sorted = useMemo(() => poster.components.filter((item) => item.type !== 'background').sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)), [poster.components])
   useEffect(() => {
     const node = nodes.current[selectedId]
     if (node && transformRef.current) {
@@ -28,7 +28,7 @@ function ComponentCanvas({ poster, selectedId, zoom, select, update, stageRef })
       onMouseDown={(event) => { if (event.target === event.target.getStage()) select(null) }}
       onTouchStart={(event) => { if (event.target === event.target.getStage()) select(null) }}>
       <Layer>
-        <Rect x={0} y={0} width={poster.width} height={poster.height} fill="#FFFFFF" shadowColor="#342e23" shadowBlur={12} shadowOpacity={0.12} onMouseDown={() => select(null)} onTouchStart={() => select(null)} />
+        <PosterBackground poster={poster} image={background} />
         {sorted.map((item) => <CanvasItem key={item.id} item={item} selected={selectedId === item.id} onSelect={() => select(item.id)} onChange={(patch) => update(item.id, patch)} registerNode={(node) => { if (node) nodes.current[item.id] = node; else delete nodes.current[item.id] }} />)}
         <Transformer ref={transformRef} rotateEnabled anchorSize={9} borderStroke="#4c7757" anchorStroke="#4c7757" anchorFill="#fff" />
       </Layer>
@@ -64,6 +64,7 @@ export default function PosterPage() {
   const stageRef = useRef(null)
   const posterId = new URLSearchParams(location.search).get('edit')
   const selected = poster?.components.find((item) => item.id === selectedId)
+  const background = usePosterBackground(poster)
 
   useEffect(() => {
     let live = true
@@ -78,7 +79,8 @@ export default function PosterPage() {
         }
         // 게시판 상세의 [전단지 만들기]로 왔으면 기본 템플릿에 게시글 문구·사진을 채운다(저장은 사용자가 한다).
         const draft = peekPosterDraft()
-        const templateId = draft ? 'basic' : list.items[0]?.id || 'basic'
+        const templateId = list.items[0]?.id
+        if (!templateId) throw new Error('전단지 템플릿을 불러오지 못했습니다.')
         return api(`/poster/templates/${templateId}`).then((template) => {
           if (!live) return
           const fresh = createPosterFromTemplate(template)
@@ -110,6 +112,12 @@ export default function PosterPage() {
   }
 
   function addPhotoSlot() {
+    const emptySlot = poster.components.find((item) => item.type === 'image' && !item.assetId)
+    if (emptySlot) {
+      select(emptySlot.id)
+      fileRef.current?.click()
+      return
+    }
     const component = { id: makeId(), type: 'image', label: '반려동물 사진', assetId: null, x: 150, y: 260, width: 480, height: 360, opacity: 1, zIndex: Math.max(0, ...poster.components.map((item) => item.zIndex || 0)) + 1 }
     addComponent(component); fileRef.current?.click(); setSaved(false)
   }
@@ -146,29 +154,42 @@ export default function PosterPage() {
     } catch (error) { setNotice(error.message) } finally { setSaving(false) }
   }
 
-  function downloadPng() {
+  function exportImage() {
     const stageInstance = stageRef.current
-    if (!stageInstance) { setNotice('PNG를 만들지 못했습니다.'); return }
-    const link = document.createElement('a')
-    link.download = '실종동물-전단지.png'
+    if (!stageInstance || !background.ready) return null
+    const renderedPhotos = new Set(stageInstance.find('Image').map((node) => node.id()))
+    if (poster.components.some((item) => item.type === 'image' && item.assetId && !renderedPhotos.has(item.id))) {
+      setNotice('사진을 아직 불러오지 못했습니다. 미리보기에서 사진을 확인해 주세요.')
+      return null
+    }
     const transformer = stageInstance.findOne('Transformer')
     transformer?.hide()
-    link.href = stageInstance.toDataURL({ pixelRatio: 2, mimeType: 'image/png' })
-    transformer?.show()
+    try {
+      return stageInstance.toDataURL({ pixelRatio: 2, mimeType: 'image/png' })
+    } catch {
+      setNotice('전단지 이미지를 만들지 못했습니다.')
+      return null
+    } finally {
+      transformer?.show()
+    }
+  }
+
+  function downloadPng() {
+    const imageUrl = exportImage()
+    if (!imageUrl) return
+    const link = document.createElement('a')
+    link.download = '실종동물-전단지.png'
+    link.href = imageUrl
     link.click()
   }
 
   function printPdf() {
-    const stageInstance = stageRef.current
-    if (!stageInstance) { setNotice('인쇄용 이미지를 만들지 못했습니다.'); return }
+    const imageUrl = exportImage()
+    if (!imageUrl) return
     const printWindow = window.open('', '_blank')
     if (!printWindow) { setNotice('새 창이 차단됐어요. 팝업을 허용한 뒤 다시 시도해 주세요.'); return }
-    const transformer = stageInstance.findOne('Transformer')
-    transformer?.hide()
-    const imageUrl = stageInstance.toDataURL({ pixelRatio: 2, mimeType: 'image/png' })
-    transformer?.show()
     printWindow.document.open()
-    printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>실종동물 전단지</title><style>@page{size:A4 portrait;margin:0}html,body{margin:0;width:210mm;height:297mm}img{display:block;width:210mm;height:297mm}</style></head><body><img alt="실종동물 전단지" src="${imageUrl}"></body></html>`)
+    printWindow.document.write(`<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>실종동물 전단지</title><style>@page{size:A4 portrait;margin:0}html,body{margin:0;width:210mm;height:297mm}img{display:block;width:100%;height:100%;object-fit:contain;object-position:center}</style></head><body><img alt="실종동물 전단지" src="${imageUrl}"></body></html>`)
     printWindow.document.close()
     const image = printWindow.document.querySelector('img')
     let printed = false
@@ -189,11 +210,14 @@ export default function PosterPage() {
     <div className="poster-topbar">
       <div><span className="eyebrow">MISSING PET POSTER</span><h1>실종 전단지 만들기</h1></div>
       <div className="poster-top-actions">
-        <label className="poster-select-label">템플릿<select value={poster.templateId} onChange={(event) => changeTemplate(event.target.value)}>{templates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+        <label className="poster-select-label">템플릿<select value={poster.templateId} onChange={(event) => changeTemplate(event.target.value)}>
+          {!templates.some((item) => item.id === poster.templateId) && <option value={poster.templateId}>기존 전단지</option>}
+          {templates.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </select></label>
         <button className="secondary-button" type="button" onClick={undo} disabled={!past.length}>실행 취소</button>
         <button className="secondary-button" type="button" onClick={redo} disabled={!future.length}>다시 실행</button>
-        <button className="secondary-button" type="button" onClick={downloadPng}>PNG 다운로드</button>
-        <button className="secondary-button" type="button" onClick={printPdf}>PDF / 인쇄</button>
+        <button className="secondary-button" type="button" onClick={downloadPng} disabled={!background.ready}>PNG 다운로드</button>
+        <button className="secondary-button" type="button" onClick={printPdf} disabled={!background.ready}>PDF / 인쇄</button>
         <button className="primary-button" type="button" onClick={save} disabled={saving}>{saving ? '저장 중…' : saved ? '저장 완료' : '저장'}</button>
       </div>
     </div>
@@ -203,7 +227,8 @@ export default function PosterPage() {
           <div className="poster-add-actions"><button type="button" onClick={addText}>＋ 텍스트</button><button type="button" onClick={addPhotoSlot}>＋ 사진</button></div>
           <label>확대 <input type="range" min="0.35" max="0.95" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /> <span>{Math.round(zoom * 100)}%</span></label>
         </div>
-        <ComponentCanvas poster={poster} selectedId={selectedId} zoom={zoom} select={select} update={(id, patch) => { update(id, patch); setSaved(false) }} stageRef={stageRef} />
+        {background.error && <p role="alert">전단지 배경을 불러오지 못했습니다.</p>}
+        <ComponentCanvas poster={poster} background={background.image} selectedId={selectedId} zoom={zoom} select={select} update={(id, patch) => { update(id, patch); setSaved(false) }} stageRef={stageRef} />
       </section>
       <aside className="poster-inspector panel">
         <div className="panel-title"><span>1</span><h2>전단지 내용</h2></div>

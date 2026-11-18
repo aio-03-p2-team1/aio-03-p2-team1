@@ -31,12 +31,13 @@ export const usePosterStore = create((set, get) => ({
   reorder(id, direction) {
     const { poster, past } = get()
     if (!poster) return
-    const ordered = [...poster.components].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+    const background = poster.components.filter((item) => item.type === 'background')
+    const ordered = poster.components.filter((item) => item.type !== 'background').sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
     const index = ordered.findIndex((item) => item.id === id)
     const next = index + direction
     if (index < 0 || next < 0 || next >= ordered.length) return
     ;[ordered[index], ordered[next]] = [ordered[next], ordered[index]]
-    set({ poster: { ...poster, components: ordered.map((item, zIndex) => ({ ...item, zIndex })) }, past: [...past.slice(-39), copy(poster)], future: [] })
+    set({ poster: { ...poster, components: [...background, ...ordered.map((item, zIndex) => ({ ...item, zIndex }))] }, past: [...past.slice(-39), copy(poster)], future: [] })
   },
   undo() {
     const { poster, past, future } = get()

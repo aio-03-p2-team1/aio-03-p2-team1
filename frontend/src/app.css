@@ -318,7 +318,7 @@ button[disabled]{opacity:.65;cursor:progress}
 .poster-canvas-toolbar input{width:100px;accent-color:#638062}
 .poster-canvas-toolbar span{min-width:32px;color:#51493f;font-weight:700}
 .poster-stage-wrap{display:grid;place-items:start center;height:calc(130vh - 248px);min-height:532px;overflow:auto;padding:7px 4px 18px}
-.poster-stage-viewport{position:relative;flex:none}
+.poster-stage-viewport{position:relative;flex:none;outline:1px solid #8b8278}
 .poster-stage-scale{position:absolute;top:0;left:0;transform-origin:top left}
 .poster-stage-wrap canvas{display:block;max-width:none!important}
 .poster-inspector{position:static;overflow:visible}
