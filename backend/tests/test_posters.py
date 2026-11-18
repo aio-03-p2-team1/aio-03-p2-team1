@@ -46,8 +46,8 @@ def exif_jpeg():
 def test_template_list_offers_a4_and_shorts_and_legacy_detail_still_works(client):
     response = client.get("/api/v1/poster/templates")
     assert response.status_code == 200
-    assert [(item["id"], item["width"], item["height"]) for item in response.json()["items"]] == [
-        ("lost-a4", 794, 1123), ("lost-shorts", 720, 1280),
+    assert [(item["id"], item["name"], item["width"], item["height"]) for item in response.json()["items"]] == [
+        ("lost-a4", "일반형", 794, 1123), ("lost-shorts", "긴급형", 720, 1280),
     ]
     detail = client.get("/api/v1/poster/templates/basic")
     assert detail.json()["width"] == 794 and detail.json()["height"] == 1123
