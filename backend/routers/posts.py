@@ -31,7 +31,7 @@ from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody, PostUpdateBody
 from backend.timeutil import kst_today  # noqa: F401  (tests 에서 posts.kst_today 로도 import)
 from backend.tools.lost_animal_api import LostAnimalApiError
 from backend.tools.kinds import normalize
-from backend.tools.kind_aliases import is_curated_alias
+from backend.normalization.kind_aliases import is_curated_alias
 
 router = APIRouter(tags=["posts"])
 

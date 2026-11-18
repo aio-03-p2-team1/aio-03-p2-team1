@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from backend.config import SUPABASE_POST_AUDIO_BUCKET, Settings, get_settings
 from backend.deps import AppContext
 from backend.errors import ApiError
-from backend import admin_log
+from backend.admin import audit_log as admin_log
 from backend.routers import admin, auth, comments, memory, posters, posts, public, searches
 from backend.storage import StorageError
 
@@ -70,7 +70,7 @@ def build_context(settings: Settings) -> AppContext:
         else None
     )
     from backend.tools.kinds import KindRepository
-    from backend.agent.breed import BreedNormalizer
+    from backend.normalization.breed import BreedNormalizer
     kinds = KindRepository(settings, redis)
     if photo_llm:
         photo_llm.kinds = kinds

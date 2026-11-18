@@ -5,7 +5,7 @@ import math
 from datetime import date
 from typing import Any
 
-from backend.agent.color_tokenizer import tokenize_color_words
+from backend.normalization.color import tokenize_color_words
 
 WEIGHTS = {"color": 3, "sex": 2, "keyword": 1}
 MAX_KEYWORD_POINTS = 3

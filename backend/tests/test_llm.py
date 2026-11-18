@@ -177,7 +177,7 @@ def test_incomplete_or_bad_json_is_llm_response():
 
 
 def test_input_and_structured_response_are_validated():
-    client = FakeChatClient({"colors": ["보라"], "sex": "", "marks": []})
+    client = FakeChatClient({"colors": ["자주색"], "sex": "", "marks": []})
     with pytest.raises(LlmError, match="llm_response"):
         asyncio.run(extractor(client).extract("갈색"))
     with pytest.raises(LlmError, match="llm_request"):
@@ -255,7 +255,7 @@ def test_prompt_cache_key_reaches_openai_request_transport():
             await model.aclose()
 
     asyncio.run(invoke())
-    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v6'
+    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v7'
     properties = requests[0]['response_format']['json_schema']['schema']['properties']
     assert 'breed' not in properties
 
@@ -263,6 +263,6 @@ def test_prompt_cache_key_reaches_openai_request_transport():
 def test_feature_prompt_keeps_breeds_out_of_marks():
     from backend.agent.llm import PROMPT_VERSION, SYSTEM_PROMPT
 
-    assert PROMPT_VERSION == 'feature-extract-v6'
+    assert PROMPT_VERSION == 'feature-extract-v7'
     assert '품종명·품종코드는 별도 선택 조건' in SYSTEM_PROMPT
     assert 'marks에 넣지 않는다' in SYSTEM_PROMPT

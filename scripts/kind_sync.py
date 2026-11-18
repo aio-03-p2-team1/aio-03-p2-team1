@@ -12,7 +12,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.config import Settings  # noqa: E402
-from backend.tools.kind_aliases import ALIASES  # noqa: E402
+from backend.normalization.kind_aliases import ALIASES  # noqa: E402
 
 log = logging.getLogger(__name__)
 

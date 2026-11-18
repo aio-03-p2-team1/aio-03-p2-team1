@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.agent.graph import GRAPH
-from backend.agent import criteria as crit
+from backend.normalization import criteria as crit
 from backend.agent.search_cache import condition_key
 from backend.agent.embeddings import DIMENSIONS
 from backend.agent.llm import PROMPT_VERSION, REFINEMENT_PROMPT_VERSION
