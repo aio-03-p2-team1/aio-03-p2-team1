@@ -73,8 +73,8 @@ class FakeAnimal:
         self.region_calls += 1
         return self.region_list
 
-    async def search(self, *, region_code, start, end, species, page=1, rows=50):
-        self.calls.append({"region_code": region_code, "page": page, "species": species, "rows": rows})
+    async def search(self, *, region_code, start, end, species, kind=None, page=1, rows=50):
+        self.calls.append({"region_code": region_code, "page": page, "species": species, "kind": kind, "rows": rows})
         if self.errors:
             err = self.errors.pop(0)
             if err:
@@ -90,7 +90,7 @@ def kakao_transport(handler):
     return httpx.MockTransport(handler)
 
 
-def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None) -> AppContext:
+def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None, search_agent=None) -> AppContext:
     settings = settings or make_settings()
     return AppContext(
         settings=settings,
@@ -100,6 +100,8 @@ def build_ctx(settings=None, animal=None, kakao=None, llm=None, redis=None) -> A
         kakao=kakao or KakaoGeocoder(None),
         llm=llm,
         embedder=FakeEmbedder(),
+        search_agent=search_agent,
+        post_audio=FakePostAudioStore(),
     )
 
 
@@ -112,6 +114,24 @@ class FakeEmbedder:
     async def embed(self, texts):
         self.calls.append(texts)
         return [[1.0, 0.0] for _ in texts]
+
+
+class FakePostAudioStore:
+    def __init__(self):
+        self.data = {}
+
+    async def put(self, key, data, content_type):
+        self.data[key] = (data, content_type)
+
+    async def get(self, key):
+        entry = self.data.get(key)
+        return entry[0] if entry else None
+
+    async def delete(self, key):
+        self.data.pop(key, None)
+
+    async def aclose(self):
+        pass
 
 
 @pytest.fixture

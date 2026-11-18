@@ -46,6 +46,22 @@ def test_missing_required_asks_then_merges_followup():
     assert second["data_source"] == "sample"
 
 
+def test_breed_code_filters_candidates_before_ranking():
+    async def resolve_code(species, code):
+        assert species == "dog" and code == "poodle-code"
+        return {"kind_code": code, "name": "푸들"}
+
+    animal = FakeAnimal(pages=[[api_item(1, kindNm="푸들"), api_item(2, kindNm="말티즈")]])
+    d = deps(animal)
+    d["breed_normalizer"] = type("Normalizer", (), {"resolve_code": staticmethod(resolve_code)})()
+    run = search(d, {"species": "dog", "region": "전체", "lost_date": START, "breed_code": "poodle-code"})
+    assert run["status"] == "completed"
+    assert run["criteria"]["breed_code"] == "poodle-code"
+    assert [candidate["breed"] for candidate in run["candidates"]] == ["푸들"]
+    assert animal.calls[0]["kind"] == "poodle-code"
+    assert animal.calls[0]["rows"] == 1000
+
+
 def test_invalid_dates_detected():
     d = deps()
     future = (date.today() + timedelta(days=3)).isoformat()

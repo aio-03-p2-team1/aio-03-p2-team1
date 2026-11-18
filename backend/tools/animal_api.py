@@ -20,6 +20,8 @@ from urllib.parse import unquote
 
 import httpx
 
+from backend.timeutil import kst_today
+
 UPKIND = {"dog": "417000", "cat": "422400", "etc": "429900"}
 UPKIND_REVERSE = {v: k for k, v in UPKIND.items()}
 SPECIES_LABEL = {"dog": "개", "cat": "고양이", "etc": "기타", "all": "전체"}
@@ -71,6 +73,10 @@ def _https(url: str | None) -> str | None:
     if not url:
         return None
     url = url.strip()
+    # 파일 이름 없는 폴더 주소(…/files/)는 사진이 없는 것으로 본다(분실 신고에서 실제로 확인된 형태).
+    last = url.split("?", 1)[0].rsplit("/", 1)[-1]
+    if not last:  # 주소가 / 로 끝나면 파일이 없다
+        return None
     if url.startswith("http://"):
         url = "https://" + url[7:]
     return url or None
@@ -202,6 +208,7 @@ class AnimalApi:
         start: date,
         end: date,
         species: str,
+        kind: str | None = None,
         page: int = 1,
         rows: int = 50,
     ) -> SearchPage:
@@ -209,6 +216,7 @@ class AnimalApi:
             "bgnde": start.strftime("%Y%m%d"),
             "endde": end.strftime("%Y%m%d"),
             "upkind": UPKIND.get(species),
+            "kind": kind,
             "upr_cd": region_code,
             "pageNo": page,
             "numOfRows": rows,
@@ -241,7 +249,7 @@ _SAMPLE_ROWS = [
 
 
 def sample_items(today: date | None = None) -> list[dict[str, Any]]:
-    today = today or date.today()
+    today = today or kst_today()
     rows = []
     for index, (photo, up, kind, sex, color, region, place, days, special) in enumerate(_SAMPLE_ROWS, start=1):
         happen = (today - timedelta(days=days)).strftime("%Y%m%d")
@@ -276,7 +284,7 @@ class SampleAnimalApi:
     async def regions(self) -> list[Region]:
         return SAMPLE_REGIONS
 
-    async def search(self, *, region_code, start, end, species, page=1, rows=50) -> SearchPage:
+    async def search(self, *, region_code, start, end, species, kind=None, page=1, rows=50) -> SearchPage:
         fetched = _now_iso()
         region_name = next((r.name for r in SAMPLE_REGIONS if r.code == region_code), None)
         matched = []

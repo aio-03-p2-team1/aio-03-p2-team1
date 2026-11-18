@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api.js'
-import { errorMessage, formatDate, formatDateTime, noticeTitle, SPECIES_OPTIONS } from '../lib/format.js'
+import { errorMessage, formatDate, formatDateTime, noticeTitle, sourceLabel, SPECIES_OPTIONS } from '../lib/format.js'
 import NoticePhoto from '../components/NoticePhoto.jsx'
-import SourceBadge from '../components/SourceBadge.jsx'
+import StoryBanner from '../components/StoryBanner.jsx'
 import { useRegions } from './useRegions.js'
 
 const ROWS = 20
@@ -54,55 +54,41 @@ export default function BoardPage() {
   const hasMore = data && items.length < data.total_count
 
   return (
-    <main className="page-main">
+    <main className="page-main board-page">
+      <StoryBanner />
       <div className="page-heading board-heading">
-        <div>
-          <span className="eyebrow">함께 찾는 공간</span>
-          <h1>보호 중인 동물 공고</h1>
-          <p>최근 공공데이터포털에 올라온 구조동물 공고예요. 우리 아이와 닮은 친구가 있는지 살펴보세요.</p>
+        <h1>보호 중인 동물 공고</h1>
+        <Link to="/search" className="primary-button">우리 아이 찾기</Link>
+        <div className="filters">
+          <label>
+            동물 종류
+            <select value={species} onChange={changeFilter(setSpecies)}>
+              {[...SPECIES_OPTIONS.slice(3), ...SPECIES_OPTIONS.slice(0, 3)].map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            지역
+            <select value={regionCode} onChange={changeFilter(setRegionCode)} disabled={!regions.list.length}>
+              <option value="">전체 지역</option>
+              {regions.list.map((r) => (
+                <option key={r.code} value={r.code}>{r.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            기간
+            <select value={days} onChange={changeFilter((v) => setDays(Number(v)))}>
+              <option value={7}>최근 7일</option>
+              <option value={14}>최근 14일</option>
+              <option value={30}>최근 30일</option>
+            </select>
+          </label>
         </div>
-        <Link to="/search" className="primary-button">우리 아이 찾기 ↗</Link>
       </div>
 
-      <section className="board-list-section" aria-labelledby="notices-title">
-        <div className="section-head">
-          <div>
-            <h2 id="notices-title">
-              최근 공고 {data && <SourceBadge source={data.data_source} />}
-            </h2>
-            <p>
-              공고를 선택하면 상세 페이지로 이동합니다.
-              {data && ` 조회 범위 ${formatDate(data.period.start)}~${formatDate(data.period.end)} · 전체 ${data.total_count}건 · 조회 ${formatDateTime(data.fetched_at)}`}
-            </p>
-          </div>
-          <div className="filters">
-            <label>
-              동물 종류
-              <select value={species} onChange={changeFilter(setSpecies)}>
-                {[...SPECIES_OPTIONS.slice(3), ...SPECIES_OPTIONS.slice(0, 3)].map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              지역
-              <select value={regionCode} onChange={changeFilter(setRegionCode)} disabled={!regions.list.length}>
-                <option value="">전체 지역</option>
-                {regions.list.map((r) => (
-                  <option key={r.code} value={r.code}>{r.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              기간
-              <select value={days} onChange={changeFilter((v) => setDays(Number(v)))}>
-                <option value={7}>최근 7일</option>
-                <option value={14}>최근 14일</option>
-                <option value={30}>최근 30일</option>
-              </select>
-            </label>
-          </div>
-        </div>
+      <section className="board-list-section" aria-label="보호 중인 동물 공고 목록">
 
         {status === 'loading' && <p className="state-box">공고를 불러오고 있어요…</p>}
         {status === 'error' && (
@@ -113,7 +99,7 @@ export default function BoardPage() {
           </div>
         )}
         {status !== 'loading' && status !== 'error' && items.length === 0 && (
-          <p className="empty-results">선택한 조건의 공고가 없어요. 이 결과는 위 조회 범위에 한정됩니다.</p>
+          <p className="empty-results">선택한 조건의 공고가 없어요.</p>
         )}
         {items.length > 0 && status !== 'loading' && (
           <div className="board-list" aria-live="polite">
@@ -138,6 +124,14 @@ export default function BoardPage() {
           </div>
         )}
       </section>
+      {data && (status === 'ready' || status === 'more') && (
+        <div className="board-data-note" aria-label="공고 데이터 조회 정보">
+          <span>{data.data_source === 'api' ? '공공데이터포털' : sourceLabel(data.data_source)}</span>
+          <span>조회 범위 {formatDate(data.period.start)}~{formatDate(data.period.end)}</span>
+          <span>전체 {Number(data.total_count).toLocaleString('ko-KR')}건</span>
+          <span>{formatDateTime(data.fetched_at)} 조회</span>
+        </div>
+      )}
     </main>
   )
 }

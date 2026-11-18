@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import time
 from collections import OrderedDict
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 
 from backend.deps import AppContext, get_ctx
 from backend.errors import ApiError
+from backend.timeutil import kst_today
 from backend.tools.animal_api import AnimalApiError
 
 router = APIRouter(tags=["public"])
@@ -46,6 +47,7 @@ async def health(ctx: AppContext = Depends(get_ctx)):
         "model": s.openai_model if s.app_mode == "live" else None,
         "animal_data_source": s.animal_data_source,
         "kakao_configured": ctx.kakao.configured,
+        "lost_data_source": "api" if ctx.lost is not None else "off",  # 게시판 분실 신고 연동 여부
         "notifications": "not_implemented",
     }
 
@@ -74,7 +76,7 @@ async def notices(
     rows: int = Query(default=20, ge=4, le=40),
     ctx: AppContext = Depends(get_ctx),
 ):
-    end = date.today()
+    end = kst_today()  # 한국 날짜 기준
     start = end - timedelta(days=days)
     key = (ctx.animal.source, species, region_code, start, end, page, rows)
     cached = _list_cache.get(key)
@@ -108,3 +110,11 @@ async def notice_detail(notice_id: str):
     if not item:
         raise ApiError(404, "notice_not_cached", "공고 정보를 다시 불러와야 합니다. 목록에서 공고를 다시 선택해 주세요.")
     return item
+
+
+@router.get("/kinds")
+async def kinds(species: Literal["dog", "cat", "etc"], name: str = Query(default="", max_length=100),
+                ctx: AppContext = Depends(get_ctx)):
+    if ctx.kinds is None:
+        raise ApiError(503, "kinds_unavailable", "품종 목록을 불러오지 못했습니다.")
+    return {"kinds": await ctx.kinds.lookup(species, name)}

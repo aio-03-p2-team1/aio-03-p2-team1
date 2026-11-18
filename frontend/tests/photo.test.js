@@ -33,3 +33,12 @@ test('unsuitable photo maps its reason code to guidance', () => {
   assert.ok(!messages.includes(fallback))
   assert.equal(unsuitablePhotoMessage({ suitable: true, reason_code: 'animal_not_detected' }), '')
 })
+
+test('photo traits already in the description are not repeated', async () => {
+  const { newPhotoTraits, photoTraitLine } = await import('../src/lib/photo.js')
+  const text = '털색: 하얀색, 성별: 수컷\n빨간목줄 하고 있어요'
+  assert.deepEqual(newPhotoTraits(['흰색', '수컷', '빨간 목줄', '꼬리 짧음'], text), ['꼬리 짧음'])
+  assert.equal(photoTraitLine(['흰색', '빨간 목줄'], text), '사진에서 확인한 특징: 글 내용과 같음')
+  assert.equal(photoTraitLine(['갈색'], text), '사진에서 확인한 특징: 갈색')
+  assert.equal(photoTraitLine([], text), '')
+})

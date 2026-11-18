@@ -16,12 +16,14 @@ export default function Header() {
   return (
     <header className="site-header">
       <Link className="brand" to="/">
-        <span className="brand-paw" aria-hidden="true">●<i>● ● ●</i></span> 다시 만나
+        <img className="brand-icon" src="/brand-icon.png" alt="" width="40" height="40" />
+        <span className="brand-wordmark">다시 만나</span>
       </Link>
       <nav aria-label="주요 메뉴">
         <NavLink to="/" end>전체 공고</NavLink>
         <NavLink to="/search">우리 아이 찾기</NavLink>
         <NavLink to="/board">실종 정보 게시판</NavLink>
+        <NavLink to="/poster">전단지 만들기</NavLink>
         <NavLink to="/my">마이페이지</NavLink>
       </nav>
       {user ? (

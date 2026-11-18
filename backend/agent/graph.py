@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import time
 from datetime import date, datetime, timezone
 from typing import Any
@@ -9,10 +10,16 @@ from langgraph.graph import END, START, StateGraph
 
 from backend.agent import criteria as crit
 from backend.agent.llm import LlmError
-from backend.agent.ranking import TOP_K, cosine, feature_text, fuse_rrf, in_scope, rank
+from backend.agent.radius import apply_radius
+from backend.agent import assess as assess_rules
+from backend.agent import photo_store
+from backend.agent import search_agent as agent_mod
+from backend.agent.ranking import TOP_K, confidence_signals, cosine, feature_text, fuse_rrf, in_scope, rank
 from backend.agent.state import SearchState
 from backend.tools.animal_api import AnimalApiError, short_region_name
 from backend.tools.kakao import KakaoError
+
+log = logging.getLogger("dasimanna.graph")
 
 ROWS_PER_PAGE = 1000
 LOCATE_TOP = 3
@@ -38,6 +45,14 @@ ERROR_MESSAGES = {
     "embedding_not_configured": "검색 임베딩 설정이 없습니다. OPENAI_API_KEY 설정이 필요합니다.",
     "unknown_region": "지원하지 않는 지역입니다.",
     "tool_budget": "도구 호출 한도에 도달해 검색을 멈췄습니다.",
+}
+
+RADIUS_REASON_TEXT = {
+    "whole_region": "반경 없이 조회 지역 전체",
+    "lost_place_missing": "실종 위치가 없어 반경을 적용하지 않음",
+    "not_configured": "지도 키가 없어 반경을 적용하지 않음",
+    "center_unavailable": "실종 위치 좌표를 찾지 못해 반경을 적용하지 않음",
+    "no_items": "조회된 공고가 없어 반경을 적용하지 않음",
 }
 
 
@@ -83,6 +98,7 @@ async def ask(state: SearchState, config) -> dict:
             "total_count": state.get("total_count", 0),
             "fetched_at": state.get("fetched_at"),
             "data_source": state.get("data_source"),
+            "radius": state.get("radius"),
         }
     return update
 
@@ -99,6 +115,8 @@ async def context(state: SearchState, config) -> dict:
             memory = await deps["store"].get(state["owner"], "memory", profile_id)
         confirmed = (memory or {}).get("confirmed") or {}
         for key in crit.OPTIONAL_FIELDS:
+            if key in ("breed", "breed_code") and origin.get(key) == "request":
+                continue
             if not criteria.get(key) and confirmed.get(key):
                 criteria[key] = str(confirmed[key])[:500]
                 origin[key] = "memory"
@@ -113,6 +131,9 @@ async def context(state: SearchState, config) -> dict:
         },
         "trace": ["context"],
     }
+    # 사진 특징은 설명 글 LLM 추출과 별개로 넣는다(로컬 모드처럼 LLM 추출이 꺼져 있어도 반영).
+    if state.get("photo_features"):
+        update["llm_features"] = photo_store.merge_features(state.get("llm_features"), state.get("photo_features"))
     llm = deps.get("llm")
     if llm and criteria.get("description"):
         started = time.perf_counter()
@@ -122,7 +143,7 @@ async def context(state: SearchState, config) -> dict:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("llm_feature_extract", {"model": llm.model}, exc.code, "자유 서술에서 특징 추출")]
             return update
-        update["llm_features"] = features.model_dump()
+        update["llm_features"] = photo_store.merge_features(features.model_dump(), state.get("photo_features"))
         update["tool_calls"] = [
             _call(
                 "llm_feature_extract",
@@ -136,7 +157,28 @@ async def context(state: SearchState, config) -> dict:
 
 
 def route_after_context(state: SearchState) -> str:
-    return "finalize" if state.get("error") else "plan"
+    return "finalize" if state.get("error") else "breed"
+
+
+async def normalize_breed(state: SearchState, config) -> dict:
+    normalizer = _deps(config).get("breed_normalizer")
+    criteria = dict(state["criteria"])
+    code = criteria.get("breed_code")
+    criteria["breed_code"] = None
+    if code:
+        criteria.pop("breed", None)
+    if normalizer and criteria.get("species") in {"dog", "cat", "etc"}:
+        try:
+            row = (await normalizer.resolve_code(criteria["species"], code) if code
+                   else await normalizer.resolve(criteria["species"], criteria.get("breed", "")))
+        except Exception:
+            return {"criteria": criteria, "trace": ["breed"], "error": {"code": "breed_normalization_failed", "message": "품종을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."}}
+        if row:
+            criteria.update(breed=row["name"], breed_code=row["kind_code"])
+    if code and not criteria.get("breed_code"):
+        return {"criteria": criteria, "trace": ["breed"], "error": {
+            "code": "invalid_breed_code", "message": "선택한 축종의 품종 코드를 확인해 주세요."}}
+    return {"criteria": criteria, "trace": ["breed"]}
 
 
 def _match_region(name: str, regions, *, lenient: bool) -> Any:
@@ -208,6 +250,7 @@ async def execute(state: SearchState, config) -> dict:
         "start": criteria["start_date"],
         "end": criteria["end_date"],
         "species": criteria["species"],
+        "kind": criteria.get("breed_code"),
     }
     while page <= 1:
         attempt = 0
@@ -222,6 +265,7 @@ async def execute(state: SearchState, config) -> dict:
                     start=date.fromisoformat(args["start"]),
                     end=date.fromisoformat(args["end"]),
                     species=args["species"],
+                    kind=args["kind"],
                     page=page,
                     rows=ROWS_PER_PAGE,
                 )
@@ -257,9 +301,33 @@ async def execute(state: SearchState, config) -> dict:
     }
 
 
+async def radius_node(state: SearchState, config) -> dict:
+    """실종 위치 기준 반경 안 공고만 남긴다(반경 밖은 임베딩하지 않음). 좌표 실패는 거리 미확인으로 남긴다."""
+    if state.get("error"):
+        return {"trace": ["radius"]}
+    deps = _deps(config)
+    result = await apply_radius(deps["kakao"], state["criteria"], state.get("raw_items") or [])
+    radius = result["radius"]
+    if not radius.get("applied"):
+        radius = {**radius, "reason_text": RADIUS_REASON_TEXT.get(radius.get("reason"), "")}
+    update: dict[str, Any] = {"radius": radius, "radius_items": result["items"], "trace": ["radius"]}
+    if result["call"]:
+        call = result["call"]
+        update["tool_calls"] = [
+            _call(
+                "kakao_geocode_regions",
+                {"lost_place": "set", "radius_km": radius.get("radius_km"), "requests": call.get("requests", 0)},
+                call.get("outcome", "ok"),
+                "실종 위치와 공고 관할 시군구를 좌표로 바꿔 반경 안 공고만 남김",
+                cached=call.get("cached", 0),
+            )
+        ]
+    return update
+
+
 async def rank_node(state: SearchState, config) -> dict:
     fix = state.get("pending_fix") or {}
-    items = state.get("raw_items") or []
+    items = state.get("radius_items") if state.get("radius_items") is not None else (state.get("raw_items") or [])
     if fix.get("dedupe"):
         seen: set[str] = set()
         unique = []
@@ -279,12 +347,14 @@ async def rank_node(state: SearchState, config) -> dict:
             if not embedder and deps["animal"].source != "sample":
                 raise LlmError("embedding_not_configured")
             if embedder:
-                if scores is None:
-                    vectors = await embedder.embed([feature_text(state["criteria"])] + [feature_text(item) for item in items])
-                    if len(vectors) != len(items) + 1:
+                # 아직 점수가 없는 공고만 임베딩한다(반경 안 공고만 대상).
+                pending = [item for item in items if item["id"] not in (scores or {})]
+                if pending:
+                    vectors = await embedder.embed([feature_text(state["criteria"])] + [feature_text(item) for item in pending])
+                    if len(vectors) != len(pending) + 1:
                         raise LlmError("llm_response")
-                    scores = {item["id"]: cosine(vectors[0], vector) for item, vector in zip(items, vectors[1:])}
-                    calls = [_call("embedding_search", {"model": embedder.model, "documents": len(items)}, "ok", "전체 공고와 검색 조건 임베딩")]
+                    scores = {**(scores or {}), **{item["id"]: cosine(vectors[0], vector) for item, vector in zip(pending, vectors[1:])}}
+                    calls = [_call("embedding_search", {"model": embedder.model, "documents": len(pending)}, "ok", "반경 안 공고와 검색 조건 임베딩")]
                 candidates = fuse_rrf(candidates, scores)
         except (LlmError, ValueError) as exc:
             code = exc.code if isinstance(exc, LlmError) else "llm_response"
@@ -315,22 +385,38 @@ async def validate(state: SearchState, config) -> dict:
     missing_id = [c for c in candidates if not c.get("id")]
     if missing_id:
         issues.append({"type": "field_missing", "field": "desertionNo", "count": len(missing_id)})
-    if not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
+    radius = state.get("radius") or {}
+    # 반경 안에는 없지만 반경 밖에 조회된 공고가 있으면, 반경을 넓힐지 사용자에게 묻는다.
+    if not candidates and radius.get("applied") and radius.get("excluded", 0) > 0:
+        issues.append({"type": "empty_radius", "field": "radius", "radius_km": radius.get("radius_km"),
+                       "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
+    elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
-    return {"issues": issues, "trace": ["validate"]}
+    # 결과가 있으면 확신 신호를 계산한다. 낮으면 검색 에이전트(agent 노드)가 결과를 읽고 판단·수정한다.
+    confidence = (confidence_signals(candidates, criteria, state.get("llm_features"), state.get("photo_features"))
+                  if candidates else None)
+    return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
 FIXES = {
     "duplicates": {"strategy": "dedupe_and_rerank", "next": "rank", "fix": {"dedupe": True}},
     "condition_violation": {"strategy": "refilter_and_rerank", "next": "rank", "fix": {}},
     "arg_mapping": {"strategy": "remap_official_code", "next": "plan", "fix": {"lenient_region": True}},
     "empty_narrow": {"strategy": "ask_user_to_widen", "next": "ask", "fix": {}},
+    "empty_radius": {"strategy": "ask_user_to_widen_radius", "next": "ask", "fix": {}},
 }
 
 
 def route_after_validate(state: SearchState, config) -> str:
     issues = [i for i in state.get("issues") or [] if i["type"] in FIXES]
     if not issues:
-        return "locate" if not state.get("error") and state.get("candidates") is not None else "finalize"
+        if state.get("error") or state.get("candidates") is None:
+            return "finalize"
+        # 에이전트가 조건을 고쳐 다시 찾은 뒤면 다시 에이전트로(새 결과를 읽고 비교). 이미 끝냈으면 위치 조회.
+        if state.get("agent_done"):
+            return "locate"
+        if state.get("agent_messages") or (state.get("confidence") or {}).get("low"):
+            return "agent"
+        return "locate"
     if not state.get("reflection_enabled", True):
         return "finalize"
     if state.get("reflection_count", 0) >= _deps(config)["settings"].max_reflections:
@@ -362,6 +448,18 @@ async def reflect(state: SearchState, config) -> dict:
                 "field": "region",
                 "message": f"{state['criteria'].get('region_name') or state['criteria']['region']} 지역에서는 조건에 맞는 공고가 없었습니다. "
                 "구조 지역은 실종 지역과 다를 수 있어요. 지역을 넓혀 '전체'로 다시 찾아볼까요?",
+            }
+        ]
+    if issue["type"] == "empty_radius":
+        radius = state.get("radius") or {}
+        nxt = radius.get("next_radius_km")
+        wider = f"반경 {nxt:g}km" if nxt else "조회 지역 전체"
+        update["questions"] = [
+            {
+                "field": "radius",
+                "next_step": issue["next_step"],
+                "message": f"실종 위치에서 직선거리 {issue['radius_km']:g}km 안에서는 조건에 맞는 공고가 없었습니다. "
+                f"동물이 더 멀리 이동했을 수 있어요. {wider}로 넓혀 다시 찾아볼까요?",
             }
         ]
     if issue["type"] == "arg_mapping" and issue.get("lenient"):
@@ -405,6 +503,101 @@ async def locate(state: SearchState, config) -> dict:
     return {"candidates": candidates, "tool_calls": calls, "trace": ["locate"]}
 
 
+def _agent_decision(state: SearchState, source: str, final_tool: str | None, log_: list[dict[str, Any]]) -> dict[str, Any]:
+    conf = state.get("confidence") or {}
+    return {"source": source, "final_tool": final_tool, "steps": state.get("agent_steps", 0),
+            "reruns": state.get("agent_reruns", 0), "log": log_, "prompt_version": agent_mod.AGENT_PROMPT_VERSION,
+            "confidence_version": conf.get("version")}
+
+
+async def agent_node(state: SearchState, config) -> dict:
+    """검색 에이전트 한 걸음: 지금까지의 대화(신호·도구 결과)를 보고 LLM이 도구 하나를 고른다.
+
+    처음이면 결과 신호로 대화를 시작하고, 조건을 고쳐 다시 찾은 뒤라면 새 신호와 이전 대비 변화를 덧붙인다.
+    LLM 없음·실패·걸음 한도면 지금 결과를 그대로 보여 주고 끝낸다(검색을 막지 않음).
+    """
+    deps = _deps(config)
+    agent = deps.get("search_agent")
+    allowed = assess_rules.allowed_actions(state.get("confidence") or {}, state.get("agent_history") or {})
+    messages = list(state.get("agent_messages") or [])
+    log_ = list(state.get("agent_log") or [])
+    update: dict[str, Any] = {"trace": ["agent"]}
+
+    def done(source: str) -> dict:
+        log_.append({"step": "end", "source": source})
+        return {**update, "agent_done": True, "agent_request": None, "agent_log": log_,
+                "agent_decision": _agent_decision(state, source, None, log_)}
+
+    if agent is None:
+        return done("no_llm")
+    if not messages:
+        messages = agent_mod.start_messages(state, allowed)
+        update["agent_source"] = agent_mod.source_text(state["criteria"], state.get("photo_features"))  # 원문 근거(고친 값은 근거가 아님)
+        update["agent_before"] = agent_mod._summary(state)
+        log_.append({"step": "start", **agent_mod._summary(state)})
+    elif state.get("agent_rerun_pending"):
+        messages.append(agent_mod.rerun_message(state, allowed, state.get("agent_before") or {}))
+        log_.append({"step": "rerun_result", **agent_mod._summary(state)})
+        update.update(agent_rerun_pending=False, agent_before=agent_mod._summary(state))
+    if state.get("agent_steps", 0) >= agent_mod.MAX_STEPS:
+        return done("step_limit")
+    try:
+        message = await agent.step(messages)
+    except Exception as exc:  # LLM 실패는 지금 결과를 보여 주는 것으로 대신한다
+        log.warning("search agent llm failed type=%s", type(exc).__name__)
+        return done("llm_error")
+    if not (getattr(message, "tool_calls", None) or []):
+        return done("no_tool_call")
+    messages.append(message)
+    return {**update, "agent_messages": messages, "agent_steps": state.get("agent_steps", 0) + 1, "agent_log": log_}
+
+
+async def agent_tools_node(state: SearchState, config) -> dict:
+    """agent 가 고른 도구를 서버 규칙으로 검증·실행하고 결과를 대화에 붙인다. 조건을 고쳤으면 다시 찾는다."""
+    _, _, ToolMessage = agent_mod._messages()
+    allowed = assess_rules.allowed_actions(state.get("confidence") or {}, state.get("agent_history") or {})
+    message = state["agent_messages"][-1]
+    first, *extra = message.tool_calls
+    name = agent_mod.TOOL_NAMES.get(first.get("name"), first.get("name"))
+    args = dict(first.get("args") or {})
+    result = agent_mod.execute_tool(name, args, state, allowed)
+    replies = [ToolMessage(content=agent_mod._json(result["content"]), tool_call_id=first.get("id") or "call_0")]
+    # 한 번에 하나만 처리한다. 나머지 호출에도 답을 붙여야 다음 LLM 호출이 거절되지 않는다.
+    replies += [ToolMessage(content=agent_mod._json({"ok": False, "error": "한 번에 도구 하나만 호출하세요."}),
+                            tool_call_id=c.get("id") or f"call_{n}") for n, c in enumerate(extra, 1)]
+    content = result["content"]
+    ok = content.get("ok", True) if isinstance(content, dict) else True
+    log_ = [*(state.get("agent_log") or []),
+            {"step": state.get("agent_steps", 0), "tool": name, "args": agent_mod.safe_args(name, args), "ok": ok,
+             **({"rejected": content.get("rejected") or content.get("error")} if isinstance(content, dict)
+                and (content.get("rejected") or content.get("error")) else {})}]
+    update: dict[str, Any] = {
+        **result["update"],
+        "agent_messages": [*state["agent_messages"], *replies],
+        "agent_next": result["next"],
+        "agent_log": log_,
+        "tool_calls": [_call(f"agent_{name}", agent_mod.safe_args(name, args), "ok" if ok else "rejected",
+                             "검색 에이전트 도구 호출")],
+        "trace": ["agent_tools"],
+    }
+    if result["next"]:
+        update["agent_rerun_pending"] = True
+    if result["done"]:
+        update.update(agent_done=True, agent_request=result["request"],
+                      agent_decision=_agent_decision({**state, **update}, "llm", name, log_))
+    return update
+
+
+def route_after_agent(state: SearchState) -> str:
+    return "locate" if state.get("agent_done") else "agent_tools"
+
+
+def route_after_agent_tools(state: SearchState) -> str:
+    if state.get("agent_done"):
+        return "locate"
+    return state.get("agent_next") or "agent"
+
+
 async def finalize(state: SearchState, config) -> dict:
     criteria = state.get("criteria") or {}
     error = state.get("error")
@@ -425,6 +618,7 @@ async def finalize(state: SearchState, config) -> dict:
         "complete": complete_scope,
         "fetched_at": state.get("fetched_at"),
         "data_source": state.get("data_source"),
+        "radius": state.get("radius"),
     }
     unresolved = [i for i in issues if i["type"] in FIXES or i["type"] == "tool_error"]
     if any(i["type"] == "arg_mapping" for i in unresolved):
@@ -454,31 +648,40 @@ def build_graph():
     g.add_node("analyze", analyze)
     g.add_node("ask", ask)
     g.add_node("context", context)
+    g.add_node("breed", normalize_breed)
     g.add_node("plan", plan)
     g.add_node("execute", execute)
+    g.add_node("radius", radius_node)
     g.add_node("rank", rank_node)
     g.add_node("validate", validate)
     g.add_node("reflect", reflect)
+    g.add_node("agent", agent_node)
+    g.add_node("agent_tools", agent_tools_node)
     g.add_node("locate", locate)
     g.add_node("finalize", finalize)
 
     g.add_edge(START, "analyze")
     g.add_conditional_edges("analyze", route_after_analyze, {"ask": "ask", "context": "context"})
     g.add_edge("ask", END)
-    g.add_conditional_edges("context", route_after_context, {"plan": "plan", "finalize": "finalize"})
+    g.add_conditional_edges("context", route_after_context, {"breed": "breed", "finalize": "finalize"})
+    g.add_conditional_edges("breed", lambda s: "finalize" if s.get("error") else "plan", {"plan": "plan", "finalize": "finalize"})
     g.add_conditional_edges("plan", route_after_plan, {"validate": "validate", "execute": "execute"})
-    g.add_edge("execute", "rank")
+    g.add_edge("execute", "radius")
+    g.add_edge("radius", "rank")
     g.add_edge("rank", "validate")
     g.add_conditional_edges(
         "validate",
         route_after_validate,
-        {"reflect": "reflect", "locate": "locate", "finalize": "finalize"},
+        {"reflect": "reflect", "agent": "agent", "locate": "locate", "finalize": "finalize"},
     )
     g.add_conditional_edges(
         "reflect",
         route_after_reflect,
         {"execute": "execute", "rank": "rank", "plan": "plan", "ask": "ask", "finalize": "finalize"},
     )
+    g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "locate": "locate"})
+    g.add_conditional_edges("agent_tools", route_after_agent_tools,
+                            {"agent": "agent", "rank": "rank", "radius": "radius", "locate": "locate"})
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()

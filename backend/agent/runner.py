@@ -19,6 +19,7 @@ from backend.agent import criteria as crit
 from backend.agent.search_cache import condition_key
 from backend.agent.embeddings import DIMENSIONS
 from backend.agent.llm import PROMPT_VERSION
+from backend.agent.radius import RADIUS_VERSION
 from backend.errors import ApiError
 
 RUN_FIELDS = (
@@ -26,8 +27,29 @@ RUN_FIELDS = (
     "memory_used", "llm_features", "context_summary", "plan", "tool_calls", "candidates", "issues",
     "reflection_enabled", "reflection_count", "reflections", "retry_count", "scope", "error", "trace",
     "data_source",
-    "ranking_method", "cache_key", "cache_hit", "snapshot_id",
+    "ranking_method", "cache_key", "cache_hit", "snapshot_id", "radius",
+    "confidence", "agent_request", "agent_decision", "photo_features",
 )
+# 에이전트 요청은 대화(thread)마다 다르므로(이미 물은 것, '모르겠어요') 캐시에 넣지 않는다.
+AGENT_FIELDS = ("agent_request", "agent_decision")
+
+
+def agent_history(thread: dict[str, Any], declined: list[str] | None) -> dict[str, Any]:
+    """같은 대화에서 이미 한 요청과 사용자가 '모르겠어요'한 항목을 모은다(반복 요청 방지)."""
+    history = dict(thread.get("agent") or {})
+    history["declined"] = sorted(set(history.get("declined") or []) | set(declined or []))
+    return history
+
+
+def next_history(history: dict[str, Any], request: dict[str, Any] | None) -> dict[str, Any]:
+    history = {"photo_requests": history.get("photo_requests", 0), "info_requests": history.get("info_requests", 0),
+               "asked_fields": list(history.get("asked_fields") or []), "declined": list(history.get("declined") or [])}
+    if request and request["type"] == "photo":
+        history["photo_requests"] += 1
+    elif request and request["type"] == "info":
+        history["info_requests"] += 1
+        history["asked_fields"].append(request["field"])
+    return history
 
 
 def _now() -> str:
@@ -39,6 +61,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     thread_id = request.get("thread_id") or uuid.uuid4().hex
     thread = await store.get(owner, "thread", thread_id) or {}
     session_criteria = thread.get("criteria")
+    history = agent_history(thread, request.get("declined"))
     profile = (await store.get(owner, "memory", request["profile_id"]) or {}) if request.get("profile_id") else None
     merged, origins = crit.merge_conditions(request.get("criteria", {}), session_criteria, (profile or {}).get("confirmed"))
     normalized, missing, errors = crit.normalize(merged)
@@ -56,12 +79,19 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "tool_calls": [],
         "reflections": [],
         "trace": [],
+        "agent_history": history,
+        "photo_features": request.get("photo"),  # 서버가 보관한 사진 분석 결과(없으면 None)
     }
-    config = {"configurable": deps, "recursion_limit": 40}
+    # 에이전트 루프(걸음 최대 6, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
+    config = {"configurable": deps, "recursion_limit": 80}
     cache = deps.get("search_cache")
     key = condition_key(owner, normalized, source=deps["animal"].source,
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
-                               "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION},
+                               "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION,
+                               # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
+                               "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off",
+                               # 사진 특징이 다르면 결과가 달라지므로 캐시 키에 넣는다.
+                               "photo": request.get("photo")},
                         reflection=request.get("reflection_enabled", True))
     cache_hit = False
 
@@ -79,8 +109,11 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
                 if result is None:
                     result = await execute()
                     result["snapshot_id"] = run_id
-                    if not result.get("error") and result.get("status") == "completed":
-                        snapshot = {k: result.get(k) for k in RUN_FIELDS if k not in ("run_id", "thread_id", "cache_key", "cache_hit")}
+                    # 에이전트가 조건을 고쳐 다시 찾은 결과는 저장하지 않는다(원래 조건의 결과가 아니므로).
+                    if (not result.get("error") and result.get("status") == "completed"
+                            and not (result.get("agent_decision") or {}).get("reruns")):
+                        snapshot = {k: result.get(k) for k in RUN_FIELDS
+                                    if k not in ("run_id", "thread_id", "cache_key", "cache_hit", *AGENT_FIELDS)}
                         await cache.put(key, snapshot)
                 else:
                     cache_hit = True
@@ -88,6 +121,10 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             cache_hit = True
     else:
         result = await execute()
+    if cache_hit and (result.get("confidence") or {}).get("low") and deps.get("search_agent"):
+        # 애매한 결과는 캐시를 쓰지 않고 다시 돌려 에이전트가 이 대화 기준으로 읽고 판단하게 한다.
+        result = await execute()
+        cache_hit = False
     if cache_hit:
         result["context_summary"] = {**(result.get("context_summary") or {}), "origin": origins}
         result["memory_used"] = {k: normalized[k] for k, source in origins.items() if source == "memory" and k in normalized}
@@ -119,6 +156,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             "status": run["status"],
             "questions": run.get("questions") or [],
             "last_run_id": run_id,
+            "agent": next_history(history, run.get("agent_request")),
             "updated_at": _now(),
         },
     )

@@ -49,10 +49,10 @@ def extractor(client):
 
 
 def test_extract_keeps_multiple_colors_and_filters_duplicates():
-    client = FakeChatClient({"colors": ["갈색", "흰색", "갈색"], "breed": "시바견", "sex": "F", "marks": ["목줄"]})
+    client = FakeChatClient({"colors": ["갈색", "흰색", "갈색"], "sex": "F", "marks": ["목줄"]})
     out = asyncio.run(extractor(client).extract("갈색과 흰색 푸들, 빨간 목줄"))
     assert out.colors == ["갈색", "흰색"]
-    assert out.breed == ""  # 설명에 없는 품종은 버린다
+    assert "breed" not in out.model_dump()
     assert out.sex == "F" and out.marks == ["목줄"]
     assert client.messages[0][0] == "system" and client.messages[1][1] == "갈색과 흰색 푸들, 빨간 목줄"
     assert COLOR_VALUES_TEXT in client.messages[0][1]
@@ -67,10 +67,10 @@ def test_photo_analysis_uses_injected_langchain_client():
         "center_subject_clear": True,
         "confidence": {
             key: 0.95
-            for key in ("animal_present", "identifiable", "center_subject_clear", "species", "breed", "sex")
+            for key in ("animal_present", "identifiable", "center_subject_clear", "species", "breed_code", "sex")
         },
         "species": "dog",
-        "breed": "",
+        "breed_code": "",
         "sex": "",
         "colors": [
             {"value": "갈색", "confidence": 0.95},
@@ -115,11 +115,11 @@ def test_photo_reason_code_is_derived_from_suitability_reason():
             "identifiable": 0.95,
             "center_subject_clear": 0.5,
             "species": 0.95,
-            "breed": 0.95,
+            "breed_code": 0.95,
             "sex": 0.95,
         },
         "species": "dog",
-        "breed": "",
+        "breed_code": "",
         "sex": "",
         "colors": [],
         "marks": [],
@@ -160,7 +160,7 @@ def test_incomplete_or_bad_json_is_llm_response():
 
 
 def test_input_and_structured_response_are_validated():
-    client = FakeChatClient({"colors": ["보라"], "breed": "", "sex": "", "marks": []})
+    client = FakeChatClient({"colors": ["보라"], "sex": "", "marks": []})
     with pytest.raises(LlmError, match="llm_response"):
         asyncio.run(extractor(client).extract("갈색"))
     with pytest.raises(LlmError, match="llm_request"):
@@ -180,3 +180,72 @@ def test_timeout_classified():
     with pytest.raises(LlmError) as info:
         asyncio.run(extractor(FakeChatClient(error=APITimeoutError())).extract("갈색"))
     assert info.value.code == "llm_timeout"
+
+
+@pytest.mark.parametrize("code,expected", [("1", "푸들"), ("unknown", ""), ("", "")])
+def test_photo_uses_cached_codes_and_rejects_unknown_code(code, expected):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    payload = {
+        'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
+        'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed_code', 'sex')},
+        'species': 'dog', 'breed_code': code, 'sex': '', 'colors': [], 'marks': [],
+    }
+    client = FakeChatClient(payload)
+    model = extractor(client)
+    model.kinds = SimpleNamespace(catalog=AsyncMock(return_value=(("1", "푸들"), ("2", "코리안 숏헤어"))))
+    result = asyncio.run(model.analyze_photo(b'image', 'image/jpeg'))
+    assert result.breed == expected
+    assert result.breed_code == (code if expected else '')
+    prefix = client.messages[0][1]
+    assert '["1", "푸들"]' in prefix
+
+
+def test_photo_empty_catalog_does_not_accept_generated_code():
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    payload = {
+        'animal_present': True, 'identifiable': True, 'center_subject_clear': True,
+        'confidence': {key: .95 for key in ('animal_present', 'identifiable', 'center_subject_clear', 'species', 'breed_code', 'sex')},
+        'species': 'dog', 'breed_code': '1', 'sex': '', 'colors': [], 'marks': [],
+    }
+    model = extractor(FakeChatClient(payload))
+    model.kinds = SimpleNamespace(catalog=AsyncMock(return_value=()))
+    result = asyncio.run(model.analyze_photo(b'image', 'image/jpeg'))
+    assert result.breed_code == result.breed == ''
+
+
+def test_prompt_cache_key_reaches_openai_request_transport():
+    import json
+    import httpx
+    requests = []
+
+    def handler(request):
+        body = json.loads(request.content)
+        requests.append(body)
+        return httpx.Response(200, json={
+            'id': 'mock-completion', 'object': 'chat.completion', 'created': 0, 'model': 'gpt-6-luna',
+            'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {
+                'role': 'assistant', 'content': json.dumps({'colors': [], 'sex': '', 'marks': []})}}],
+            'usage': {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0},
+        })
+
+    async def invoke():
+        model = FeatureExtractor('test-only', 'gpt-6-luna', transport=httpx.MockTransport(handler))
+        try:
+            await model.extract('목줄')
+        finally:
+            await model.aclose()
+
+    asyncio.run(invoke())
+    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v6'
+    properties = requests[0]['response_format']['json_schema']['schema']['properties']
+    assert 'breed' not in properties
+
+
+def test_feature_prompt_keeps_breeds_out_of_marks():
+    from backend.agent.llm import PROMPT_VERSION, SYSTEM_PROMPT
+
+    assert PROMPT_VERSION == 'feature-extract-v6'
+    assert '품종명·품종코드는 별도 선택 조건' in SYSTEM_PROMPT
+    assert 'marks에 넣지 않는다' in SYSTEM_PROMPT

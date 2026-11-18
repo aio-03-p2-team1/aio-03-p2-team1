@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import base64
+import logging
 import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
 from backend.agent.llm import LlmError
-from backend.agent.photo import InvalidPhoto, decode_and_validate
+from backend.agent import photo_store
+from backend.agent.photo import InvalidPhoto, decode_and_validate, shrink_for_analysis
+from backend.tools import remote_photo
 from backend.agent.runner import run_search
 from backend.schemas.api import PhotoAnalysisBody, PhotoAnalysisResponse, SearchBody
 from backend.auth.sessions import AuthUnavailable, SessionUser
@@ -16,6 +20,7 @@ from backend.routers.public import remember_items
 from backend.tools.kakao import KakaoError
 
 router = APIRouter(tags=["searches"])
+log = logging.getLogger("dasimanna.searches")
 
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
@@ -23,7 +28,7 @@ PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
 
 def _deps(ctx: AppContext) -> dict[str, Any]:
     return {"settings": ctx.settings, "store": ctx.store, "animal": ctx.animal, "kakao": ctx.kakao, "llm": ctx.llm,
-            "embedder": ctx.embedder, "search_cache": ctx.search_cache}
+            "embedder": ctx.embedder, "search_cache": ctx.search_cache, "search_agent": ctx.search_agent, "breed_normalizer": ctx.breed_normalizer}
 
 
 def page_result(run, page=1, page_size=20):
@@ -43,10 +48,23 @@ async def create_search(body: SearchBody, user: SessionUser = Depends(current_us
         "thread_id": body.thread_id,
         "profile_id": body.profile_id,
         "reflection_enabled": body.reflection_enabled,
+        "declined": body.declined,
+        # 사진 분석 번호로 서버가 보관한 결과를 꺼낸다(설명 글 속 사진 문장은 판단에 쓰지 않는다).
+        "photo": await _load_photo(ctx, user.owner, body.photo_analysis_id),
     }
     run = await run_search(_deps(ctx), user.owner, request)
     remember_items(run.get("candidates") or [])
     return page_result(run)
+
+
+async def _load_photo(ctx: AppContext, owner: str, analysis_id: str | None):
+    if not analysis_id:
+        return None
+    try:
+        return await photo_store.load(ctx.sessions._redis, owner, analysis_id)
+    except Exception:  # Redis 장애면 사진 없이 검색한다
+        log.warning("photo analysis load failed")
+        return None
 
 
 @router.post("/photo-analysis", response_model=PhotoAnalysisResponse)
@@ -64,7 +82,10 @@ async def analyze_photo(
     if limited:
         raise ApiError(429, "photo_analysis_rate_limited", "사진 분석 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.")
     try:
-        image_data, mime_type = decode_and_validate(body.image_base64)
+        encoded = body.image_base64 if body.image_base64 is not None else await _post_photo_base64(ctx, body.post_id)
+        image_data, mime_type = decode_and_validate(encoded)
+        # 분석 시간을 줄이려고 긴 변 1024px 로 줄여 보낸다(직접 올린 사진·게시글 사진 공통).
+        image_data, mime_type = shrink_for_analysis(image_data, mime_type)
     except InvalidPhoto as exc:
         raise ApiError(422, exc.code, exc.message)
     started = time.perf_counter()
@@ -72,10 +93,39 @@ async def analyze_photo(
         result = await ctx.photo_llm.analyze_photo(image_data, mime_type)
     except LlmError as exc:
         raise ApiError(502, exc.code, "사진을 분석하지 못했습니다. 잠시 후 다시 시도해 주세요.")
+    analysis_id = None
+    try:
+        # 검색 때 번호로 꺼내 쓰도록 결과(특징만)를 잠시 보관한다. 보관에 실패해도 분석 결과는 돌려준다.
+        analysis_id = await photo_store.save(ctx.sessions._redis, user.owner, result.model_dump())
+    except Exception:  # Redis 장애는 분석 자체를 막지 않는다
+        log.warning("photo analysis store failed")
     return PhotoAnalysisResponse(
         **result.model_dump(),
         analysis_ms=round((time.perf_counter() - started) * 1000),
+        analysis_id=analysis_id,
     )
+
+
+async def _post_photo_base64(ctx: AppContext, post_id: str) -> str:
+    """실종 정보 게시판 글의 사진을 base64 로 꺼낸다. 회원 글은 저장된 사진, 분실 신고는 공공데이터 사진을 서버가 받는다.
+
+    사진 주소는 사용자가 보낸 값이 아니라 공공 API 응답에서 꺼낸 값만 쓴다(remote_photo 의 SSRF 방지 설명 참고).
+    """
+    from backend.routers.posts import BOARD_OWNER, KIND as POST_KIND, _LOST_ID
+
+    if _LOST_ID.match(post_id):
+        if ctx.lost is None:
+            raise ApiError(503, "lost_board_unavailable", "분실 신고 정보를 불러올 수 없어요.")
+        item = await ctx.lost.get(post_id)
+        if not item or not item.get("photo_url"):
+            raise ApiError(404, "photo_not_found", "사진이 없는 게시글입니다.")
+        raw = await remote_photo.fetch_photo(item["photo_url"])
+        return base64.b64encode(raw).decode()
+    data = await ctx.store.get(BOARD_OWNER, POST_KIND, post_id)
+    photo = (data or {}).get("photo")
+    if not photo or not photo.get("data"):
+        raise ApiError(404, "photo_not_found", "사진이 없는 게시글입니다.")
+    return photo["data"]
 
 
 @router.get("/runs")

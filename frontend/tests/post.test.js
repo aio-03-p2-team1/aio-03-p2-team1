@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { dataUrlBytes, postPhotoPath, postSpeciesLabel, postTitle, validatePost } from '../src/lib/post.js'
+import { boardSummary, dataUrlBytes, isLostReport, postPath, postPhotoPath, postSpeciesLabel, postTitle, sexLabel, validatePost } from '../src/lib/post.js'
 
 const TODAY = '2026-11-13'
 const ok = {
@@ -47,4 +47,21 @@ test('data url byte size and helpers', () => {
   assert.equal(postTitle({ pet_name: '초코' }), '초코를 찾습니다')
   assert.equal(postTitle({ pet_name: '보름' }), '보름을 찾습니다')
   assert.equal(postTitle({ pet_name: 'Max' }), 'Max을(를) 찾습니다')
+})
+
+test('lost reports link to their own detail path and get a breed title', () => {
+  const lost = { id: 'lost-20261111-0123456789ab', source: 'lost_api', pet_name: '', breed: '믹스견', species: 'dog' }
+  assert.equal(isLostReport(lost), true)
+  assert.equal(postPath(lost), '/board/lost/lost-20261111-0123456789ab')
+  assert.equal(postPath({ id: 'a'.repeat(32), source: 'member' }), `/board/${'a'.repeat(32)}`)
+  assert.equal(postTitle(lost), '믹스견을 찾습니다')
+  assert.equal(postTitle({ pet_name: '', breed: '', species: 'cat' }), '고양이를 찾습니다')
+  assert.equal(sexLabel('F'), '암컷')
+  assert.equal(sexLabel('Q'), '')
+})
+
+test('board summary separates member posts and public lost reports', () => {
+  assert.equal(boardSummary({ count: 5, member_count: 1, lost_count: 4, lost: { status: 'ok' } }),
+    '조건에 맞는 글 5건 (회원 글 1건 · 공공데이터 분실 신고 4건)')
+  assert.equal(boardSummary({ count: 1, lost: { status: 'unavailable' } }), '조건에 맞는 글 1건')
 })

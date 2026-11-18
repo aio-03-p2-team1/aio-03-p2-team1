@@ -9,10 +9,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from backend.config import Settings, get_settings
+from backend.config import SUPABASE_POST_AUDIO_BUCKET, Settings, get_settings
 from backend.deps import AppContext
 from backend.errors import ApiError
-from backend.routers import auth, memory, posts, public, searches
+from backend.routers import auth, comments, memory, posters, posts, public, searches
 from backend.storage import StorageError
 
 log = logging.getLogger("dasimanna")
@@ -42,8 +42,11 @@ def build_context(settings: Settings) -> AppContext:
     from backend.agent.search_cache import SearchCache
     from backend.auth.sessions import SessionStore
     from backend.storage import build_store
+    from backend.storage.post_audio import PostAudioStore
     from backend.tools.animal_api import AnimalApi, SampleAnimalApi
     from backend.tools.kakao import KakaoGeocoder
+    from backend.tools.lost_animal_api import LostAnimalApi
+    from backend.tools.lost_feed import LostFeed
 
     timeout = settings.request_timeout_seconds
     redis = aioredis.from_url(settings.redis_url, socket_connect_timeout=3, socket_timeout=3)
@@ -63,16 +66,41 @@ def build_context(settings: Settings) -> AppContext:
         if settings.openai_api_key
         else None
     )
+    from backend.tools.kinds import KindRepository
+    from backend.agent.breed import BreedNormalizer
+    kinds = KindRepository(settings, redis)
+    if photo_llm:
+        photo_llm.kinds = kinds
+    # 검색 에이전트의 도구 호출은 사진 분석과 같은 채팅 모델·연결을 쓴다(키 없으면 에이전트 생략, 결과는 그대로).
+    from backend.agent.search_agent import SearchAgent
+
+    search_agent = SearchAgent(photo_llm._client, settings.openai_model) if photo_llm else None
     return AppContext(
+        kinds=kinds,
+        breed_normalizer=BreedNormalizer(kinds, photo_llm._client if photo_llm else None),
         settings=settings,
         store=build_store(settings),
+        post_audio=PostAudioStore(
+            backend=settings.storage_backend,
+            local_dir=settings.post_audio_local_dir,
+            url=settings.supabase_url,
+            bucket=SUPABASE_POST_AUDIO_BUCKET,
+            service_key=settings.supabase_service_role_key.get_secret_value() if settings.supabase_service_role_key else "",
+            timeout=timeout,
+        ),
         sessions=SessionStore(redis, settings.auth_session_ttl_seconds),
         animal=animal,
         kakao=KakaoGeocoder(kakao_key, timeout=min(timeout, 15)),
         llm=llm,
         photo_llm=photo_llm,
+        search_agent=search_agent,
         embedder=Embedder(settings.openai_api_key.get_secret_value(), timeout=timeout) if settings.openai_api_key else None,
         search_cache=SearchCache(redis),
+        # 키가 있을 때만 분실 신고를 게시판에 합친다. 없으면 회원 글만(샘플로 채우지 않음).
+        lost=LostFeed(LostAnimalApi(settings.lost_animal_api_base_url, settings.lost_animal_api_key.get_secret_value(),
+                                    timeout=min(timeout, 20)))
+        if settings.lost_animal_api_key
+        else None,
     )
 
 
@@ -121,7 +149,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=sorted(allowed),
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type"],
     )
 
@@ -146,7 +174,7 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
     async def api_error(request: Request, exc: ApiError):
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    for router in (public.router, auth.router, searches.router, memory.router, posts.router):
+    for router in (public.router, auth.router, searches.router, memory.router, posts.router, comments.router, posters.router):
         app.include_router(router, prefix=API_PREFIX)
     return app
 

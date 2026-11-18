@@ -80,6 +80,7 @@ class FakePhotoAnalyzer:
             species="",
             colors=[],
             breed="",
+            breed_code="",
             sex="",
             marks=[],
         )
@@ -135,3 +136,139 @@ def test_photo_analysis_maps_backend_llm_failure_to_api_error():
     assert response.status_code == 502
     assert response.json()["detail"]["code"] == "llm_upstream"
     assert "private upstream detail" not in response.text
+
+
+# ── 게시글 사진 분석(post_id): 회원 글은 저장된 사진, 분실 신고는 서버가 공공데이터 사진을 받아 분석 ──
+import asyncio  # noqa: E402
+
+import httpx  # noqa: E402
+
+from backend.tools import remote_photo  # noqa: E402
+
+LOST_ID = "lost-20261115-0123456789ab"
+
+
+class FakeLost:
+    def __init__(self, items):
+        self.items = items
+
+    async def get(self, item_id):
+        return self.items.get(item_id)
+
+
+def test_photo_analysis_body_needs_exactly_one_source():
+    with photo_client(FakePhotoAnalyzer()) as client:
+        signup(client)
+        both = client.post("/api/v1/photo-analysis", json={"image_base64": encoded_image(image_bytes()), "post_id": "x"})
+        neither = client.post("/api/v1/photo-analysis", json={})
+    assert both.status_code == 422 and neither.status_code == 422
+
+
+def test_member_post_photo_is_analyzed_by_post_id():
+    analyzer = FakePhotoAnalyzer()
+    data = image_bytes("JPEG")
+    with photo_client(analyzer) as client:
+        signup(client)
+        ctx = client.app.state.ctx
+        photo = {"type": "image/jpeg", "data": encoded_image(data), "bytes": len(data)}
+        asyncio.run(ctx.store.put("board", "post", "p" * 32, {"pet_name": "초코", "photo": photo}))
+        ok = client.post("/api/v1/photo-analysis", json={"post_id": "p" * 32})
+        missing = client.post("/api/v1/photo-analysis", json={"post_id": "q" * 32})
+    assert ok.status_code == 200 and analyzer.calls == [(data, "image/jpeg")]
+    assert missing.status_code == 404
+
+
+def test_lost_report_photo_is_fetched_by_server(monkeypatch):
+    analyzer = FakePhotoAnalyzer()
+    data = image_bytes("JPEG")
+    fetched = []
+
+    async def fake_fetch(url, **_):
+        fetched.append(url)
+        return data
+
+    monkeypatch.setattr(remote_photo, "fetch_photo", fake_fetch)
+    url = "https://openapi.animal.go.kr/openapi/service/rest/fileDownloadSrvc/files/loss/a.jpg"
+    with photo_client(analyzer) as client:
+        signup(client)
+        client.app.state.ctx.lost = FakeLost({LOST_ID: {"id": LOST_ID, "photo_url": url}})
+        response = client.post("/api/v1/photo-analysis", json={"post_id": LOST_ID})
+    assert response.status_code == 200
+    assert fetched == [url]  # 사용자가 보낸 주소가 아니라 공공 API 응답의 주소만 받아 온다
+    assert analyzer.calls == [(data, "image/jpeg")]
+
+
+def test_remote_photo_only_allows_public_data_host_and_no_redirect():
+    def handler(request):
+        if request.url.path.endswith("redirect.jpg"):
+            return httpx.Response(302, headers={"location": "https://evil.example/x.jpg"})
+        return httpx.Response(200, content=b"img")
+
+    transport = httpx.MockTransport(handler)
+    ok = asyncio.run(remote_photo.fetch_photo("https://openapi.animal.go.kr/a.jpg", transport=transport))
+    assert ok == b"img"
+    for bad in ("http://openapi.animal.go.kr/a.jpg", "https://evil.example/a.jpg", "https://127.0.0.1/a.jpg"):
+        with pytest.raises(InvalidPhoto) as info:
+            asyncio.run(remote_photo.fetch_photo(bad, transport=transport))
+        assert info.value.code == "photo_source_not_allowed"
+    with pytest.raises(InvalidPhoto) as info:
+        asyncio.run(remote_photo.fetch_photo("https://openapi.animal.go.kr/redirect.jpg", transport=transport))
+    assert info.value.code == "photo_fetch_failed"
+
+
+def test_photo_analysis_returns_id_and_search_uses_stored_result():
+    from backend.agent import photo_store as store
+
+    with photo_client(FakePhotoAnalyzer()) as client:
+        signup(client)
+        response = client.post("/api/v1/photo-analysis", json={"image_base64": encoded_image(image_bytes())})
+        analysis_id = response.json()["analysis_id"]
+        assert analysis_id and len(analysis_id) == 32
+        ctx = client.app.state.ctx
+        assert asyncio.run(store.load(ctx.sessions._redis, next(iter(_owners(ctx))), analysis_id)) is not None
+        bad = client.post("/api/v1/searches", json={"criteria": {}, "photo_analysis_id": "not-an-id"})
+    assert bad.status_code == 422  # 번호 형식이 틀리면 거절
+
+
+def _owners(ctx):
+    keys = asyncio.run(ctx.sessions._redis.keys("photo-analysis:*"))
+    return {k.decode().split(":")[1] for k in keys}
+
+
+# ── 분석 전 사진 줄이기 ──
+def test_shrink_for_analysis_reduces_large_photo_to_1024_jpeg():
+    from io import BytesIO
+
+    from PIL import Image
+
+    from backend.agent.photo import shrink_for_analysis
+
+    big = image_bytes("PNG", size=(3000, 2000))
+    data, mime = shrink_for_analysis(big, "image/png")
+    with Image.open(BytesIO(data)) as image:
+        assert mime == "image/jpeg" and image.format == "JPEG" and max(image.size) == 1024
+        assert image.size == (1024, 683)  # 비율 유지
+    small = image_bytes("PNG", size=(800, 600))
+    assert shrink_for_analysis(small, "image/png") == (small, "image/png")  # 작은 사진은 그대로
+
+
+def test_shrink_for_analysis_applies_exif_rotation_and_white_background():
+    from io import BytesIO
+
+    from PIL import Image
+
+    from backend.agent.photo import shrink_for_analysis
+
+    rotated = BytesIO()
+    exif = Image.Exif()
+    exif[0x0112] = 6  # 휴대폰 사진: 90도 돌려서 보라는 표시
+    Image.new("RGB", (2000, 1000), (200, 50, 50)).save(rotated, format="JPEG", exif=exif)
+    data, _ = shrink_for_analysis(rotated.getvalue(), "image/jpeg")
+    with Image.open(BytesIO(data)) as image:
+        assert image.size == (512, 1024)  # 세로로 돌린 뒤 줄임
+
+    clear = BytesIO()
+    Image.new("RGBA", (2000, 2000), (0, 0, 0, 0)).save(clear, format="PNG")
+    data, _ = shrink_for_analysis(clear.getvalue(), "image/png")
+    with Image.open(BytesIO(data)) as image:
+        assert image.getpixel((10, 10)) == (255, 255, 255)  # 투명 부분은 흰색

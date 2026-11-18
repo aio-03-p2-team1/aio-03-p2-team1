@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { loadKinds, withSpecies } from '../lib/kinds.js'
 import { api, API_BASE } from '../lib/api.js'
 import { useAuth } from '../lib/auth.jsx'
 import { errorMessage, formatDate } from '../lib/format.js'
-import { localDate, MAX_PHOTO_BYTES, dataUrlBytes, POST_SPECIES, postPhotoPath, postTitle, validatePost } from '../lib/post.js'
+import {
+  BOARD_PERIODS, DEFAULT_BOARD_DAYS, boardSummary, localDate, MAX_PHOTO_BYTES, dataUrlBytes, POST_SPECIES,
+  postPath, postPhotoPath, postTitle, validatePost
+} from '../lib/post.js'
+import Pagination from '../components/Pagination.jsx'
 import RegionPicker from '../components/RegionPicker.jsx'
 import { useToast } from '../components/Toast.jsx'
 import { useRegions } from './useRegions.js'
 
-const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed: '', description: '' }
+const EMPTY = { pet_name: '', species: '', region: '', lost_place: '', lost_date: '', breed_code: '', description: '' }
+const MAX_POST_VOICES = 3
+const MAX_VOICE_BYTES = 10 * 1024 * 1024
 
 export default function PostBoardPage() {
   const { user } = useAuth()
@@ -16,6 +23,8 @@ export default function PostBoardPage() {
   const regions = useRegions()
   const [species, setSpecies] = useState('all')
   const [region, setRegion] = useState('')
+  const [days, setDays] = useState(DEFAULT_BOARD_DAYS) // 분실 날짜 기준 최근 며칠
+  const [page, setPage] = useState(1)
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -28,7 +37,8 @@ export default function PostBoardPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    const query = new URLSearchParams({ species })
+    // 필터·페이지는 서버가 캐시된 목록에서 처리한다(외부 API 를 다시 부르지 않음).
+    const query = new URLSearchParams({ species, days: String(days), page: String(page) })
     if (region) query.set('region', region)
     setStatus('loading')
     api(`/posts?${query}`, { auth: false, signal: controller.signal })
@@ -43,7 +53,15 @@ export default function PostBoardPage() {
         setStatus('error')
       })
     return () => controller.abort()
-  }, [species, region, reload, user])
+  }, [species, region, days, page, reload, user])
+
+  // 필터를 바꾸면 첫 페이지부터 다시 본다.
+  function changeFilter(setter) {
+    return (e) => {
+      setter(e.target.value)
+      setPage(1)
+    }
+  }
 
   function openForm() {
     if (!user) {
@@ -66,10 +84,9 @@ export default function PostBoardPage() {
         <div>
           <span className="eyebrow">함께 찾는 공간</span>
           <h1>실종 정보 게시판</h1>
-          <p>잃어버린 반려동물의 정보를 등록하고 동네 게시글을 살펴보세요.</p>
         </div>
         <button type="button" className="primary-button" onClick={openForm} aria-expanded={formOpen}>
-          실종 정보 등록 ↗
+          실종 정보 등록
         </button>
       </div>
 
@@ -91,26 +108,36 @@ export default function PostBoardPage() {
             <h2 id="posts-title">등록된 실종 정보</h2>
             <p>
               게시글을 선택하면 상세 페이지로 이동합니다.
-              {data && ` 최근 게시글 ${data.scanned}건 중 조건에 맞는 ${data.count}건`}
+              {data && ` ${boardSummary(data)}`}
             </p>
           </div>
           <div className="filters">
             <label>
               동물 종류
-              <select value={species} onChange={(e) => setSpecies(e.target.value)}>
+              <select value={species} onChange={changeFilter(setSpecies)}>
                 <option value="all">전체</option>
                 {POST_SPECIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             </label>
             <label>
               지역
-              <select value={region} onChange={(e) => setRegion(e.target.value)} disabled={!regions.list.length}>
+              <select value={region} onChange={changeFilter(setRegion)} disabled={!regions.list.length}>
                 <option value="">전체 지역</option>
                 {regions.list.map((r) => <option key={r.code} value={r.name}>{r.name}</option>)}
               </select>
             </label>
+            <label>
+              기간
+              <select value={days} onChange={changeFilter((v) => setDays(Number(v)))}>
+                {BOARD_PERIODS.map((d) => <option key={d} value={d}>최근 {d}일</option>)}
+              </select>
+            </label>
           </div>
         </div>
+        {/* 분실 신고를 못 불러왔으면 회원 글만 보이는 이유를 알린다(빈 결과와 구분) */}
+        {status === 'ready' && ['unavailable', 'loading'].includes(data.lost?.status) && (
+          <p className="fineprint" role="status">{data.lost.message}</p>
+        )}
 
         {status === 'loading' && <p className="state-box">게시글을 불러오고 있어요…</p>}
         {status === 'error' && (
@@ -122,13 +149,13 @@ export default function PostBoardPage() {
         )}
         {status === 'ready' && data.items.length === 0 && (
           <p className="empty-results">
-            {species === 'all' && !region ? '아직 등록된 실종 정보가 없어요. 첫 게시글을 등록해 보세요.' : '선택한 조건의 게시글이 없어요.'}
+            {species === 'all' && !region ? '이 기간에 등록된 실종 정보가 없어요. 기간을 넓히거나 첫 게시글을 등록해 보세요.' : '선택한 조건의 게시글이 없어요.'}
           </p>
         )}
         {status === 'ready' && data.items.length > 0 && (
           <div className="board-list" aria-live="polite">
             {data.items.map((post) => (
-              <Link key={post.id} className="post-card" to={`/board/${post.id}`}>
+              <Link key={post.id} className="post-card" to={postPath(post)}>
                 <PostPhoto post={post} />
                 <span className="post-card-body">
                   {post.mine && <span className="sample-label">내 글</span>}
@@ -140,7 +167,17 @@ export default function PostBoardPage() {
             ))}
           </div>
         )}
+        {status === 'ready' && (
+          <Pagination page={data.page} pages={data.pages} onChange={(n) => { setPage(n); window.scrollTo(0, 0) }} />
+        )}
       </section>
+      {data && status === 'ready' && (
+        <div className="board-data-note" aria-label="실종 정보 조회 정보">
+          <span>{data.lost?.status === 'ok' ? '회원 글 · 공공데이터포털 분실 신고' : '회원 글 · 공공데이터 분실 신고 조회 불가'}</span>
+          <span>조회 범위 {formatDate(data.period.start)}~{formatDate(data.period.end)}</span>
+          <span>전체 {Number(data.count).toLocaleString('ko-KR')}건</span>
+        </div>
+      )}
     </main>
   )
 }
@@ -150,12 +187,15 @@ export function PostPhoto({ post, main = false }) {
   if (!post.has_photo || failed) {
     return <span className={main ? 'post-detail-empty' : 'post-thumb'}>사진 없음</span>
   }
+  // 분실 신고 사진은 공공데이터 사진 주소(photo_url)를 바로 쓰고, 회원 글 사진은 우리 서버에서 받는다.
   return (
     <img
       className={main ? undefined : 'post-thumb post-thumb-img'}
-      src={API_BASE + postPhotoPath(post.id)}
-      alt={`${post.pet_name} 사진`}
+      src={post.photo_url || API_BASE + postPhotoPath(post.id)}
+      alt={`${postTitle(post).replace(' 찾습니다', '')} 사진`}
       loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
     />
   )
@@ -164,9 +204,25 @@ export function PostPhoto({ post, main = false }) {
 function PostForm({ regions, onCancel, onCreated }) {
   const toast = useToast()
   const [form, setForm] = useState(EMPTY)
+  const [kinds, setKinds] = useState([])
+  const [kindsLoading, setKindsLoading] = useState(false)
+  const [kindsError, setKindsError] = useState('')
+  useEffect(() => {
+    let active = true
+    setKinds([]); setKindsError('')
+    setKindsLoading(Boolean(form.species))
+    if (form.species) {
+      loadKinds(form.species).then((rows) => { if (active) setKinds(rows) })
+        .catch(() => { if (active) setKindsError('품종 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.') })
+        .finally(() => { if (active) setKindsLoading(false) })
+    }
+    return () => { active = false }
+  }, [form.species])
   const [location, setLocation] = useState(null)
   const [regionOpen, setRegionOpen] = useState(false)
   const [photo, setPhoto] = useState(null)
+  const [voices, setVoices] = useState([])
+  const [voiceError, setVoiceError] = useState('')
   const [errors, setErrors] = useState({})
   const [photoError, setPhotoError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -204,6 +260,20 @@ function PostForm({ regions, onCancel, onCreated }) {
     }
   }
 
+  function chooseVoice(event) {
+    const file = event.target.files?.[0]
+    setVoiceError('')
+    if (!file) return
+    if (voices.length >= MAX_POST_VOICES) {
+      setVoiceError('음성은 게시글당 3개까지 올릴 수 있어요.')
+    } else if (file.size > MAX_VOICE_BYTES) {
+      setVoiceError('음성 파일은 하나당 10 MiB까지 올릴 수 있어요.')
+    } else {
+      setVoices((items) => [...items, { file, description: '' }])
+    }
+    event.target.value = ''
+  }
+
   async function submit(event) {
     event.preventDefault()
     const found = validatePost(form, today)
@@ -214,6 +284,18 @@ function PostForm({ regions, onCancel, onCreated }) {
     try {
       const body = { ...form, photo: photo || undefined }
       const post = await api('/posts', { method: 'POST', body })
+      try {
+        for (const voice of voices) {
+          const data = new FormData()
+          data.append('audio', voice.file)
+          data.append('description', voice.description.trim())
+          await api(`/posts/${encodeURIComponent(post.id)}/voices`, { method: 'POST', body: data })
+        }
+      } catch (err) {
+        toast(`게시글은 등록했지만 음성 일부를 올리지 못했어요: ${errorMessage(err)}`)
+        onCreated(post)
+        return
+      }
       toast('게시글을 등록했어요.')
       onCreated(post)
     } catch (err) {
@@ -224,6 +306,7 @@ function PostForm({ regions, onCancel, onCreated }) {
   }
 
   return (
+    <>
     <form className="panel post-form" onSubmit={submit} noValidate>
       <div className="panel-title">
         <span aria-hidden="true">＋</span>
@@ -237,7 +320,7 @@ function PostForm({ regions, onCancel, onCreated }) {
         </label>
         <label>
           동물 종류
-          <select value={form.species} onChange={update('species')} aria-invalid={!!errors.species}>
+          <select value={form.species} onChange={(event) => setForm((prev) => withSpecies(prev, event.target.value))} aria-invalid={!!errors.species}>
             <option value="">선택</option>
             {POST_SPECIES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
@@ -265,8 +348,11 @@ function PostForm({ regions, onCancel, onCreated }) {
         </label>
         <label>
           품종 (선택)
-          <input value={form.breed} onChange={update('breed')} placeholder="예: 푸들, 코리안 숏헤어" maxLength={30} />
-          <FieldError text={errors.breed} />
+          <select value={form.breed_code} onChange={update('breed_code')} disabled={!form.species || kindsLoading || !kinds.length}>
+            <option value="">{kindsLoading ? '품종 불러오는 중…' : '품종을 선택해 주세요'}</option>
+            {kinds.map((kind) => <option key={kind.kind_code} value={kind.kind_code}>{kind.name}</option>)}
+          </select>
+          <FieldError text={kindsError || errors.breed_code} />
         </label>
         <label>
           사진 (선택)
@@ -274,6 +360,19 @@ function PostForm({ regions, onCancel, onCreated }) {
           {photo && <img className="post-photo-preview" src={photo} alt="선택한 사진 미리보기" />}
           <FieldError text={photoError} />
         </label>
+        <div className="field-block wide">
+          <span className="field-label">목소리 음성 (선택, 최대 3개)</span>
+          <input type="file" accept="audio/mpeg,audio/mp4,audio/wav,audio/x-wav,audio/ogg,audio/opus,.mp3,.m4a,.wav,.ogg,.opus" onChange={chooseVoice} />
+          <span className="fineprint">MP3·M4A·WAV·OGG, 1분 이내, 파일당 10 MiB까지. 서버에서 압축하지 않아요.</span>
+          {voices.map((voice, index) => (
+            <div className="voice-draft" key={`${voice.file.name}-${index}`}>
+              <span>{voice.file.name} ({Math.ceil(voice.file.size / 1024)} KB)</span>
+              <input aria-label={`${voice.file.name} 음성 설명`} placeholder="이 음성에 대한 설명 (필수)" maxLength={200} value={voice.description} onChange={(event) => setVoices((items) => items.map((item, i) => i === index ? { ...item, description: event.target.value } : item))} />
+              <button type="button" className="text-action" onClick={() => setVoices((items) => items.filter((_, i) => i !== index))}>제거</button>
+            </div>
+          ))}
+          {voiceError && <FieldError text={voiceError} />}
+        </div>
         <label className="wide">
           특징과 마지막으로 본 장소
           <textarea rows={4} value={form.description} onChange={update('description')} placeholder="털 색, 크기, 목줄, 마지막으로 본 장소를 적어주세요." maxLength={1000} aria-invalid={!!errors.description} />
@@ -283,6 +382,18 @@ function PostForm({ regions, onCancel, onCreated }) {
       {serverError && (
         <p className="state-box state-error" role="alert">{errorMessage(serverError)}</p>
       )}
+      <div className="form-bottom">
+        <p className="fineprint">
+          게시글은 로그인하지 않은 사람도 볼 수 있어요. 연락처·주소 같은 개인정보는 적지 마세요. 내가 쓴 글은 상세 화면에서 지울 수 있어요.
+        </p>
+        <div>
+          <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>취소</button>
+          <button type="submit" className="primary-button" disabled={submitting || voices.some((voice) => !voice.description.trim())}>{submitting ? '등록 중…' : '게시글 등록'}</button>
+        </div>
+      </div>
+    </form>
+    {/* 지역 선택 창은 등록 폼 밖에 둔다. 창 안의 주소 검색도 <form> 이라, 폼 안에 두면 검색(Enter)이
+        바깥 등록 폼 제출로 번져 창이 닫히고 검증 오류가 뜬다. */}
       <RegionPicker
         open={regionOpen}
         regions={regions.list}
@@ -301,16 +412,7 @@ function PostForm({ regions, onCancel, onCreated }) {
           setRegionOpen(false)
         }}
       />
-      <div className="form-bottom">
-        <p className="fineprint">
-          게시글은 로그인하지 않은 사람도 볼 수 있어요. 연락처·주소 같은 개인정보는 적지 마세요. 내가 쓴 글은 상세 화면에서 지울 수 있어요.
-        </p>
-        <div>
-          <button type="button" className="secondary-button" onClick={onCancel} disabled={submitting}>취소</button>
-          <button type="submit" className="primary-button" disabled={submitting}>{submitting ? '등록 중…' : '게시글 등록'}</button>
-        </div>
-      </div>
-    </form>
+    </>
   )
 }
 

@@ -47,7 +47,7 @@ export default function DetailPage() {
   }, [noticeId, runId, user])
 
   const back = runId ? `/search?run=${encodeURIComponent(runId)}&page=${encodeURIComponent(params.get('page') || '1')}` : '/'
-  const backLabel = runId ? '← 검색 결과로' : '← 전체 공고'
+  const backLabel = runId ? '검색 결과로' : '전체 공고로'
 
   if (status === 'loading') {
     return <main className="page-main detail-page"><p className="state-box">공고를 불러오고 있어요…</p></main>

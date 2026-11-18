@@ -1,0 +1,37 @@
+name: Refresh public kinds
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: refresh-kinds
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      APP_MODE: local
+      STORAGE_BACKEND: supabase
+      ANIMAL_API_KEY: ${{ secrets.ANIMAL_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SCHEMA: ${{ secrets.SUPABASE_SCHEMA }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      REDIS_URL: ${{ secrets.REDIS_URL }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v8.1.0
+      - name: Validate required configuration
+        shell: bash
+        run: |
+          for setting_name in ANIMAL_API_KEY SUPABASE_URL SUPABASE_SCHEMA SUPABASE_SERVICE_ROLE_KEY REDIS_URL; do
+            if [ -z "${!setting_name}" ]; then
+              printf '%s is required\n' "$setting_name"
+              exit 1
+            fi
+          done
+      - run: uv python install 3.12
+      - run: uv sync --frozen --no-dev
+      - run: uv run --no-sync python -m scripts.refresh_kinds

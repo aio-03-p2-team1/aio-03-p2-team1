@@ -17,6 +17,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class ConfigError(RuntimeError):
     pass
 
+SUPABASE_POST_AUDIO_BUCKET = "post-audio"
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -27,6 +29,7 @@ class Settings(BaseSettings):
     supabase_url: str = "https://yaywavgjaquftvekuvsb.supabase.co"
     supabase_schema: str = "aio-03-p2-team1-demo"
     supabase_service_role_key: SecretStr | None = None
+    post_audio_local_dir: str = ".data/post-audio"
 
     openai_api_key: SecretStr | None = None
     openai_model: str = "gpt-6-luna"
@@ -40,6 +43,11 @@ class Settings(BaseSettings):
         default=None, validation_alias=AliasChoices("ANIMAL_API_KEY", "ANIMAL_API_SERVICE_KEY")
     )
     animal_api_base_url: str = "https://apis.data.go.kr/1543061/abandonmentPublicService_v2"
+
+    # 분실동물 조회 서비스(실종 정보 게시판용). 구조동물 키와 별도 변수로 둔다.
+    # 키가 없으면 게시판은 회원 글만 보여 준다(샘플 데이터로 채우지 않음).
+    lost_animal_api_key: SecretStr | None = None
+    lost_animal_api_base_url: str = "https://apis.data.go.kr/1543061/lossInfoService"
 
     kakao_rest_api_key: SecretStr | None = None
 
@@ -63,6 +71,7 @@ class Settings(BaseSettings):
         "openai_api_key",
         "langsmith_api_key",
         "animal_api_key",
+        "lost_animal_api_key",
         "kakao_rest_api_key",
         "discord_bot_token",
         mode="before",
@@ -73,7 +82,7 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("animal_api_base_url")
+    @field_validator("animal_api_base_url", "lost_animal_api_base_url")
     @classmethod
     def _force_https(cls, value: str) -> str:
 
