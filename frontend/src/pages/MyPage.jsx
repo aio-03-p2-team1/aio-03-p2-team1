@@ -87,10 +87,10 @@ export default function MyPage() {
         <section className="panel profile-panel" aria-labelledby="profile-title">
           <div className="panel-title"><span>01</span><h2 id="profile-title">내 정보</h2></div>
           <div className="profile-avatar" aria-hidden="true">{user?.name?.slice(0, 1)}</div>
-          <h3>{user?.name}</h3>
+          <h3 className="profile-name">{user?.name}</h3>
           <p>{user?.email}</p>
           <dl className="profile-facts">
-            <div><dt>이름</dt><dd>{user?.name}</dd></div>
+            <div><dt>이름</dt><dd className="profile-name">{user?.name}</dd></div>
             <div><dt>이메일</dt><dd>{user?.email}</dd></div>
           </dl>
           <div className="profile-actions">
