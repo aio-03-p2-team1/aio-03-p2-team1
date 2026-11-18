@@ -44,7 +44,7 @@ test('preview step table matches the server table', () => {
   const py = readFileSync(new URL('../../backend/agent/radius.py', import.meta.url), 'utf8')
   const steps = py.match(/RADIUS_STEPS_KM[^=]*=\s*\(([^)]*)\)/)[1].split(',').map((v) => v.trim()).filter(Boolean)
   assert.deepEqual(steps.map((v) => (v === 'None' ? null : Number(v))), RADIUS_STEPS_KM)
-  const days = [...py.match(/STEP_BY_DAYS\s*=\s*\((.*)\)\n/)[1].matchAll(/\((\d+),\s*(\d+)\)/g)].map((m) => [Number(m[1]), Number(m[2])])
+  const days = [...py.match(/STEP_BY_DAYS\s*=\s*\((.*)\)\r?\n/)[1].matchAll(/\((\d+),\s*(\d+)\)/g)].map((m) => [Number(m[1]), Number(m[2])])
   assert.deepEqual(days, STEP_BY_DAYS)
 })
 

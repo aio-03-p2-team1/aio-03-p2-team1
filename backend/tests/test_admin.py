@@ -138,6 +138,16 @@ def test_agent_stats_excludes_cache_hits_from_tool_counts():
     assert stats["tool_use"] == {"animal_search": 1, "kakao_geocode": 1}
 
 
+def test_agent_stats_includes_fresh_review_of_cached_notices():
+    reviewed = run_doc(cache_hit=True, trace=["cache_hit", "validate", "agent", "agent_tools", "finalize"],
+                       tool_calls=[{"tool": "agent_finish", "outcome": "ok"}],
+                       reflection_count=0, reflections=[])
+    stats = agent_stats([run_doc(), reviewed])
+    assert stats["cache_hit_rate"] == 0.5 and stats["executed_runs"] == 2
+    assert stats["agent"]["runs"] == 2
+    assert stats["tool_use"] == {"animal_search": 1, "kakao_geocode": 1, "agent_finish": 1}
+
+
 def test_admin_deletes_posts_comments_and_posters():
     ctx, client = make()
     with client:
