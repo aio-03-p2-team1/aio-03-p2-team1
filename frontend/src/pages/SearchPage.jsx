@@ -299,7 +299,9 @@ export default function SearchPage() {
       if (result.status === 'awaiting_input') toast(result.questions?.[0]?.message || '추가 정보가 필요해요.')
       // 결과는 보여 주되, 에이전트가 사진·정보를 요청했으면 알림으로도 알려 준다(카드는 입력란 위에 있음).
       else if (result.agent_request) toast(`${result.agent_request.reason} 입력란 위에서 골라 주세요.`)
-      scrollToResults()
+      // 에이전트가 검색 전에 글·사진 모순을 물었으면 결과가 아니라 입력란 위 질문 카드로 이동한다.
+      if (result.status === 'awaiting_input' && result.input_review?.action === 'ask') scrollToInputReview()
+      else scrollToResults()
     } catch (err) {
       setError(err)
     } finally {
@@ -660,7 +662,7 @@ function InputReview({ review, awaiting, picks = {}, onChoose }) {
   // 서로 다른 값이면 '글대로/사진대로'.
   const choices = awaiting && view.question ? (review.conflicts || []).filter((c) => conflictChoices(c).length) : []
   return (
-    <div className="input-review" role="status">
+    <div className="input-review" id="input-review" role="status">
       <p className="input-review-title"><strong>{view.title}</strong> {view.message}</p>
       {view.question && <p className="input-review-question">{view.question}</p>}
       {choices.length > 0 && (
@@ -684,6 +686,13 @@ function InputReview({ review, awaiting, picks = {}, onChoose }) {
       {view.lines.length > 0 && <ul>{view.lines.map((line) => <li key={line}>{line}</li>)}</ul>}
     </div>
   )
+}
+
+// 질문 카드는 검색이 끝나 화면이 다시 그려진 뒤에 생기므로 한 박자 늦게 이동한다.
+function scrollToInputReview() {
+  window.setTimeout(() => {
+    document.getElementById('input-review')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, 80)
 }
 
 function scrollToResults() {

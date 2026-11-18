@@ -280,35 +280,53 @@ async def plan(state: SearchState, config) -> dict:
     steps: list[dict[str, Any]] = []
     calls: list[dict[str, Any]] = []
     issues: list[dict[str, Any]] = []
+    retries = state.get("retry_count", 0)
+    error = None
     if criteria["region"] != "all" and not criteria.get("region_code"):
-        regions = await deps["animal"].regions()
-        calls.append(_call("animal_regions", {}, "ok", "지역 이름을 공식 시도 코드로 바꾸기 위해 조회"))
-        lenient = bool((state.get("pending_fix") or {}).get("lenient_region"))
-        match = _match_region(criteria["region"], regions, lenient=lenient)
-        if match:
-            criteria["region_code"] = match.code
-            criteria["region_name"] = match.name
-        else:
-            issues.append({"type": "arg_mapping", "field": "region", "value": criteria["region"], "lenient": lenient})
-    steps.append(
-        {
-            "tool": "animal_search",
-            "why": "지역·기간·종류 조건으로 실제 공고를 조회",
-            "max_pages": 1,
-        }
-    )
+        budget = deps["settings"].max_tool_calls - len(state.get("tool_calls") or [])
+        sleep = deps.get("sleep", asyncio.sleep)
+        attempt = 0
+        while True:
+            if len(calls) >= budget:
+                error = {"code": "tool_budget", "message": ERROR_MESSAGES["tool_budget"]}
+                break
+            try:
+                regions = await deps["animal"].regions()
+            except AnimalApiError as exc:
+                calls.append(_call("animal_regions", {}, exc.code, "공식 시도 목록 조회", attempt=attempt,
+                                   result_code=exc.result_code))
+                if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
+                    await sleep(RETRY_BACKOFF_SECONDS[attempt])
+                    attempt += 1
+                    retries += 1
+                    continue
+                error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
+                break
+            calls.append(_call("animal_regions", {}, "ok", "공식 시도 목록 조회", attempt=attempt))
+            lenient = bool((state.get("pending_fix") or {}).get("lenient_region"))
+            match = _match_region(criteria["region"], regions, lenient=lenient)
+            if match:
+                criteria["region_code"] = match.code
+                criteria["region_name"] = match.name
+            else:
+                issues.append({"type": "arg_mapping", "field": "region", "value": criteria["region"], "lenient": lenient})
+            break
+    if error is None:
+        steps.append({"tool": "animal_search", "why": "지역·기간·종류 조건으로 실제 공고를 조회", "max_pages": 1})
     return {
         "criteria": criteria,
         "plan": steps,
         "tool_calls": calls,
         "issues": issues,
+        "retry_count": retries,
+        "error": error,
         "pending_fix": None,
         "trace": ["plan"],
     }
 
 
 def route_after_plan(state: SearchState) -> str:
-    return "validate" if state.get("issues") else "execute"
+    return "validate" if state.get("issues") or state.get("error") else "execute"
 
 
 async def _fetch_page(state: SearchState, config, query: dict[str, Any], page: int, reason: str) -> dict:
