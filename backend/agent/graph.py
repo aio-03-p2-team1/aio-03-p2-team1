@@ -153,7 +153,25 @@ async def context(state: SearchState, config) -> dict:
                 ms=round((time.perf_counter() - started) * 1000),
             )
         ]
+    update["llm_features"] = user_answer_features(update.get("llm_features", state.get("llm_features")), criteria,
+                                                  state.get("agent_history") or {})
     return update
+
+
+def user_answer_features(features: dict[str, Any] | None, criteria: dict[str, Any], history: dict[str, Any]) -> dict[str, Any] | None:
+    """사용자가 고르거나 질문에 답한 값을 추출 특징에도 반영한다(설명 추출·사진 추정보다 우선).
+
+    - 성별을 골랐으면 특징의 성별도 그 값으로 맞춘다.
+    - 성별 조건 빼기에 동의했으면(relaxed_fields) 설명·사진에서 추정한 성별 특징도 쓰지 않는다.
+    """
+    if features is None and not criteria.get("sex"):
+        return features
+    out = dict(features or {})
+    if criteria.get("sex") in ("M", "F"):
+        out["sex"] = criteria["sex"]
+    elif "sex" in (history.get("relaxed_fields") or []):
+        out.pop("sex", None)
+    return out
 
 
 def route_after_context(state: SearchState) -> str:
@@ -231,82 +249,88 @@ def route_after_plan(state: SearchState) -> str:
     return "validate" if state.get("issues") else "execute"
 
 
-async def execute(state: SearchState, config) -> dict:
+async def _fetch_page(state: SearchState, config, query: dict[str, Any], page: int, reason: str) -> dict:
+    """최초 조회·에이전트 재조회가 같은 통신 재시도·전체 도구 예산을 사용한다."""
     deps = _deps(config)
     settings = deps["settings"]
     animal = deps["animal"]
-    criteria = state["criteria"]
     sleep = deps.get("sleep", asyncio.sleep)
     budget = settings.max_tool_calls - len(state.get("tool_calls") or [])
     calls: list[dict[str, Any]] = []
-    items: list[dict[str, Any]] = []
     retries = state.get("retry_count", 0)
-    total = 0
-    page = 1
-    fetched_at = None
+    result = None
     error = None
-    args_base = {
-        "region_code": criteria.get("region_code"),
-        "start": criteria["start_date"],
-        "end": criteria["end_date"],
-        "species": criteria["species"],
-        "kind": criteria.get("breed_code"),
-    }
-    reason = "공고 조회"
-    while page <= 1:
-        attempt = 0
-        while True:
-            if len(calls) >= budget:
-                error = {"code": "tool_budget", "message": ERROR_MESSAGES["tool_budget"]}
-                break
-            args = {**args_base, "page": page, "rows": ROWS_PER_PAGE}
-            try:
-                result = await animal.search(
-                    region_code=args["region_code"],
-                    start=date.fromisoformat(args["start"]),
-                    end=date.fromisoformat(args["end"]),
-                    species=args["species"],
-                    kind=args["kind"],
-                    page=page,
-                    rows=ROWS_PER_PAGE,
-                )
-            except AnimalApiError as exc:
-                calls.append(_call("animal_search", args, exc.code, reason, attempt=attempt, result_code=exc.result_code))
-                # 공공데이터가 일부 품종 코드(예: 5자리 코드)를 받지 못하고 오류를 돌려주는 경우가 있다.
-                # 검색 전체를 실패시키지 않고 품종 조건만 빼고 한 번 다시 조회한다. 품종은 받은 결과에서 거른다.
-                if exc.code == "animal_response" and args_base.get("kind"):
-                    args_base = {**args_base, "kind": None}
-                    reason = "품종 코드로 조회 실패: 품종 조건 없이 다시 조회(품종은 결과에서 거름)"
-                    attempt = 0
-                    continue
-                if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
-                    await sleep(RETRY_BACKOFF_SECONDS[attempt])
-                    attempt += 1
-                    retries += 1
-                    continue
-                error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code), "page": page}
-                break
-            calls.append(_call("animal_search", args, "ok", reason, count=len(result.items), attempt=attempt))
-            items.extend(result.items[:ROWS_PER_PAGE])
-            total = result.total_count
-            fetched_at = result.fetched_at
+    attempt = 0
+    while True:
+        if len(calls) >= budget:
+            error = {"code": "tool_budget", "message": ERROR_MESSAGES["tool_budget"]}
             break
-        if error:
+        args = {**query, "page": page, "rows": ROWS_PER_PAGE}
+        try:
+            result = await animal.search(region_code=args["region_code"], start=date.fromisoformat(args["start"]),
+                                         end=date.fromisoformat(args["end"]), species=args["species"],
+                                         kind=args["kind"], page=page, rows=ROWS_PER_PAGE)
+        except AnimalApiError as exc:
+            calls.append(_call("animal_search", args, exc.code, reason, attempt=attempt, result_code=exc.result_code))
+            # 공공데이터가 일부 품종 코드(예: 5자리 코드)를 받지 못하고 오류를 돌려주는 경우가 있다.
+            # 검색 전체를 실패시키지 않고 품종 코드만 빼고 한 번 다시 조회한다. 품종 조건은 그대로 두고
+            # 받은 결과에서 거른다(사용자가 고른 품종을 바꾸지 않음).
+            if exc.code == "animal_response" and query.get("kind"):
+                query = {**query, "kind": None}
+                reason = "품종 코드로 조회 실패: 품종 조건 없이 다시 조회(품종은 결과에서 거름)"
+                attempt = 0
+                continue
+            if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
+                await sleep(RETRY_BACKOFF_SECONDS[attempt])
+                attempt += 1
+                retries += 1
+                continue
+            error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code), "page": page}
             break
-        break  # 요청당 원본 API 1페이지(최대 1,000건)만 조회한다.
-    pages_fetched = page if not error else page - 1
+        calls.append(_call("animal_search", args, "ok", reason, count=len(result.items), attempt=attempt))
+        break
+    return {"items": result.items[:ROWS_PER_PAGE] if result else [], "total_count": result.total_count if result else 0,
+            "fetched_at": result.fetched_at if result else _now(), "tool_calls": calls,
+            "retry_count": retries, "error": error, "query": query}
+
+
+async def execute(state: SearchState, config) -> dict:
+    criteria = state["criteria"]
+    query = {"region_code": criteria.get("region_code"), "start": criteria["start_date"],
+             "end": criteria["end_date"], "species": criteria["species"], "kind": criteria.get("breed_code")}
+    fetched = await _fetch_page(state, config, query, 1, "공고 조회")
     return {
-        "raw_items": items,
-        "total_count": total,
-        "pages_fetched": max(pages_fetched, 0),
-        "fetched_at": fetched_at or _now(),
-        "data_source": animal.source,
-        "retry_count": retries,
-        "tool_calls": calls,
-        "error": error,
-        "pending_fix": None,
-        "trace": ["execute"],
+        # 실제로 쓴 조회 인자(품종 코드 오류로 코드 없이 다시 조회했으면 그 인자)를 남겨 다음 페이지도 같게 조회한다.
+        "raw_items": fetched["items"], "search_query": fetched["query"], "total_count": fetched["total_count"],
+        "pages_fetched": 0 if fetched["error"] else 1, "fetched_at": fetched["fetched_at"],
+        "data_source": _deps(config)["animal"].source, "retry_count": fetched["retry_count"],
+        "tool_calls": fetched["tool_calls"], "error": fetched["error"], "pending_fix": None, "trace": ["execute"],
     }
+
+
+async def research(state: SearchState, config) -> dict:
+    """기존 agent가 고른 재검색을 실행한다. 전략 선택을 위한 별도 LLM 호출은 없다."""
+    plan = state["agent_search_plan"]
+    fetched = await _fetch_page(state, config, plan["query"], plan["page"], "검색 에이전트의 공고 재조회")
+    log_ = [*(state.get("agent_log") or []), {"step": "research_result", "strategy": plan["action"],
+            "ok": not fetched["error"], "count": len(fetched["items"]),
+            "error_code": fetched["error"]["code"] if fetched["error"] else None}]
+    update = {"tool_calls": fetched["tool_calls"], "retry_count": fetched["retry_count"],
+              "agent_search_plan": None, "agent_log": log_, "trace": ["research"]}
+    if fetched["error"]:
+        # 이전에 성공한 범위·조건·후보는 보존하고 실패를 명시한다.
+        update.update(error=fetched["error"], issues=[{"type": "tool_error", "code": fetched["error"]["code"], "fixable": False}],
+                      agent_done=True, agent_request=None,
+                      agent_decision=_agent_decision(state, "tool_error", "search_notices", log_))
+        return update
+    raw = fetched["items"]
+    if plan["action"] == "next_page":
+        raw = [*(state.get("raw_items") or []), *raw]
+    update.update(criteria=plan["criteria"], llm_features=plan["features"], raw_items=raw,
+                  search_query=plan["query"], pages_fetched=plan["page"], total_count=fetched["total_count"],
+                  fetched_at=fetched["fetched_at"], radius_items=None, issues=[], error=None, pending_fix=None)
+    # 종류·지역·기간·특징 검색 문장은 바꾸지 않아 기존 공고의 코사인 점수는 재사용한다.
+    return update
 
 
 async def radius_node(state: SearchState, config) -> dict:
@@ -400,9 +424,8 @@ async def validate(state: SearchState, config) -> dict:
                        "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
     elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
-    # 결과가 있으면 확신 신호를 계산한다. 낮으면 검색 에이전트(agent 노드)가 결과를 읽고 판단·수정한다.
-    confidence = (confidence_signals(candidates, criteria, state.get("llm_features"), state.get("photo_features"))
-                  if candidates else None)
+    # 빈 결과도 입력 신호를 남겨, 이미 받은 정보를 에이전트가 다시 묻지 않게 한다.
+    confidence = confidence_signals(candidates, criteria, state.get("llm_features"), state.get("photo_features"))
     return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
 FIXES = {
@@ -412,19 +435,24 @@ FIXES = {
     "empty_narrow": {"strategy": "ask_user_to_widen", "next": "ask", "fix": {}},
     "empty_radius": {"strategy": "ask_user_to_widen_radius", "next": "ask", "fix": {}},
 }
+EMPTY_ISSUES = {"empty_narrow", "empty_radius"}
 
 
 def route_after_validate(state: SearchState, config) -> str:
     issues = [i for i in state.get("issues") or [] if i["type"] in FIXES]
-    if not issues:
+    # 중복·조건 위반·지역 매핑은 기존 규칙으로 먼저 수정한다.
+    # 빈 결과는 LLM이 원인을 읽고 전략을 선택하고, LLM이 없거나 실패하면 기존 성찰로 돌아간다.
+    structural = [i for i in issues if i["type"] not in EMPTY_ISSUES]
+    if not structural:
         if state.get("error") or state.get("candidates") is None:
             return "finalize"
-        # 에이전트가 조건을 고쳐 다시 찾은 뒤면 다시 에이전트로(새 결과를 읽고 비교). 이미 끝냈으면 위치 조회.
-        if state.get("agent_done"):
+        if not state.get("agent_done"):
+            if (_deps(config).get("search_agent") or state.get("agent_messages")
+                    or (state.get("confidence") or {}).get("low")):
+                # 조회·정렬까지만 캐시한 뒤, 대화별 판단은 별도 실행한다.
+                return "review" if _deps(config).get("_defer_agent") else "agent"
+        if not issues:
             return "locate"
-        if state.get("agent_messages") or (state.get("confidence") or {}).get("low"):
-            return "agent"
-        return "locate"
     if not state.get("reflection_enabled", True):
         return "finalize"
     if state.get("reflection_count", 0) >= _deps(config)["settings"].max_reflections:
@@ -515,6 +543,7 @@ def _agent_decision(state: SearchState, source: str, final_tool: str | None, log
     conf = state.get("confidence") or {}
     return {"source": source, "final_tool": final_tool, "steps": state.get("agent_steps", 0),
             "reruns": state.get("agent_reruns", 0), "log": log_, "prompt_version": agent_mod.AGENT_PROMPT_VERSION,
+            "researches": state.get("agent_researches", 0),
             "confidence_version": conf.get("version")}
 
 
@@ -588,19 +617,31 @@ async def agent_tools_node(state: SearchState, config) -> dict:
                              "검색 에이전트 도구 호출")],
         "trace": ["agent_tools"],
     }
-    if result["next"]:
+    if result["next"] in ("rank", "radius", "research"):
         update["agent_rerun_pending"] = True
     if result["done"]:
+        empty = [i for i in state.get("issues") or [] if i["type"] in EMPTY_ISSUES]
+        if name == "finish" and empty and not state.get("candidates"):
+            # 결과 0건에서 LLM 이 그냥 끝내면 사용자는 다음에 할 일을 모른다.
+            # 이 경우 판단을 기록만 하고, 검증을 다시 거쳐 기존 성찰 질문(지역·반경 넓히기 동의)으로 넘긴다.
+            update.update(agent_done=True, agent_request=None, agent_next="validate",
+                          agent_decision={**_agent_decision({**state, **update}, "llm", name, log_),
+                                          "empty_fallback": empty[0]["type"]})
+            return update
         update.update(agent_done=True, agent_request=result["request"],
+                      # 에이전트가 빈 결과를 검토하고 요청을 선택했다. 빈 결과 자체는 미해결 데이터 오류가 아니다.
+                      issues=[i for i in state.get("issues") or [] if i["type"] not in EMPTY_ISSUES],
                       agent_decision=_agent_decision({**state, **update}, "llm", name, log_))
     return update
 
 
 def route_after_agent(state: SearchState) -> str:
-    return "locate" if state.get("agent_done") else "agent_tools"
+    return "validate" if state.get("agent_done") else "agent_tools"
 
 
 def route_after_agent_tools(state: SearchState) -> str:
+    if state.get("agent_next") in ("ask", "validate"):
+        return state["agent_next"]
     if state.get("agent_done"):
         return "locate"
     return state.get("agent_next") or "agent"
@@ -651,7 +692,7 @@ async def finalize(state: SearchState, config) -> dict:
     }
 
 
-def build_graph():
+def build_graph(entry: str = "analyze"):
     g = StateGraph(SearchState)
     g.add_node("analyze", analyze)
     g.add_node("ask", ask)
@@ -659,6 +700,7 @@ def build_graph():
     g.add_node("breed", normalize_breed)
     g.add_node("plan", plan)
     g.add_node("execute", execute)
+    g.add_node("research", research)
     g.add_node("radius", radius_node)
     g.add_node("rank", rank_node)
     g.add_node("validate", validate)
@@ -668,30 +710,34 @@ def build_graph():
     g.add_node("locate", locate)
     g.add_node("finalize", finalize)
 
-    g.add_edge(START, "analyze")
+    g.add_edge(START, entry)
     g.add_conditional_edges("analyze", route_after_analyze, {"ask": "ask", "context": "context"})
     g.add_edge("ask", END)
     g.add_conditional_edges("context", route_after_context, {"breed": "breed", "finalize": "finalize"})
     g.add_conditional_edges("breed", lambda s: "finalize" if s.get("error") else "plan", {"plan": "plan", "finalize": "finalize"})
     g.add_conditional_edges("plan", route_after_plan, {"validate": "validate", "execute": "execute"})
     g.add_edge("execute", "radius")
+    g.add_conditional_edges("research", lambda s: "finalize" if s.get("error") else "radius",
+                            {"finalize": "finalize", "radius": "radius"})
     g.add_edge("radius", "rank")
     g.add_edge("rank", "validate")
     g.add_conditional_edges(
         "validate",
         route_after_validate,
-        {"reflect": "reflect", "agent": "agent", "locate": "locate", "finalize": "finalize"},
+        {"reflect": "reflect", "agent": "agent", "review": END, "locate": "locate", "finalize": "finalize"},
     )
     g.add_conditional_edges(
         "reflect",
         route_after_reflect,
         {"execute": "execute", "rank": "rank", "plan": "plan", "ask": "ask", "finalize": "finalize"},
     )
-    g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "locate": "locate"})
+    g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "validate": "validate"})
     g.add_conditional_edges("agent_tools", route_after_agent_tools,
-                            {"agent": "agent", "rank": "rank", "radius": "radius", "locate": "locate"})
+                            {"agent": "agent", "rank": "rank", "radius": "radius", "research": "research",
+                             "ask": "ask", "validate": "validate", "locate": "locate"})
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()
 
 GRAPH = build_graph()
+REVIEW_GRAPH = build_graph(entry="validate")

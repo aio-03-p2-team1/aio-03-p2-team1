@@ -85,7 +85,8 @@ def test_thousand_embeddings_top_300_cache_hit_ttl_and_expiry():
         assert second["tool_call_count"] == 0
         alias = await run_search(d, "owner", {"criteria": {**CRITERIA, "species": "개", "region": "all"}})
         assert alias["cache_hit"] and len(animal.calls) == 1
-        await redis.expire(first["cache_key"], 0)
+        # FakeRedis에서 같은 시각의 expire(0)는 Windows 시계 정밀도에 따라 잠시 살아 있을 수 있다.
+        await redis.expire(first["cache_key"], -1)
         third = await run_search(d, "owner", {"criteria": CRITERIA})
         assert not third["cache_hit"] and len(animal.calls) == 2
         await run_search(d, "another-owner", {"criteria": CRITERIA})

@@ -10,7 +10,7 @@ from redis.exceptions import RedisError
 from backend.errors import ApiError
 
 TTL = 600
-VERSION = "rrf-breed-v3"
+VERSION = "search-research-v1"
 
 
 def condition_key(owner, criteria, *, source, model, reflection=True):
@@ -18,6 +18,14 @@ def condition_key(owner, criteria, *, source, model, reflection=True):
                "reflection": reflection, "version": VERSION}
     digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
     return "meet-again:search:" + digest
+
+
+def review_cache_key(base_key, history, photo):
+    """조회 캐시 키 + 에이전트가 판단에 쓰는 대화 맥락(요청·거절 이력, 사진 분석) → 검토 결과 캐시 키."""
+    payload = {"history": history or {}, "photo": photo or None}
+    digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"),
+                                       default=str).encode()).hexdigest()
+    return f"{base_key}:review:{digest}"
 
 
 class SearchCache:

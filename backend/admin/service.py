@@ -22,7 +22,7 @@ RUN_LIST_FIELDS = (
 RUN_STAT_FIELDS = (
     "status", "end_reason", "reflection_enabled", "reflection_count", "retry_count", "cache_hit", "elapsed_ms",
     "tool_calls", "confidence", "agent_decision", "agent_request", "issues", "reflections", "ranking_method",
-    "error", "created_at",
+    "error", "created_at", "trace",
 )
 
 _RUN_LISTS = ("tool_calls", "issues", "reflections", "trace", "questions")
@@ -161,7 +161,9 @@ def agent_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
     """실행 문서 목록 → 에이전트 정확도 개선용 집계."""
     runs = [clean_run(run)[0] for run in runs]
     total = len(runs)
-    executed = [run for run in runs if not run.get("cache_hit")]
+    # 공고 캐시를 재사용해도 에이전트가 새로 검토했으면(trace 에 agent) 실제 실행으로 센다.
+    # 검토 결과까지 캐시에서 꺼낸 실행(review_cache_hit)은 그래프를 돌지 않았으므로 뺀다.
+    executed = [run for run in runs if not run.get("cache_hit") or "agent" in (run.get("trace") or [])]
     tool_use: Counter = Counter()
     tool_fail: Counter = Counter()
     for run in executed:
@@ -190,7 +192,7 @@ def agent_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "total_runs": total,
         "executed_runs": len(executed),
-        "cache_hit_rate": _rate(total - len(executed), total),
+        "cache_hit_rate": _rate(sum(bool(run.get("cache_hit")) for run in runs), total),
         "status": dict(Counter(run.get("status") or "unknown" for run in runs)),
         "end_reason": dict(Counter(run.get("end_reason") or "-" for run in runs)),
         "errors": dict(Counter((run.get("error") or {}).get("code") for run in runs if run.get("error"))),

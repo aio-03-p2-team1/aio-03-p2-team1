@@ -187,7 +187,7 @@ def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[s
 # RRF 점수는 순위로만 계산(1/(k+순위))해서 결과가 엉망이어도 1등 점수가 비슷하다. "얼마나 닮았나"를 말해 주지 않는다.
 # 그래서 확신은 절대적인 신호(벡터 유사도 값, 특징 일치 근거, 입력 특징의 양)로 판단한다.
 # 기준값은 실제 검색 몇 건을 보고 정한 것이 아니라 임시값이다(CONFIDENCE_VERSION 으로 기록, 측정 후 조정).
-CONFIDENCE_VERSION = "conf-v1(임시 기준)"
+CONFIDENCE_VERSION = "conf-v2(임시 기준)"
 WEAK_SIMILARITY = 0.45  # 1등 후보 벡터 유사도가 이보다 낮으면 애매
 FLAT_GAP = 0.01  # 1·2등 유사도 차이가 이보다 작으면 두드러진 후보가 없음
 MIXED_WORDS = ("믹스", "잡종", "혼종", "mix")
@@ -234,7 +234,9 @@ def confidence_signals(candidates: list[dict[str, Any]], criteria: dict[str, Any
         "top_unknown": len(evidence.get("unknown") or []),
     }
     reasons = []
-    if candidates:
+    if not candidates:
+        reasons.append("empty_result")
+    else:
         if feature_count <= 1:
             reasons.append("few_features")  # 특징이 거의 없음
         if given["breed_mixed"] and not given["photo_given"]:

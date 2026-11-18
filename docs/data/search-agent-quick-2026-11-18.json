@@ -1,0 +1,857 @@
+{
+  "measured_at": "2026-11-18T15:04:45.128566+09:00",
+  "model": "gpt-6-luna",
+  "git_revision": "9d602bfb9fd3c09ac2a140aa2bbaab0bfce2e6e3",
+  "agent_prompt": "search-agent-v4",
+  "policy_runs": [
+    {
+      "case": "sufficient",
+      "elapsed_ms": 5508.72,
+      "llm_elapsed_ms": 5488.96,
+      "tools": [
+        {
+          "step": 1,
+          "tool": "finish",
+          "args": {
+            "note": "후보의 갈색 털과 암컷 조건이 일치하고 곱슬털 특징도 원문과 맞습니다."
+          },
+          "ok": true
+        }
+      ],
+      "final_tool": "finish",
+      "assessment": {
+        "pass": true,
+        "checks": {
+          "llm_completed": true,
+          "no_rejected_calls": true,
+          "finish_without_rerun": true
+        }
+      }
+    },
+    {
+      "case": "next_page",
+      "elapsed_ms": 13144.0,
+      "llm_elapsed_ms": 10736.22,
+      "tools": [
+        {
+          "step": 1,
+          "tool": "update_features",
+          "args": {
+            "colors": [
+              "흰색"
+            ],
+            "sex": "F",
+            "marks": [
+              "곱슬털"
+            ],
+            "reason": "원문에 있는 곱슬털 특징이 검색에 반영되지 않았습니다."
+          },
+          "ok": true
+        },
+        {
+          "step": 2,
+          "tool": "search_notices",
+          "args": {
+            "action": "next_page",
+            "reason": "현재 후보가 원문과 털색이 달라 남은 공고도 확인하겠습니다."
+          },
+          "ok": true
+        },
+        {
+          "step": 3,
+          "tool": "finish",
+          "args": {
+            "note": "전체 공고를 확인했고, 1순위 후보가 흰색 곱슬털 암컷으로 설명과 정확히 일치합니다."
+          },
+          "ok": true
+        }
+      ],
+      "final_tool": "finish",
+      "assessment": {
+        "pass": false,
+        "checks": {
+          "llm_completed": true,
+          "no_rejected_calls": true,
+          "strategy": false,
+          "effect": true
+        }
+      }
+    },
+    {
+      "case": "relax_breed",
+      "elapsed_ms": 3721.82,
+      "llm_elapsed_ms": 3698.8,
+      "tools": [
+        {
+          "step": 1,
+          "tool": "search_notices",
+          "args": {
+            "action": "relax_breed",
+            "reason": "푸들이 확실하지 않다고 하셔서 품종 필터를 풀고 다시 찾아보겠습니다."
+          },
+          "ok": true
+        }
+      ],
+      "final_tool": null,
+      "assessment": {
+        "pass": false,
+        "checks": {
+          "llm_completed": false,
+          "no_rejected_calls": true,
+          "strategy": true,
+          "effect": true
+        }
+      }
+    },
+    {
+      "case": "widen_region",
+      "elapsed_ms": 1785.34,
+      "llm_elapsed_ms": 1.96,
+      "tools": [],
+      "final_tool": null,
+      "assessment": {
+        "pass": false,
+        "checks": {
+          "scope_confirmation": false
+        }
+      },
+      "excluded_from_quality": "embedding-disabled preflight; no LLM call"
+    },
+    {
+      "case": "widen_region",
+      "elapsed_ms": 3944.73,
+      "llm_elapsed_ms": 2979.58,
+      "tools": [
+        {
+          "step": 1,
+          "tool": "search_notices",
+          "args": {
+            "action": "widen_region",
+            "reason": "현재 후보는 털색과 성별이 달라 다른 지역까지 넓혀 찾아볼까요?"
+          },
+          "ok": true
+        }
+      ],
+      "final_tool": "search_notices",
+      "assessment": {
+        "pass": true,
+        "checks": {
+          "scope_confirmation": true
+        }
+      }
+    }
+  ],
+  "live_runs": [
+    {
+      "case": "cold",
+      "elapsed_ms": 1785.34,
+      "scope": {
+        "region": "서울특별시",
+        "species": "dog",
+        "start_date": "2026-11-18",
+        "end_date": "2026-11-18",
+        "pages_fetched": 1,
+        "total_count": 1,
+        "fetched_rows": 1,
+        "complete": false,
+        "fetched_at": "2026-11-18T06:08:17.913149+00:00",
+        "data_source": "api",
+        "radius": {
+          "days_since_lost": 0,
+          "auto": true,
+          "next_widen_day": 4,
+          "version": "radius-v2",
+          "step": 0,
+          "max_step": 3,
+          "radius_km": 3.0,
+          "next_radius_km": 10.0,
+          "lost_place": null,
+          "basis": "rescue_area_or_jurisdiction",
+          "distance": "straight_line",
+          "applied": false,
+          "reason": "lost_place_missing",
+          "reason_text": "실종 위치가 없어 반경을 적용하지 않음"
+        }
+      },
+      "cache_hit": false,
+      "status": "failed",
+      "decision": {},
+      "error": {
+        "code": "embedding_not_configured",
+        "message": "검색 임베딩 설정이 없습니다. OPENAI_API_KEY 설정이 필요합니다."
+      }
+    },
+    {
+      "case": "warm",
+      "elapsed_ms": 70.71,
+      "scope": {
+        "region": "서울특별시",
+        "species": "dog",
+        "start_date": "2026-11-18",
+        "end_date": "2026-11-18",
+        "pages_fetched": 1,
+        "total_count": 1,
+        "fetched_rows": 1,
+        "complete": false,
+        "fetched_at": "2026-11-18T06:08:17.985532+00:00",
+        "data_source": "api",
+        "radius": {
+          "days_since_lost": 0,
+          "auto": true,
+          "next_widen_day": 4,
+          "version": "radius-v2",
+          "step": 0,
+          "max_step": 3,
+          "radius_km": 3.0,
+          "next_radius_km": 10.0,
+          "lost_place": null,
+          "basis": "rescue_area_or_jurisdiction",
+          "distance": "straight_line",
+          "applied": false,
+          "reason": "lost_place_missing",
+          "reason_text": "실종 위치가 없어 반경을 적용하지 않음"
+        }
+      },
+      "cache_hit": false,
+      "status": "failed",
+      "decision": {},
+      "error": {
+        "code": "embedding_not_configured",
+        "message": "검색 임베딩 설정이 없습니다. OPENAI_API_KEY 설정이 필요합니다."
+      }
+    },
+    {
+      "case": "cold",
+      "elapsed_ms": 3944.73,
+      "scope": {
+        "region": "서울특별시",
+        "species": "dog",
+        "start_date": "2026-11-18",
+        "end_date": "2026-11-18",
+        "total_count": 1,
+        "fetched_at": "2026-11-18T06:09:22.700303+00:00",
+        "data_source": "api",
+        "radius": {
+          "days_since_lost": 0,
+          "auto": true,
+          "next_widen_day": 4,
+          "version": "radius-v2",
+          "step": 0,
+          "max_step": 3,
+          "radius_km": 3.0,
+          "next_radius_km": 10.0,
+          "lost_place": null,
+          "basis": "rescue_area_or_jurisdiction",
+          "distance": "straight_line",
+          "applied": false,
+          "reason": "lost_place_missing",
+          "reason_text": "실종 위치가 없어 반경을 적용하지 않음"
+        }
+      },
+      "cache_hit": false,
+      "status": "awaiting_input",
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "no_feature_match"
+            ],
+            "candidates": 1,
+            "top_similarity": 0.619,
+            "top_id": "411324202600665",
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 후보는 털색과 성별이 달라 다른 지역까지 넓혀 찾아볼까요?"
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "error": null
+    },
+    {
+      "case": "warm",
+      "elapsed_ms": 3886.54,
+      "scope": {
+        "region": "서울특별시",
+        "species": "dog",
+        "start_date": "2026-11-18",
+        "end_date": "2026-11-18",
+        "total_count": 1,
+        "fetched_at": "2026-11-18T06:09:22.700303+00:00",
+        "data_source": "api",
+        "radius": {
+          "days_since_lost": 0,
+          "auto": true,
+          "next_widen_day": 4,
+          "version": "radius-v2",
+          "step": 0,
+          "max_step": 3,
+          "radius_km": 3.0,
+          "next_radius_km": 10.0,
+          "lost_place": null,
+          "basis": "rescue_area_or_jurisdiction",
+          "distance": "straight_line",
+          "applied": false,
+          "reason": "lost_place_missing",
+          "reason_text": "실종 위치가 없어 반경을 적용하지 않음"
+        }
+      },
+      "cache_hit": true,
+      "status": "awaiting_input",
+      "decision": {
+        "source": "llm",
+        "final_tool": "search_notices",
+        "steps": 1,
+        "reruns": 0,
+        "log": [
+          {
+            "step": "start",
+            "low": true,
+            "reasons": [
+              "no_feature_match"
+            ],
+            "candidates": 1,
+            "top_similarity": 0.619,
+            "top_id": "411324202600665",
+            "top_matched": 0
+          },
+          {
+            "step": 1,
+            "tool": "search_notices",
+            "args": {
+              "action": "widen_region",
+              "reason": "현재 후보의 털색과 성별이 달라 다른 지역 공고까지 찾을지 동의가 필요합니다."
+            },
+            "ok": true
+          }
+        ],
+        "prompt_version": "search-agent-v4",
+        "researches": 0,
+        "confidence_version": "conf-v2(임시 기준)"
+      },
+      "error": null
+    }
+  ],
+  "limits": {
+    "agent_calls": 8,
+    "all_chat_calls": 9,
+    "token_budget": 20000,
+    "output_tokens_per_call": 256,
+    "deadline_seconds": 120,
+    "input_reserve": "o200k estimate plus 1024 overhead tokens",
+    "resume_fresh_prompt_reserve": 3000
+  },
+  "scope": "policy: real LLM, fixed features/vectors and mock API; live pair: real API/extraction/embedding, memory storage, no Kakao/browser",
+  "summary": {
+    "cases": {
+      "next_page": {
+        "runs": 1,
+        "passes": 0,
+        "pass_rate": 0.0,
+        "action_sequence_consistency": 1.0,
+        "elapsed": {
+          "n": 1,
+          "mean_ms": 13144.0,
+          "median_ms": 13144.0,
+          "p95_ms": 13144.0
+        },
+        "llm_elapsed": {
+          "n": 1,
+          "mean_ms": 10736.22,
+          "median_ms": 10736.22,
+          "p95_ms": 10736.22
+        }
+      },
+      "relax_breed": {
+        "runs": 1,
+        "passes": 0,
+        "pass_rate": 0.0,
+        "action_sequence_consistency": 1.0,
+        "elapsed": {
+          "n": 1,
+          "mean_ms": 3721.82,
+          "median_ms": 3721.82,
+          "p95_ms": 3721.82
+        },
+        "llm_elapsed": {
+          "n": 1,
+          "mean_ms": 3698.8,
+          "median_ms": 3698.8,
+          "p95_ms": 3698.8
+        }
+      },
+      "sufficient": {
+        "runs": 1,
+        "passes": 1,
+        "pass_rate": 1.0,
+        "action_sequence_consistency": 1.0,
+        "elapsed": {
+          "n": 1,
+          "mean_ms": 5508.72,
+          "median_ms": 5508.72,
+          "p95_ms": 5508.72
+        },
+        "llm_elapsed": {
+          "n": 1,
+          "mean_ms": 5488.96,
+          "median_ms": 5488.96,
+          "p95_ms": 5488.96
+        }
+      },
+      "widen_region": {
+        "runs": 2,
+        "passes": 1,
+        "pass_rate": 0.5,
+        "action_sequence_consistency": 0.5,
+        "elapsed": {
+          "n": 2,
+          "mean_ms": 2865.03,
+          "median_ms": 2865.03,
+          "p95_ms": 3944.73
+        },
+        "llm_elapsed": {
+          "n": 2,
+          "mean_ms": 1490.77,
+          "median_ms": 1490.77,
+          "p95_ms": 2979.58
+        }
+      }
+    },
+    "attempted_model_calls": 8,
+    "successful_model_calls": 7,
+    "model_call_elapsed": {
+      "n": 8,
+      "mean_ms": 3347.06,
+      "median_ms": 3616.05,
+      "p95_ms": 5488.96
+    },
+    "input_tokens": 18081,
+    "output_tokens": 708
+  },
+  "model_calls": [
+    {
+      "ok": true,
+      "tools": [
+        "Finish"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 1940,
+        "output_tokens": 118,
+        "total_tokens": 2058,
+        "input_token_details": {
+          "cache_creation": 1814,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "reasoning": 71
+        }
+      },
+      "elapsed_ms": 5488.96
+    },
+    {
+      "ok": true,
+      "tools": [
+        "UpdateFeatures"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 2378,
+        "output_tokens": 109,
+        "total_tokens": 2487,
+        "input_token_details": {
+          "cache_creation": 832,
+          "cache_read": 1420
+        },
+        "output_token_details": {
+          "reasoning": 53
+        }
+      },
+      "elapsed_ms": 4098.35
+    },
+    {
+      "ok": true,
+      "tools": [
+        "SearchNotices"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 3422,
+        "output_tokens": 95,
+        "total_tokens": 3517,
+        "input_token_details": {
+          "cache_creation": 1044,
+          "cache_read": 2252
+        },
+        "output_token_details": {
+          "reasoning": 49
+        }
+      },
+      "elapsed_ms": 3535.25
+    },
+    {
+      "ok": true,
+      "tools": [
+        "Finish"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 4420,
+        "output_tokens": 49,
+        "total_tokens": 4469,
+        "input_token_details": {
+          "cache_creation": 998,
+          "cache_read": 3296
+        },
+        "output_token_details": {
+          "reasoning": 0
+        }
+      },
+      "elapsed_ms": 3102.62
+    },
+    {
+      "ok": true,
+      "tools": [
+        "SearchNotices"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 1871,
+        "output_tokens": 98,
+        "total_tokens": 1969,
+        "input_token_details": {
+          "cache_creation": 325,
+          "cache_read": 1420
+        },
+        "output_token_details": {
+          "reasoning": 49
+        }
+      },
+      "elapsed_ms": 3696.84
+    },
+    {
+      "ok": false,
+      "error_type": "RuntimeError",
+      "status": null,
+      "error_code": null,
+      "elapsed_ms": 1.96
+    },
+    {
+      "ok": true,
+      "tools": [
+        "SearchNotices"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 2025,
+        "output_tokens": 92,
+        "total_tokens": 2117,
+        "input_token_details": {
+          "cache_creation": 479,
+          "cache_read": 1420
+        },
+        "output_token_details": {
+          "reasoning": 44
+        }
+      },
+      "elapsed_ms": 2979.58
+    },
+    {
+      "ok": true,
+      "tools": [
+        "SearchNotices"
+      ],
+      "model": "gpt-6-luna",
+      "usage": {
+        "input_tokens": 2025,
+        "output_tokens": 147,
+        "total_tokens": 2172,
+        "input_token_details": {
+          "cache_creation": 0,
+          "cache_read": 1899
+        },
+        "output_token_details": {
+          "reasoning": 95
+        }
+      },
+      "elapsed_ms": 3872.89
+    }
+  ],
+  "total_elapsed_ms": 35093.310000000005,
+  "chat_usage": {
+    "calls": [
+      {
+        "usage": {
+          "input_tokens": 1940,
+          "output_tokens": 118,
+          "total_tokens": 2058,
+          "input_token_details": {
+            "cache_creation": 1814,
+            "cache_read": 0
+          },
+          "output_token_details": {
+            "reasoning": 71
+          }
+        },
+        "elapsed_ms": 5315.87
+      },
+      {
+        "usage": {
+          "input_tokens": 2378,
+          "output_tokens": 109,
+          "total_tokens": 2487,
+          "input_token_details": {
+            "cache_creation": 832,
+            "cache_read": 1420
+          },
+          "output_token_details": {
+            "reasoning": 53
+          }
+        },
+        "elapsed_ms": 4096.37
+      },
+      {
+        "usage": {
+          "input_tokens": 3422,
+          "output_tokens": 95,
+          "total_tokens": 3517,
+          "input_token_details": {
+            "cache_creation": 1044,
+            "cache_read": 2252
+          },
+          "output_token_details": {
+            "reasoning": 49
+          }
+        },
+        "elapsed_ms": 3533.06
+      },
+      {
+        "usage": {
+          "input_tokens": 4420,
+          "output_tokens": 49,
+          "total_tokens": 4469,
+          "input_token_details": {
+            "cache_creation": 998,
+            "cache_read": 3296
+          },
+          "output_token_details": {
+            "reasoning": 0
+          }
+        },
+        "elapsed_ms": 3100.05
+      },
+      {
+        "usage": {
+          "input_tokens": 1871,
+          "output_tokens": 98,
+          "total_tokens": 1969,
+          "input_token_details": {
+            "cache_creation": 325,
+            "cache_read": 1420
+          },
+          "output_token_details": {
+            "reasoning": 49
+          }
+        },
+        "elapsed_ms": 3695.07
+      },
+      {
+        "usage": {
+          "input_tokens": 2025,
+          "output_tokens": 92,
+          "total_tokens": 2117,
+          "input_token_details": {
+            "cache_creation": 479,
+            "cache_read": 1420
+          },
+          "output_token_details": {
+            "reasoning": 44
+          }
+        },
+        "elapsed_ms": 2958.9
+      },
+      {
+        "usage": {
+          "input_tokens": 2025,
+          "output_tokens": 147,
+          "total_tokens": 2172,
+          "input_token_details": {
+            "cache_creation": 0,
+            "cache_read": 1899
+          },
+          "output_token_details": {
+            "reasoning": 95
+          }
+        },
+        "elapsed_ms": 3869.86
+      }
+    ],
+    "total_tokens": 18789
+  },
+  "budget_stop": "token_or_call_budget",
+  "resume_budget_stop": null,
+  "scope_speed_note": "real API and embeddings; fixed input/photo traits, no feature extraction; no Kakao/browser; earlier embedding-disabled preflight failures retained",
+  "scope_speed_criteria": {
+    "species": "dog",
+    "region": "서울특별시",
+    "lost_date": "2026-11-18",
+    "color": "검정",
+    "sex": "M",
+    "size": "소형",
+    "description": "검정 수컷 꼬리짧음"
+  },
+  "quick_results": {
+    "policy_outcomes": {
+      "sufficient": "pass",
+      "next_page": "fail",
+      "relax_breed": "incomplete_budget",
+      "widen_region": "pass"
+    },
+    "chat_tokens": 18789,
+    "reduction_vs_50405_agent_tokens_percent": 62.72,
+    "active_runtime_seconds": 35.09,
+    "valid_speed_runs": [
+      {
+        "case": "cold",
+        "elapsed_ms": 3944.73,
+        "scope": {
+          "region": "서울특별시",
+          "species": "dog",
+          "start_date": "2026-11-18",
+          "end_date": "2026-11-18",
+          "total_count": 1,
+          "fetched_at": "2026-11-18T06:09:22.700303+00:00",
+          "data_source": "api",
+          "radius": {
+            "days_since_lost": 0,
+            "auto": true,
+            "next_widen_day": 4,
+            "version": "radius-v2",
+            "step": 0,
+            "max_step": 3,
+            "radius_km": 3.0,
+            "next_radius_km": 10.0,
+            "lost_place": null,
+            "basis": "rescue_area_or_jurisdiction",
+            "distance": "straight_line",
+            "applied": false,
+            "reason": "lost_place_missing",
+            "reason_text": "실종 위치가 없어 반경을 적용하지 않음"
+          }
+        },
+        "cache_hit": false,
+        "status": "awaiting_input",
+        "decision": {
+          "source": "llm",
+          "final_tool": "search_notices",
+          "steps": 1,
+          "reruns": 0,
+          "log": [
+            {
+              "step": "start",
+              "low": true,
+              "reasons": [
+                "no_feature_match"
+              ],
+              "candidates": 1,
+              "top_similarity": 0.619,
+              "top_id": "411324202600665",
+              "top_matched": 0
+            },
+            {
+              "step": 1,
+              "tool": "search_notices",
+              "args": {
+                "action": "widen_region",
+                "reason": "현재 후보는 털색과 성별이 달라 다른 지역까지 넓혀 찾아볼까요?"
+              },
+              "ok": true
+            }
+          ],
+          "prompt_version": "search-agent-v4",
+          "researches": 0,
+          "confidence_version": "conf-v2(임시 기준)"
+        },
+        "error": null
+      },
+      {
+        "case": "warm",
+        "elapsed_ms": 3886.54,
+        "scope": {
+          "region": "서울특별시",
+          "species": "dog",
+          "start_date": "2026-11-18",
+          "end_date": "2026-11-18",
+          "total_count": 1,
+          "fetched_at": "2026-11-18T06:09:22.700303+00:00",
+          "data_source": "api",
+          "radius": {
+            "days_since_lost": 0,
+            "auto": true,
+            "next_widen_day": 4,
+            "version": "radius-v2",
+            "step": 0,
+            "max_step": 3,
+            "radius_km": 3.0,
+            "next_radius_km": 10.0,
+            "lost_place": null,
+            "basis": "rescue_area_or_jurisdiction",
+            "distance": "straight_line",
+            "applied": false,
+            "reason": "lost_place_missing",
+            "reason_text": "실종 위치가 없어 반경을 적용하지 않음"
+          }
+        },
+        "cache_hit": true,
+        "status": "awaiting_input",
+        "decision": {
+          "source": "llm",
+          "final_tool": "search_notices",
+          "steps": 1,
+          "reruns": 0,
+          "log": [
+            {
+              "step": "start",
+              "low": true,
+              "reasons": [
+                "no_feature_match"
+              ],
+              "candidates": 1,
+              "top_similarity": 0.619,
+              "top_id": "411324202600665",
+              "top_matched": 0
+            },
+            {
+              "step": 1,
+              "tool": "search_notices",
+              "args": {
+                "action": "widen_region",
+                "reason": "현재 후보의 털색과 성별이 달라 다른 지역 공고까지 찾을지 동의가 필요합니다."
+              },
+              "ok": true
+            }
+          ],
+          "prompt_version": "search-agent-v4",
+          "researches": 0,
+          "confidence_version": "conf-v2(임시 기준)"
+        },
+        "error": null
+      }
+    ]
+  }
+}
