@@ -24,6 +24,7 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/poster` 실종 전단지 에디터(로그인) | `docs` 기반 MVP | `GET /poster/templates`, `GET /poster/templates/{id}`, `POST /poster/assets`, `POST /poster/assets/from-post`(게시판 글 사진 복사), `POST/GET/PUT/DELETE /posters/{id}`. 저장 후에는 편집기에 머물며 '저장되었습니다.'만 안내한다(새 전단지는 주소만 `?edit={id}` 로 바꿔 다음 저장이 수정이 되게 함) |
 | `/posters/:posterId` 전단지 상세(로그인) | — | `GET /posters/{id}`. 읽기 전용 캔버스(화면 폭에 맞춰 축소), 오른쪽 위 '수정' → `/poster?edit={id}` |
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
+| `/admin` 관리자(관리자 계정만) | — | `GET /admin/overview`(연동·저장소·Redis 상태, 버전·한도), `GET /admin/agent/stats`(에이전트 집계·성찰 켬/끔 비교), `GET /admin/runs`·`GET/DELETE /admin/runs/{owner}/{run_id}`, `GET/PATCH /admin/users`, `GET /admin/posts`·`DELETE /admin/posts/{id}`, `GET /admin/comments`·`DELETE /admin/comments/{post_id}/{id}`, `GET /admin/posters`·`DELETE /admin/posters/{owner}/{id}`, `GET /admin/logs`. 헤더 '관리자' 메뉴는 `GET /auth/me` 의 `is_admin` 이 참일 때만 보인다 |
 
 ## 2. StateGraph
 
@@ -227,6 +228,7 @@ flowchart LR
 | `GET /poster/templates` · `GET /poster/templates/{id}` | 없음 | `poster_template_not_found` |
 | `POST /poster/assets` · `GET /poster/assets/{asset_id}` | 필요(소유자) | `poster_asset_too_large`(413, 15MB), `poster_asset_pixels`(413, 2,500만 화소), `poster_asset_format`(415), `poster_asset_invalid`(422), `poster_asset_not_found` |
 | `GET/POST /posters` · `GET/PUT/DELETE /posters/{id}` | 필요(소유자) | `poster_not_found`, `poster_component_invalid`, `poster_asset_unavailable`, `poster_limit`(422, 사용자당 5개) |
+| `/admin/*` | 필요(관리자: 계정 문서 `identity.role=admin`) | `not_authenticated`(401), `admin_only`(403), `admin_protected`(422, 관리자 정지 시도), `not_found`·`run_not_found`·`post_not_found`·`comment_not_found`·`poster_not_found`(404) |
 | `/subscriptions`, `/notifications` | — | **미구현** |
 
 전단지 목록 `GET /posters`는 로그인 사용자 소유의 DB 문서만 조회해 `items=[{id,title,pet_name,template_id,template_name,lost_place,photo_asset_id,updated_at}]`, `limit=5`를 반환한다. 마이페이지에서 `/poster?edit=<id>`로 바로 편집기를 열며, 삭제 전 확인 팝업을 표시한다. 신규 저장은 백엔드가 DB에서 해당 사용자의 `kind=poster` 문서를 조회해 5개 이상이면 `422 poster_limit`으로 거부한다. 기존 문서 수정에는 개수 제한을 적용하지 않으며 삭제 후 신규 저장할 수 있다.
@@ -251,6 +253,14 @@ flowchart LR
 전단지 JSON은 `owner=<로그인 사용자 키>`, `kind=poster` 로 기존 문서 저장소에 저장한다. 업로드는 multipart 파일 15MB 이하, JPEG/PNG/WebP 실제 디코딩 형식, 최대 2,500만 화소로 검증한다. Pillow의 EXIF transpose 후 긴 변을 2,000px로 줄이고 WebP 품질 85로 다시 인코딩해 위치정보 등 원본 메타데이터를 제거한다. 결과 바이트는 `owner=<로그인 사용자 키>`, `kind=asset` 문서에 보관하며 전단지는 URL 대신 `assetId`를 참조한다. 이미지 읽기와 전단지 저장 시에도 자산 소유자를 확인한다. 원본은 보관하지 않는다.
 
 Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해야 한다. 새 DB는 `scripts/bootstrap_schema.sql`을 사용하고, 기존 DB는 그 파일 끝의 2026-11-17 ALTER 주석을 적용한다. 이미지 자르기는 종횡비를 유지하는 프레임 채우기와 확대·가로/세로 위치 조절로 제공하며, 회전·투명도도 속성 패널에서 바꾼다. PDF/인쇄는 A4 크기의 인쇄 전용 창을 열어 브라우저 인쇄 대화상자를 사용한다(사용자가 PDF로 저장 가능).
+
+**관리자** (`backend/routers/admin.py`, `backend/admin_log.py`, `frontend/src/pages/AdminPage.jsx`)
+- 권한: 계정 문서(`kind=identity`, `id=account`)의 `role=admin`. 회원가입 API 로는 줄 수 없고 `uv run python -m scripts.create_admin --email <이메일>` 로만 붙인다(비밀번호는 실행 시 입력, `.env` 의 저장소에 기록). `require_admin` 이 요청마다 저장소에서 역할을 다시 읽는다. `GET /auth/me`·로그인 응답의 `is_admin` 은 메뉴 표시용이다.
+- 정지: `PATCH /admin/users/{owner}` `{disabled}` → 계정 문서 `disabled=true`. 비밀번호가 맞는 로그인만 `403 account_disabled` 로 알린다. 이미 발급된 세션은 TTL 까지 유지된다(세션 강제 만료 미구현). 관리자 계정은 정지할 수 없다.
+- 소유자 무관 조회: 저장소 `list_kind(kind, limit, offset, fields)`. `fields` 를 주면 SQLite 는 파이썬에서, Supabase 는 PostgREST `select=f:data->f` 로 최상위 키만 받아 후보 300건을 내려받지 않는다. 한 번에 최대 500건.
+- 에이전트 분석: 최근 실행(run) 최대 500건으로 종료 상태·종료 이유·오류 코드·검증 문제·성찰 종류·도구 사용/실패·확신 낮음 이유·에이전트 판단 출처·고른/거부된 도구·화면 요청과 성찰 켬/끔 비교(완료율·실패율·질문 종료율·평균 성찰·재시도·도구 호출)를 집계한다. 캐시 적중 실행은 그래프를 돌지 않았으므로 도구·성찰 집계에서 뺀다. 화면에서 실행 내역 CSV·분석 JSON 을 내려받는다(시험 보고서 원자료).
+- 로그: `dasimanna*` 로거(INFO 이상)와 API 요청 한 줄(메서드·경로·상태·ms, 쿼리·본문 제외)을 프로세스 메모리에 최근 1,000건만 둔다. 재시작하면 비고, 서버 인스턴스마다 따로다. `/health`·`/admin/logs` 요청은 남기지 않는다. 관리자의 삭제·정지는 `dasimanna.admin` 로그로 남는다.
+- 관리자에게도 비밀번호 해시·세션 토큰·게시글 사진 원본은 내보내지 않는다.
 
 ## 9. 미구현·미확정
 
