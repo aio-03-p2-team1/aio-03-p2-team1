@@ -18,7 +18,7 @@ from backend.agent.graph import GRAPH
 from backend.agent import criteria as crit
 from backend.agent.search_cache import condition_key
 from backend.agent.embeddings import DIMENSIONS
-from backend.agent.llm import PROMPT_VERSION
+from backend.agent.llm import PROMPT_VERSION, REFINEMENT_PROMPT_VERSION
 from backend.agent.radius import RADIUS_VERSION
 from backend.errors import ApiError
 
@@ -81,13 +81,20 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "trace": [],
         "agent_history": history,
         "photo_features": request.get("photo"),  # 서버가 보관한 사진 분석 결과(없으면 None)
+        "llm_features": request.get("precomputed_features") or {},
+        "features_precomputed": bool(request.get("features_precomputed")),
     }
     # 에이전트 루프(걸음 최대 6, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
-    config = {"configurable": deps, "recursion_limit": 80}
+    # A refinement request is already the one allowed model call for the post-to-search flow.
+    # Reuse its normalized features and do not start the optional search-agent LLM loop.
+    graph_deps = {**deps, "search_agent": None} if request.get("features_precomputed") else deps
+    config = {"configurable": graph_deps, "recursion_limit": 80}
     cache = deps.get("search_cache")
     key = condition_key(owner, normalized, source=deps["animal"].source,
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
-                               "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION,
+                               "features": getattr(deps.get("llm"), "model", None),
+                               "feature_prompt": REFINEMENT_PROMPT_VERSION if request.get("features_precomputed") else PROMPT_VERSION,
+                               "precomputed_features": bool(request.get("features_precomputed")),
                                # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
                                "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off",
                                # 사진 특징이 다르면 결과가 달라지므로 캐시 키에 넣는다.
@@ -121,7 +128,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             cache_hit = True
     else:
         result = await execute()
-    if cache_hit and (result.get("confidence") or {}).get("low") and deps.get("search_agent"):
+    if cache_hit and (result.get("confidence") or {}).get("low") and graph_deps.get("search_agent"):
         # 애매한 결과는 캐시를 쓰지 않고 다시 돌려 에이전트가 이 대화 기준으로 읽고 판단하게 한다.
         result = await execute()
         cache_hit = False

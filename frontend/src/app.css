@@ -67,6 +67,7 @@ button[disabled]{opacity:.65;cursor:progress}
 .post-thumb.sample-photo{height:auto;aspect-ratio:390/171}
 
 .search-form-grid-v2{grid-template-columns:minmax(200px,.75fr) minmax(0,2fr)}
+.search-form-grid{width:100%;min-width:0;margin:0;padding:0;border:0}
 .search-form-grid-v2 .upload-box{min-height:100%}
 .photo-upload-column{display:flex;flex-direction:column;min-width:0}
 .photo-upload-column .upload-box{flex:1}
@@ -74,6 +75,18 @@ button[disabled]{opacity:.65;cursor:progress}
 .search-fields-v2{display:flex;flex-direction:column;gap:14px;min-width:0}
 .search-fields-v2 .search-description textarea{min-height:120px}
 .search-fields-v2 .form-pair label,.search-fields-v2 .search-description{margin-top:0}
+.search-description-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.search-description-head label{color:#59554e;font-size:12px;font-weight:700}
+.refine-button{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid #d8d6d1;border-radius:7px;background:#d5d5d599;color:#625f5a;font-size:11px;font-weight:700;cursor:pointer;transition:background .15s ease,color .15s ease}
+.refine-button:hover:not(:disabled){background:#c9c8c3;color:#393733}
+.refine-button:disabled{opacity:.65;cursor:wait}
+.refine-button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.description-wrap{position:relative;isolation:isolate;display:flex;flex:1;min-height:120px}
+.description-wrap textarea{flex:1}
+.description-wrap.is-refining textarea{color:transparent;text-shadow:0 0 8px #777;resize:none}
+.refine-shimmer{position:absolute;z-index:1;inset:1px;overflow:hidden;border-radius:7px;pointer-events:none;background:repeating-linear-gradient(135deg,#a8a8a8eb 0 16px,#c3c3c3ee 16px 34px,#adadaddf 34px 48px);}
+.refine-shimmer::after{content:"";position:absolute;inset:-60% auto -60% -45%;width:35%;transform:skewX(-20deg);background:linear-gradient(90deg,transparent,#f6f6f655,transparent);animation:refine-sweep 1.15s ease-in-out infinite}
+@keyframes refine-sweep{to{left:125%}}
 .field-block{display:flex;flex-direction:column;gap:6px;min-width:0}
 .field-label{color:#59554e;font-size:12px;font-weight:700}
 .pagination{display:flex;align-items:center;justify-content:center;gap:7px;flex-wrap:wrap;margin:24px 0}
