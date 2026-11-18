@@ -129,9 +129,9 @@ order by species;
 이후 운영 API에서 목록을 확인한다. 아래 주소는 [development.md](development.md)에 기록된 백엔드 주소이며, 실제 운영 주소가 다르면 바꾼다.
 
 ```bash
-curl --fail-with-body 'https://aio-03-p2-team1.onrender.com/api/v1/kinds?species=dog'
-curl --fail-with-body 'https://aio-03-p2-team1.onrender.com/api/v1/kinds?species=cat'
-curl --fail-with-body 'https://aio-03-p2-team1.onrender.com/api/v1/kinds?species=etc'
+curl --fail-with-body 'https://aio-03-p2-team1-0umv.onrender.com/api/v1/kinds?species=dog'
+curl --fail-with-body 'https://aio-03-p2-team1-0umv.onrender.com/api/v1/kinds?species=cat'
+curl --fail-with-body 'https://aio-03-p2-team1-0umv.onrender.com/api/v1/kinds?species=etc'
 ```
 
 각 응답의 `kinds` 목록에 `kind_code`, `name`, `species`가 있는지 확인한다. 이 API는 로그인 없이 조회할 수 있다.

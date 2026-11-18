@@ -123,12 +123,13 @@ Supabase 프로젝트, 문서 DB·Storage 설정, 최초·정기 품종 동기�
 | 대상 | 플랫폼 설정 |
 | --- | --- |
 | 프론트엔드 | Vercel 프로젝트 `aio-03-p2-team1`, Root `frontend`, Install `npm ci`, Build `npm run build`, Output `dist` |
-| 백엔드 | Render 서비스 `aio-03-p2-team1`, Python 3.12, `uv sync --frozen --no-dev`, 시작 시 `$PORT`로 Uvicorn 실행, Health Check `/api/v1/health` |
-| Redis | Render Key Value. Render에서 제공하는 연결 URL을 `REDIS_URL`로 사용 |
+| 백엔드 | Render 팀 공용 워크스페이스, 프로젝트 `aio-03-p2-team1`(Production, Singapore)의 서비스 `aio-03-p2-team1`(0.5 CPU·512 MB). Build `pip install uv && uv sync --frozen --no-dev`, Start `uv run --no-sync uvicorn backend.main:app --host 0.0.0.0 --port $PORT`, Health Check `/api/v1/health` |
+| Redis | 같은 프로젝트의 Render Key Value `aio-03-p2-team1-redis`(256 MB, Singapore). 내부 연결 URL(Internal)을 `REDIS_URL`로 사용 |
 
-- 프론트 주소는 `https://dasi-manna.vercel.app`, 백엔드 주소는 `https://aio-03-p2-team1.onrender.com`이다.
+- 프론트 주소는 `https://dasi-manna.vercel.app`, 백엔드 주소는 `https://aio-03-p2-team1-0umv.onrender.com`이다. 2026-11-18 이전 백엔드(`aio-03-p2-team1.onrender.com`, 개인 워크스페이스)에서 옮겼다.
 - 프론트의 `/api/v1/*` 요청은 `frontend/vercel.json`에서 백엔드로 전달한다. 프론트 API 기본 경로는 `/api/v1`로 둔다.
 - Render의 `CORS_ORIGINS`와 카카오 JavaScript SDK 도메인에는 실제 프론트 origin을 정확히 등록한다. Preview·커스텀 도메인은 별도로 등록한다.
+- Render `Add from .env`에는 `KEY=값`을 한 줄에 하나씩 쉼표 없이 붙여넣는다. 값 끝에 쉼표가 붙으면 그대로 저장되어 `REDIS_URL` 포트 해석 오류 등으로 시작이 실패한다.
 - 환경변수 변경 후에는 서비스를 재배포해야 반영된다. 배포 성공과 최신 코드·설정 반영 여부를 각각 확인한다.
 - 운영은 Supabase와 Render Redis를 사용한다. 임시 파일시스템의 SQLite를 영속 저장소로 사용하지 않는다.
 
