@@ -84,7 +84,6 @@ export default function PostBoardPage() {
         <div>
           <span className="eyebrow">함께 찾는 공간</span>
           <h1>실종 정보 게시판</h1>
-          <p>잃어버린 반려동물의 정보를 등록하고, 회원 글과 공공데이터 분실 신고를 함께 살펴보세요.</p>
         </div>
         <button type="button" className="primary-button" onClick={openForm} aria-expanded={formOpen}>
           실종 정보 등록
@@ -172,6 +171,13 @@ export default function PostBoardPage() {
           <Pagination page={data.page} pages={data.pages} onChange={(n) => { setPage(n); window.scrollTo(0, 0) }} />
         )}
       </section>
+      {data && status === 'ready' && (
+        <div className="board-data-note" aria-label="실종 정보 조회 정보">
+          <span>{data.lost?.status === 'ok' ? '회원 글 · 공공데이터포털 분실 신고' : '회원 글 · 공공데이터 분실 신고 조회 불가'}</span>
+          <span>조회 범위 {formatDate(data.period.start)}~{formatDate(data.period.end)}</span>
+          <span>전체 {Number(data.count).toLocaleString('ko-KR')}건</span>
+        </div>
+      )}
     </main>
   )
 }
