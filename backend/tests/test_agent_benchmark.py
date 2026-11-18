@@ -1,6 +1,12 @@
 """평가 스크립트의 채점·통계는 외부 호출 없이 검증한다."""
 
+import asyncio
+from types import SimpleNamespace
+
+import pytest
+
 from scripts.benchmark_search_agent import score_policy, summarize, timing
+from scripts.compare_search_agent import Meter, TimedService, aggregate, digest
 
 
 def test_timing_uses_nearest_rank_p95_and_handles_no_measurement():
@@ -37,3 +43,37 @@ def test_summary_keeps_failed_runs_in_denominator_and_counts_usage():
     assert summary["cases"]["one"]["pass_rate"] == .5
     assert summary["attempted_model_calls"] == 2 and summary["successful_model_calls"] == 1
     assert summary["input_tokens"] == 100 and summary["output_tokens"] == 20
+
+
+def test_comparison_separates_versions_and_retains_invalid_run_counts():
+    base = {"case": "public", "phase": "warm", "agent_calls": 0, "status": "completed"}
+    rows = [{**base, "variant": "before", "elapsed_ms": 4, "cache_hit": True, "valid_measurement": True},
+            {**base, "variant": "before", "elapsed_ms": 9000, "valid_measurement": False},
+            {**base, "variant": "after", "elapsed_ms": 3000, "agent_calls": 1, "valid_measurement": True}]
+    groups = {r["variant"]: r for r in aggregate(rows)}
+    assert groups["before"]["runs"] == 2 and groups["before"]["valid_runs"] == 1
+    assert groups["before"]["mean_ms"] == 4 and groups["before"]["cache_hits"] == 1
+    assert groups["after"]["mean_ms"] == 3000 and groups["after"]["agent_calls"] == 1
+
+
+def test_comparison_hash_ignores_dictionary_order_but_detects_different_inputs():
+    assert digest({"criteria": {"sex": "F", "color": "갈색"}, "items": []}) == digest(
+        {"items": [], "criteria": {"color": "갈색", "sex": "F"}})
+    assert digest({"items": [{"id": "a"}]}) != digest({"items": [{"id": "b"}]})
+
+
+def test_comparison_budget_prevents_extra_model_call():
+    async def scenario():
+        calls = []
+
+        async def step(messages):
+            calls.append(messages)
+            return SimpleNamespace(usage_metadata={"input_tokens": 10})
+
+        meter = Meter()
+        agent = TimedService(SimpleNamespace(model="fake", step=step), "step", meter, "agent", budget=1)
+        await agent.step([])
+        with pytest.raises(RuntimeError, match="comparison_agent_budget"):
+            await agent.step([])
+        assert len(calls) == len(meter.events) == 1 and meter.events[0]["ok"]
+    asyncio.run(scenario())
