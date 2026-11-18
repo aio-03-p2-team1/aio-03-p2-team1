@@ -27,7 +27,7 @@ from types import SimpleNamespace
 import fakeredis
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from backend.agent.criteria import normalize
+from backend.normalization.criteria import normalize
 from backend.agent.embeddings import Embedder
 from backend.agent.graph import REVIEW_GRAPH
 from backend.agent.llm import FeatureExtractor, classify

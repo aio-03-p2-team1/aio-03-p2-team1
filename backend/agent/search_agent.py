@@ -38,7 +38,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from backend.agent import assess as rules
-from backend.agent.color_tokenizer import tokenize_color_words
+from backend.normalization.color import tokenize_color_words
 from backend.schemas.common import Color
 
 log = logging.getLogger("dasimanna.agent")

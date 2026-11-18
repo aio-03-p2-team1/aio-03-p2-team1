@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from fastapi.testclient import TestClient
 
-from backend import admin_log
+from backend.admin import audit_log as admin_log
 from backend.auth.sessions import owner_key
 from backend.main import create_app
 from backend.routers.admin import agent_stats

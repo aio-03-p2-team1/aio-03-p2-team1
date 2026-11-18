@@ -9,6 +9,7 @@ from PIL import Image
 
 from backend.agent.llm import LlmError
 from backend.agent.photo import MAX_IMAGE_BYTES, InvalidPhoto, decode_and_validate
+from backend.agent import refinement_store
 from backend.schemas.llm import PhotoAnalysisResult
 from backend.main import create_app
 
@@ -136,6 +137,82 @@ def test_photo_analysis_maps_backend_llm_failure_to_api_error():
     assert response.status_code == 502
     assert response.json()["detail"]["code"] == "llm_upstream"
     assert "private upstream detail" not in response.text
+
+
+class FakeTextRefiner:
+    def __init__(self):
+        self.calls = []
+
+    async def refine_description(self, description, image_data=None, mime_type=None):
+        self.calls.append((description, image_data, mime_type))
+        from backend.schemas.llm import RefinedDescriptionResult
+        return RefinedDescriptionResult(
+            description="[털색]: 흰색\n[특징]: 빨간 목줄\n[상황]: 서울에서 실종",
+            features={"colors": ["흰색"], "sex": "", "marks": ["빨간 목줄"]},
+            photo_features=None,
+            prompt_version="feature-refine-v1",
+        )
+
+
+def test_refinement_is_reused_by_search_without_a_second_feature_extraction():
+    refiner = FakeTextRefiner()
+
+    class UnexpectedExtractor:
+        model = "fake"
+
+        async def extract(self, description):
+            raise AssertionError("search graph must use the stored refinement features")
+
+    class UnexpectedSearchAgent:
+        async def step(self, messages):
+            raise AssertionError("refinement searches must not invoke a second LLM")
+
+    ctx = build_ctx(llm=UnexpectedExtractor(), search_agent=UnexpectedSearchAgent())
+    ctx.photo_llm = refiner
+    client = TestClient(create_app(ctx), headers={"Origin": ORIGIN})
+    with client:
+        signup(client)
+        refined = client.post("/api/v1/searches/refine", json={"description": "흰색 강아지, 빨간 목줄"})
+        assert refined.status_code == 200
+        assert refined.json()["description"] == "[털색]: 흰색\n[특징]: 빨간 목줄\n[상황]: 서울에서 실종"
+        run = client.post("/api/v1/searches", json={
+            "criteria": {"species": "dog", "region": "전체", "lost_date": "2026-11-17",
+                         "description": refined.json()["description"]},
+            "refinement_id": refined.json()["refinement_id"],
+        })
+    assert run.status_code == 200
+    assert run.json()["criteria"]["description"] == refined.json()["description"]
+    assert run.json()["llm_features"]["colors"] == ["흰색"]
+    assert len(refiner.calls) == 1
+
+
+def test_refinement_photo_retrieval_error_falls_back_to_text_in_one_call():
+    refiner = FakeTextRefiner()
+    ctx = build_ctx()
+    ctx.photo_llm = refiner
+    client = TestClient(create_app(ctx), headers={"Origin": ORIGIN})
+    with client:
+        signup(client)
+        response = client.post("/api/v1/searches/refine", json={"description": "갈색 고양이", "post_id": "missing-post"})
+    assert response.status_code == 200
+    assert response.json()["photo_used"] is False
+    assert refiner.calls == [("갈색 고양이", None, None)]
+
+
+def test_refinement_lock_uses_original_text_hash_until_task_finishes():
+    import asyncio
+    import fakeredis
+
+    async def scenario():
+        redis = fakeredis.FakeAsyncRedis()
+        assert refinement_store.source_hash("흰 강아지") != refinement_store.source_hash(" 흰 강아지 ")
+        assert await refinement_store.begin(redis, "owner", "흰 강아지", "first")
+        assert not await refinement_store.begin(redis, "owner", "흰 강아지", "second")
+        assert await refinement_store.begin(redis, "other-owner", "흰 강아지", "third")
+        await refinement_store.finish(redis, "owner", "흰 강아지", "first")
+        assert await refinement_store.begin(redis, "owner", "흰 강아지", "fourth")
+
+    asyncio.run(scenario())
 
 
 # ── 게시글 사진 분석(post_id): 회원 글은 저장된 사진, 분실 신고는 서버가 공공데이터 사진을 받아 분석 ──

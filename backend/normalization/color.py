@@ -89,13 +89,6 @@ _COMPOUND_ALIASES = {
     "황검색": {"colors": frozenset({"YELLOW", "BLACK"})},
 }
 
-_LEXEMES: dict[str, dict[str, frozenset[str]]] = {}
-for _word, _token in COLOR_ALIASES.items():
-    _LEXEMES[_word] = {"colors": _token}
-for _word, _token in PATTERN_ALIASES.items():
-    _LEXEMES.setdefault(_word, {})["patterns"] = _token
-_LEXEMES.update(_COMPOUND_ALIASES)
-
 # These values carry no usable color or pattern evidence, or are animal/breed
 # names and other non-color labels present in the source export.
 EXCLUDED_COLOR_VALUES: dict[str, str] = {
@@ -125,17 +118,128 @@ EXCLUDED_COLOR_VALUES: dict[str, str] = {
     "기타(백,검색)": "색상 표현인지 불명확한 오기",
 }
 
+
+class ColorDictionary:
+    """검색 토큰, 대표 한국어 이름, 별칭을 한 곳에서 관리한다."""
+
+    COLOR_NAMES: dict[str, str] = {
+        "BLACK": "검정",
+        "WHITE": "흰색",
+        "BROWN": "갈색",
+        "TAN": "황갈색",
+        "YELLOW": "노랑",
+        "ORANGE": "주황",
+        "GOLD": "금색",
+        "GRAY": "회색",
+        "CREAM": "크림",
+        "GREEN": "초록",
+        "BLUE": "파랑",
+        "TEAL": "청록",
+        "RED": "빨강",
+        "PINK": "분홍",
+        "PURPLE": "보라",
+        "APRICOT": "살구색",
+        "MUSTARD": "겨자색",
+        "OCHRE": "황토색",
+        "SKIN_TONE": "살색",
+        "BUFF": "인절미",
+        "BRONZE": "브론즈",
+        "MULTICOLORED": "혼합색",
+    }
+    PATTERN_NAMES: dict[str, str] = {
+        "TABBY": "고등어무늬",
+        "STRIPED": "줄무늬",
+        "TUXEDO": "턱시도무늬",
+        "SPOTTED": "얼룩무늬",
+        "BRINDLE": "호반무늬",
+        "COW_PATTERN": "젖소무늬",
+        "CALICO": "칼리코무늬",
+        "TRICOLOR": "삼색",
+        "FOUR_COLOR": "사색",
+        "TORTOISESHELL": "거북등무늬",
+        "MERLE": "멀무늬",
+        "SABLE": "세이블",
+        "SALT_AND_PEPPER": "솔트앤페퍼무늬",
+        "SHELL_PATTERN": "등갑무늬",
+        "MOTTLED": "미로형무늬",
+        "MASK_MARKING": "마스카라무늬",
+        "SEAL_BICOLOR": "씰바이컬러무늬",
+    }
+    COLOR_ALIASES = COLOR_ALIASES
+    PATTERN_ALIASES = PATTERN_ALIASES
+    EXCLUDED_VALUES = EXCLUDED_COLOR_VALUES
+
+    for _token, _name in COLOR_NAMES.items():
+        COLOR_ALIASES.setdefault(_name, frozenset({_token}))
+    for _token, _name in PATTERN_NAMES.items():
+        PATTERN_ALIASES.setdefault(_name, frozenset({_token}))
+
+    _compound_aliases = _COMPOUND_ALIASES
+
+    LEXEMES: dict[str, dict[str, frozenset[str]]] = {}
+    for _word, _token in COLOR_ALIASES.items():
+        LEXEMES[_word] = {"colors": _token}
+    for _word, _token in PATTERN_ALIASES.items():
+        LEXEMES.setdefault(_word, {})["patterns"] = _token
+    LEXEMES.update(_compound_aliases)
+    SORTED_LEXEMES = tuple(sorted(LEXEMES, key=lambda word: (-len(word), word)))
+
+    @classmethod
+    def allowed_values(cls) -> tuple[str, ...]:
+        """Canonical Korean values accepted by the LLM/API Color type."""
+        return tuple((*cls.COLOR_NAMES.values(), *cls.PATTERN_NAMES.values()))
+
+    @classmethod
+    def tokenize(cls, text: str | None) -> dict[str, set[str]]:
+        """Return stable color and coat-pattern IDs found in text."""
+        result = {"colors": set(), "patterns": set()}
+        if not text:
+            return result
+
+        original = unicodedata.normalize("NFKC", text).strip()
+        if original in cls.EXCLUDED_VALUES:
+            return result
+        normalized = _strip_other_wrappers(original.lower())
+        chunks = _SEPARATORS.sub(" ", normalized).split()
+
+        for chunk in chunks:
+            segmented = _complete_segmentation(chunk, cls)
+            if segmented is not None:
+                for word in segmented:
+                    for category, tokens in cls.LEXEMES[word].items():
+                        result[category].update(tokens)
+                continue
+
+            # 긴 표현은 조합·무늬·색 같은 설명 접미사 안에서도 찾는다.
+            # 한 글자 별칭은 완전 분해에서만 인정해 일반 단어 오탐을 막는다.
+            index = 0
+            while index < len(chunk):
+                word = next(
+                    (
+                        candidate
+                        for candidate in cls.SORTED_LEXEMES
+                        if len(candidate) > 1 and chunk.startswith(candidate, index)
+                    ),
+                    None,
+                )
+                if word is None:
+                    index += 1
+                    continue
+                for category, tokens in cls.LEXEMES[word].items():
+                    result[category].update(tokens)
+                index += len(word)
+        return result
+
 _SEPARATORS = re.compile(r"[\s&＋+/／,，·ㆍ|*\[\]{}:：;；.。]+")
-_SORTED_LEXEMES = tuple(sorted(_LEXEMES, key=lambda word: (-len(word), word)))
 
 
-def _complete_segmentation(chunk: str) -> list[str] | None:
+def _complete_segmentation(chunk: str, dictionary: type[ColorDictionary]) -> list[str] | None:
     """Segment a fully known concatenated shorthand (e.g. 갈흑백)."""
     best: list[list[str] | None] = [None] * (len(chunk) + 1)
     best[len(chunk)] = []
     for start in range(len(chunk) - 1, -1, -1):
         options = []
-        for word in _SORTED_LEXEMES:
+        for word in dictionary.SORTED_LEXEMES:
             end = start + len(word)
             if chunk.startswith(word, start) and best[end] is not None:
                 options.append([word, *best[end]])
@@ -158,42 +262,5 @@ def _strip_other_wrappers(text: str) -> str:
 
 
 def tokenize_color_words(text: str | None) -> dict[str, set[str]]:
-    """Return standard English color and pattern tokens found in text."""
-    result = {"colors": set(), "patterns": set()}
-    if not text:
-        return result
-
-    original = unicodedata.normalize("NFKC", text).strip()
-    if original in EXCLUDED_COLOR_VALUES:
-        return result
-    normalized = _strip_other_wrappers(original.lower())
-    chunks = _SEPARATORS.sub(" ", normalized).split()
-
-    for chunk in chunks:
-        segmented = _complete_segmentation(chunk)
-        if segmented is not None:
-            for word in segmented:
-                for category, tokens in _LEXEMES[word].items():
-                    result[category].update(tokens)
-            continue
-
-        # Longest known expressions still extract from descriptive suffixes
-        # such as 조합, 무늬, and 색. One-character aliases require a complete
-        # segmentation above, preventing matches inside ordinary words.
-        index = 0
-        while index < len(chunk):
-            word = next(
-                (
-                    candidate
-                    for candidate in _SORTED_LEXEMES
-                    if len(candidate) > 1 and chunk.startswith(candidate, index)
-                ),
-                None,
-            )
-            if word is None:
-                index += 1
-                continue
-            for category, tokens in _LEXEMES[word].items():
-                result[category].update(tokens)
-            index += len(word)
-    return result
+    """Compatibility wrapper for the shared color dictionary tokenizer."""
+    return ColorDictionary.tokenize(text)

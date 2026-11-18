@@ -4,8 +4,8 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import StructuredTool
 
-from backend.tools.kinds import normalize
-from backend.tools.kind_aliases import is_curated_alias
+from backend.normalization.text import normalize
+from backend.normalization.kind_aliases import is_curated_alias
 
 
 class BreedNormalizer:

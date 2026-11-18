@@ -1,9 +1,10 @@
 import csv
 from pathlib import Path
+from typing import get_args
 
-from backend.agent.color_tokenizer import EXCLUDED_COLOR_VALUES
-from backend.agent.color_tokenizer import tokenize_color_words
+from backend.normalization.color import ColorDictionary, EXCLUDED_COLOR_VALUES, tokenize_color_words
 from backend.agent.ranking import score
+from backend.schemas.common import Color
 
 
 def test_splits_concatenated_color_words_and_maps_to_standard_ids():
@@ -41,6 +42,20 @@ def test_aliases_map_to_the_same_english_token():
 
     assert user["colors"] == {"BROWN"}
     assert notice["colors"] == {"BROWN"}
+
+
+def test_color_literal_values_are_canonical_names_for_exactly_one_token():
+    assert get_args(Color) == ColorDictionary.allowed_values()
+
+    expected_tokens = {
+        **{name: token for token, name in ColorDictionary.COLOR_NAMES.items()},
+        **{name: token for token, name in ColorDictionary.PATTERN_NAMES.items()},
+    }
+    assert len(expected_tokens) == len(ColorDictionary.allowed_values())
+    for name, token in expected_tokens.items():
+        parsed = ColorDictionary.tokenize(name)
+        assert parsed["colors"] | parsed["patterns"] == {token}
+        assert tokenize_color_words(name) == parsed
 
 
 def test_black_aliases_match_ranked_notice_color():

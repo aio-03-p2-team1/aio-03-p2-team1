@@ -15,10 +15,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.agent.graph import GRAPH, REVIEW_GRAPH
-from backend.agent import criteria as crit
+from backend.normalization import criteria as crit
 from backend.agent.search_cache import condition_key, review_cache_key
 from backend.agent.embeddings import DIMENSIONS
-from backend.agent.llm import PROMPT_VERSION
+from backend.agent.llm import PROMPT_VERSION, REFINEMENT_PROMPT_VERSION
 from backend.agent.radius import RADIUS_VERSION
 from backend.agent.search_agent import AGENT_PROMPT_VERSION
 from backend.errors import ApiError
@@ -111,14 +111,20 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "trace": [],
         "agent_history": history,
         "photo_features": request.get("photo"),  # 서버가 보관한 사진 분석 결과(없으면 None)
+        "llm_features": request.get("precomputed_features") or {},
+        "features_precomputed": bool(request.get("features_precomputed")),
     }
     # 에이전트 루프(걸음 최대 4, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
-    config = {"configurable": deps, "recursion_limit": 80}
+    # 게시글로 찾기(다듬기 요청)는 이미 허용된 모델 호출 한 번을 썼으므로 검색 에이전트 LLM 루프를 돌리지 않는다.
+    graph_deps = {**deps, "search_agent": None} if request.get("features_precomputed") else deps
+    config = {"configurable": graph_deps, "recursion_limit": 80}
     cache = deps.get("search_cache")
     key = condition_key(owner, normalized, source=deps["animal"].source,
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
-                               "features": getattr(deps.get("llm"), "model", None), "feature_prompt": PROMPT_VERSION,
-                               "review": AGENT_PROMPT_VERSION if deps.get("search_agent") else None,
+                               "features": getattr(deps.get("llm"), "model", None),
+                               "feature_prompt": REFINEMENT_PROMPT_VERSION if request.get("features_precomputed") else PROMPT_VERSION,
+                               "precomputed_features": bool(request.get("features_precomputed")),
+                               "review": AGENT_PROMPT_VERSION if graph_deps.get("search_agent") else None,
                                # 성별 조건 빼기에 동의한 대화는 설명의 성별 특징도 쓰지 않아 결과가 다르다.
                                "relaxed": history.get("relaxed_fields") or [],
                                # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
@@ -131,7 +137,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     async def execute(graph=GRAPH, initial=None, *, defer_agent=False):
         try:
             graph_config = {**config, "configurable": {
-                **deps, "_defer_agent": defer_agent and bool(deps.get("search_agent")),
+                **graph_deps, "_defer_agent": defer_agent and bool(graph_deps.get("search_agent")),
             }}
             # 조회와 검토를 합쳐 요청당 기존 120초 한도를 지킨다.
             remaining = max(0, 120 - (time.perf_counter() - started))
@@ -141,7 +147,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             raise ApiError(504, "search_timeout", "검색 시간이 초과되었습니다. 조건을 좁혀 다시 시도해 주세요.") from exc
 
     def review_ready(result):
-        return result.get("trace", [])[-1:] == ["validate"] and bool(deps.get("search_agent"))
+        return result.get("trace", [])[-1:] == ["validate"] and bool(graph_deps.get("search_agent"))
 
     if cache and not missing and not errors:
         result = await cache.get(key)

@@ -8,7 +8,7 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
-from backend.agent import criteria as crit
+from backend.normalization import criteria as crit
 from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
 from backend.agent import assess as assess_rules
@@ -135,7 +135,7 @@ async def context(state: SearchState, config) -> dict:
     if state.get("photo_features"):
         update["llm_features"] = photo_store.merge_features(state.get("llm_features"), state.get("photo_features"))
     llm = deps.get("llm")
-    if llm and criteria.get("description"):
+    if llm and criteria.get("description") and not state.get("features_precomputed"):
         started = time.perf_counter()
         try:
             features = await llm.extract(criteria["description"])
@@ -271,7 +271,15 @@ async def _fetch_page(state: SearchState, config, query: dict[str, Any], page: i
                                          end=date.fromisoformat(args["end"]), species=args["species"],
                                          kind=args["kind"], page=page, rows=ROWS_PER_PAGE)
         except AnimalApiError as exc:
-            calls.append(_call("animal_search", args, exc.code, reason, attempt=attempt))
+            calls.append(_call("animal_search", args, exc.code, reason, attempt=attempt, result_code=exc.result_code))
+            # 공공데이터가 일부 품종 코드(예: 5자리 코드)를 받지 못하고 오류를 돌려주는 경우가 있다.
+            # 검색 전체를 실패시키지 않고 품종 코드만 빼고 한 번 다시 조회한다. 품종 조건은 그대로 두고
+            # 받은 결과에서 거른다(사용자가 고른 품종을 바꾸지 않음).
+            if exc.code == "animal_response" and query.get("kind"):
+                query = {**query, "kind": None}
+                reason = "품종 코드로 조회 실패: 품종 조건 없이 다시 조회(품종은 결과에서 거름)"
+                attempt = 0
+                continue
             if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
                 await sleep(RETRY_BACKOFF_SECONDS[attempt])
                 attempt += 1
@@ -283,7 +291,7 @@ async def _fetch_page(state: SearchState, config, query: dict[str, Any], page: i
         break
     return {"items": result.items[:ROWS_PER_PAGE] if result else [], "total_count": result.total_count if result else 0,
             "fetched_at": result.fetched_at if result else _now(), "tool_calls": calls,
-            "retry_count": retries, "error": error}
+            "retry_count": retries, "error": error, "query": query}
 
 
 async def execute(state: SearchState, config) -> dict:
@@ -292,7 +300,8 @@ async def execute(state: SearchState, config) -> dict:
              "end": criteria["end_date"], "species": criteria["species"], "kind": criteria.get("breed_code")}
     fetched = await _fetch_page(state, config, query, 1, "공고 조회")
     return {
-        "raw_items": fetched["items"], "search_query": query, "total_count": fetched["total_count"],
+        # 실제로 쓴 조회 인자(품종 코드 오류로 코드 없이 다시 조회했으면 그 인자)를 남겨 다음 페이지도 같게 조회한다.
+        "raw_items": fetched["items"], "search_query": fetched["query"], "total_count": fetched["total_count"],
         "pages_fetched": 0 if fetched["error"] else 1, "fetched_at": fetched["fetched_at"],
         "data_source": _deps(config)["animal"].source, "retry_count": fetched["retry_count"],
         "tool_calls": fetched["tool_calls"], "error": fetched["error"], "pending_fix": None, "trace": ["execute"],

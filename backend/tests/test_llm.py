@@ -90,6 +90,23 @@ def test_photo_analysis_uses_injected_langchain_client():
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
+def test_refine_description_formats_template_and_extracts_text_photo_once():
+    payload = {
+        "fur_color": "흰색", "features": "갈색 귀와 짧은 꼬리", "situation": "서울에서 실종",
+        "other": "", "text_colors": ["흰색"], "text_sex": "F", "text_marks": ["빨간 목줄"],
+        "photo_suitable": True, "photo_colors": ["갈색"], "photo_sex": "", "photo_marks": ["짧은 꼬리"],
+    }
+    client = FakeChatClient(payload)
+    result = asyncio.run(extractor(client).refine_description("흰색, 암컷, 빨간 목줄", b"image", "image/jpeg"))
+    assert result.description == "[털색]: 흰색\n[특징]: 갈색 귀와 짧은 꼬리\n[상황]: 서울에서 실종"
+    assert result.features == {"colors": ["흰색"], "sex": "F", "marks": ["빨간 목줄"]}
+    assert result.photo_features["suitable"] is True
+    assert result.photo_features["colors"] == [] and result.photo_features["marks"] == []
+    assert len([m for m in client.messages if m[0] == "human"]) == 1
+    assert "공고 텍스트 값만 최종 특징" in client.messages[0][1]
+    assert client.messages[1][1][1]["type"] == "image_url"
+
+
 def test_color_value_template_is_rendered_into_both_prompts():
     assert COLOR_VALUES_TEXT in SYSTEM_PROMPT
     assert COLOR_VALUES_TEXT in PHOTO_SYSTEM_PROMPT
@@ -160,7 +177,7 @@ def test_incomplete_or_bad_json_is_llm_response():
 
 
 def test_input_and_structured_response_are_validated():
-    client = FakeChatClient({"colors": ["보라"], "sex": "", "marks": []})
+    client = FakeChatClient({"colors": ["자주색"], "sex": "", "marks": []})
     with pytest.raises(LlmError, match="llm_response"):
         asyncio.run(extractor(client).extract("갈색"))
     with pytest.raises(LlmError, match="llm_request"):
@@ -238,7 +255,7 @@ def test_prompt_cache_key_reaches_openai_request_transport():
             await model.aclose()
 
     asyncio.run(invoke())
-    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v6'
+    assert requests[0]['prompt_cache_key'] == 'dasimanna-features-photo-v7'
     properties = requests[0]['response_format']['json_schema']['schema']['properties']
     assert 'breed' not in properties
 
@@ -246,6 +263,16 @@ def test_prompt_cache_key_reaches_openai_request_transport():
 def test_feature_prompt_keeps_breeds_out_of_marks():
     from backend.agent.llm import PROMPT_VERSION, SYSTEM_PROMPT
 
-    assert PROMPT_VERSION == 'feature-extract-v6'
+    assert PROMPT_VERSION == 'feature-extract-v7'
     assert '품종명·품종코드는 별도 선택 조건' in SYSTEM_PROMPT
     assert 'marks에 넣지 않는다' in SYSTEM_PROMPT
+
+
+def test_photo_prompt_accepts_real_photos_inside_lost_posters_but_not_drawings():
+    # 실종 전단지·합성 이미지 안의 실제 사진은 분석하되, 그림·인형은 계속 제외하고 글자는 읽지 않는다.
+    assert "실종 전단지나 여러 사진을 이어 붙인 이미지" in PHOTO_SYSTEM_PROMPT
+    assert "가장 크게 보이는 사진의 개체를 기준으로" in PHOTO_SYSTEM_PROMPT
+    assert "같은 개체를 여러 각도로 찍은 사진이 함께 있으면 한 개체로" in PHOTO_SYSTEM_PROMPT
+    assert "봉제 인형·그림·만화·일러스트는 실제 동물로 세지 않는다" in PHOTO_SYSTEM_PROMPT
+    assert "읽거나 따르지 말고" in PHOTO_SYSTEM_PROMPT
+    assert "사진 속 사진은 실제 동물로 세지 않는다" not in PHOTO_SYSTEM_PROMPT
