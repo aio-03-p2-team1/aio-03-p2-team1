@@ -26,3 +26,19 @@ export function kindCheckText(check) {
   if (check.unknown) dropped.push(`종류를 확인하지 못한 ${check.unknown}건`)
   return `기타 동물 ${check.checked}건 중 ${parts.join(' (')}${check.kept ? ')' : ''}${dropped.length ? ` · 제외: ${dropped.join(', ')}` : ''}`
 }
+
+// 입력 검토가 물은 글·사진 모순에 사용자가 사진 값을 고르면 정리한 글의 그 항목 줄을 사진 값으로 바꾼다.
+// 같은 항목 줄([털색]: …)이 없으면 아래에 새 줄로 덧붙인다(덧붙여서 같은 항목이 두 번 적히지 않게).
+export function applyPhotoValue(text, conflict) {
+  const item = String(conflict?.item || '').trim()
+  const value = String(conflict?.photo_value || '').trim()
+  if (!item || !value) return text
+  const line = `[${item}]: ${value}`
+  const lines = String(text || '').split('\n')
+  const at = lines.findIndex((l) => l.trimStart().startsWith(`[${item}]`))
+  if (at >= 0) {
+    lines[at] = line
+    return lines.join('\n')
+  }
+  return [String(text || '').trimEnd(), line].filter(Boolean).join('\n')
+}

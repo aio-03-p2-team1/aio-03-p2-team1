@@ -16,7 +16,7 @@ import { photoAnalysisError, photoErrorMessage, photoSelectionError, photoTraitL
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 import { takePostSearch } from '../lib/postSearch.js'
-import { inputReviewView, kindCheckText } from '../lib/inputReview.js'
+import { applyPhotoValue, inputReviewView, kindCheckText } from '../lib/inputReview.js'
 import runningRaccoon from '../assets/running-raccoon.png'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
@@ -238,7 +238,8 @@ export default function SearchPage() {
 
   // 입력 카드에 보여 줄 추가 질문. 범위 넓히기(radius, 결과가 있는 상태의 region)는 권하는 질문, 나머지는 답해야 하는 질문.
   const pending = run?.status === 'awaiting_input' ? run.questions || [] : []
-  const questionNotes = pending.map((q) => ({
+  // 입력 검토 질문은 에이전트 카드 안에 버튼과 함께 보여 주므로 위 질문 상자에서는 뺀다.
+  const questionNotes = pending.filter((q) => q.field !== 'input_review').map((q) => ({
     ...q,
     blocking: !(q.field === 'radius' || (q.field === 'region' && run?.scope) || (q.field === 'sex' && q.action === 'relax')),
   }))
@@ -328,6 +329,17 @@ export default function SearchPage() {
   }
 
   // 요청 카드의 보기를 고르면 칩으로 남기고 같은 대화로 바로 다시 찾는다.
+  // 입력 검토가 물은 글·사진 모순에 답한다. 사진 값을 고르면 정리한 글의 그 항목 줄을 바꾸고,
+  // 글을 고르면 그대로 두고, 같은 대화로 바로 다시 찾는다(같은 대화에서는 다시 묻지 않는다).
+  function chooseReviewValue(conflict, side) {
+    const description = side === 'photo' ? applyPhotoValue(form.description, conflict) : form.description
+    if (description !== form.description) {
+      setForm((current) => ({ ...current, description }))
+      setPhotoFeatureText('')
+    }
+    submit(buildCriteria({ ...form, description }, answers), run?.thread_id)
+  }
+
   function chooseAnswer(field, value) {
     const next = addAnswer(answers, field, value)
     setAnswers(next)
@@ -441,7 +453,7 @@ export default function SearchPage() {
               </div>
             )}
             {/* 검색 에이전트의 입력 검토 멘트는 특징과 상황 입력란 바로 위에 보여 준다. */}
-            {!busy && <InputReview review={run?.input_review} />}
+            {!busy && <InputReview review={run?.input_review} awaiting={run?.status === 'awaiting_input'} onChoose={chooseReviewValue} />}
             <div className="search-description">
               <div className="search-description-head">
                 <label htmlFor="search-description-input">특징과 상황</label>
@@ -632,13 +644,29 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
 }
 
 // 검색 에이전트의 입력 검토: 글과 사진 특징에서 무엇을 합치고 무엇이 어긋났는지, 어떻게 찾을지 보여 준다.
-function InputReview({ review }) {
+function InputReview({ review, awaiting, onChoose }) {
   const view = inputReviewView(review)
   if (!view) return null
+  // 모순을 물은 상태면 항목마다 '글대로'·'사진대로' 버튼을 둔다. 값이 비면 그쪽 버튼은 숨긴다.
+  const choices = awaiting && view.question ? (review.conflicts || []).filter((c) => c.item) : []
   return (
     <div className="input-review" role="status">
       <p className="input-review-title"><strong>{view.title}</strong> {view.message}</p>
       {view.question && <p className="input-review-question">{view.question}</p>}
+      {choices.length > 0 && (
+        <div className="input-review-choices">
+          {choices.map((c) => (
+            <div key={c.item} className="input-review-choice">
+              {c.text_value && (
+                <button type="button" className="secondary-button" onClick={() => onChoose(c, 'text')}>글대로: {c.text_value}</button>
+              )}
+              {c.photo_value && (
+                <button type="button" className="secondary-button" onClick={() => onChoose(c, 'photo')}>사진대로: {c.photo_value}</button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       {view.lines.length > 0 && <ul>{view.lines.map((line) => <li key={line}>{line}</li>)}</ul>}
     </div>
   )
