@@ -1,6 +1,21 @@
 # 에이전트 아키텍처 설계서 (초안 v0.2)
 
 > 코드 기준: `backend/agent/graph.py`, `backend/agent/state.py`, `backend/agent/runner.py`
+
+## 백엔드 도메인 폴더
+
+기존 API 경로와 계약을 유지하면서 기능 구현을 도메인별 패키지로 둔다. `backend/routers`, `backend/schemas`, `backend/auth`는 기존 경로를 유지한다.
+
+| 경로 | 책임 |
+| --- | --- |
+| `backend/routers/` | FastAPI 라우터와 HTTP 요청·응답 처리 |
+| `backend/schemas/` | API 입력·출력 스키마 |
+| `backend/auth/` | 인증·세션 구현 |
+| `backend/admin/` | 관리자 감사 로그와 관리자 화면의 실행 기록 조회·집계 서비스 (`routers/admin.py`는 라우팅 유지) |
+| `backend/agent/` | LangGraph 검색 그래프, 상태, 노드, 도구 및 검색 런타임 |
+| `backend/normalization/` | 조건·품종·색상·종별 별칭·공통 텍스트 정규화 |
+| `backend/tools/` | 공공 데이터/저장소 조회 등 검색 시 사용하는 도구 및 저장소 어댑터 |
+
 > 노드·상태 필드·도구 스키마가 바뀌면 이 문서를 함께 고친다(AGENTS.md 7).
 
 ## 1. 전체 구성
@@ -201,7 +216,7 @@ flowchart LR
 
 `kinds.kind_code`는 공공 API 코드이며, `species`, 표시 이름, 공백을 제거한 `search_name`, `active`, 출처와 갱신 시각을 함께 둔다. 품종이 API에서 사라져도 행을 삭제하지 않고 비활성화해 과거 코드 참조를 유지한다. 이름 검색은 `(species, search_name)` 인덱스를 이용하며, 요청 문자열도 공백 제거 후 비교한다. 이름 자체가 대표 이름의 공백 유무를 흡수하므로 별칭으로 중복 등록하지 않는다.
 
-`kind_aliases`는 별도 사용 별칭만 저장하고, 품종 코드 FK와 `(kind_code, search_alias)` 유일 제약 및 alias 검색 인덱스를 둔다. `backend/tools/kind_aliases.py`가 런타임 매칭과 동기화에서 함께 쓰는 큐레이션 원본이다. 분실 신고 품종명이 `푸들`이면 공식 품종 `토이 푸들` 코드에 매핑하도록 `"토이푸들": ["푸들"]` 별칭을 둔다. 런타임은 DB 별칭 행뿐 아니라 이 큐레이션 원본도 적용하므로, DB 동기화 전에도 연결된다. 정규화한 별칭이 정확히 한 품종 코드에만 일치할 때 코드를 부여한다. 이 매핑은 신고 품종이 토이 푸들이라는 보장이 아니라 검색 편의를 위한 명시적 큐레이션이다. 테이블에 출처와 타임스탬프를 두어 이후 API 변경과 alias 출처를 추적할 수 있다.
+`kind_aliases`는 별도 사용 별칭만 저장하고, 품종 코드 FK와 `(kind_code, search_alias)` 유일 제약 및 alias 검색 인덱스를 둔다. `backend/normalization/kind_aliases.py`가 런타임 매칭과 동기화에서 함께 쓰는 큐레이션 원본이다. 분실 신고 품종명이 `푸들`이면 공식 품종 `토이 푸들` 코드에 매핑하도록 `"토이푸들": ["푸들"]` 별칭을 둔다. 런타임은 DB 별칭 행뿐 아니라 이 큐레이션 원본도 적용하므로, DB 동기화 전에도 연결된다. 정규화한 별칭이 정확히 한 품종 코드에만 일치할 때 코드를 부여한다. 이 매핑은 신고 품종이 토이 푸들이라는 보장이 아니라 검색 편의를 위한 명시적 큐레이션이다. 테이블에 출처와 타임스탬프를 두어 이후 API 변경과 alias 출처를 추적할 수 있다.
 
 ## 8. 백엔드 API 계약 (요약)
 
@@ -254,7 +269,7 @@ flowchart LR
 
 Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해야 한다. 새 DB는 `scripts/bootstrap_schema.sql`을 사용하고, 기존 DB는 그 파일 끝의 2026-11-17 ALTER 주석을 적용한다. 이미지 자르기는 종횡비를 유지하는 프레임 채우기와 확대·가로/세로 위치 조절로 제공하며, 회전·투명도도 속성 패널에서 바꾼다. PDF/인쇄는 이미지를 원래 비율로 A4 용지 중앙에 맞춘 뒤 브라우저 인쇄 대화상자를 연다(사용자가 PDF로 저장 가능).
 
-**관리자** (`backend/routers/admin.py`, `backend/admin_log.py`, `frontend/src/pages/AdminPage.jsx`)
+**관리자** (`backend/routers/admin.py`, `backend/admin/audit_log.py`, `backend/admin/service.py`, `frontend/src/pages/AdminPage.jsx`)
 - 권한: 계정 문서(`kind=identity`, `id=account`)의 `role=admin`. 회원가입 API 로는 줄 수 없고 `uv run python -m scripts.create_admin --email <이메일>` 로만 붙인다(비밀번호는 실행 시 입력, `.env` 의 저장소에 기록). `require_admin` 이 요청마다 저장소에서 역할을 다시 읽는다. `GET /auth/me`·로그인 응답의 `is_admin` 은 메뉴 표시용이다.
 - 정지: `PATCH /admin/users/{owner}` `{disabled}` → 계정 문서 `disabled=true`. 비밀번호가 맞는 로그인만 `403 account_disabled` 로 알린다. 이미 발급된 세션은 TTL 까지 유지된다(세션 강제 만료 미구현). 관리자 계정은 정지할 수 없다.
 - 소유자 무관 조회: 저장소 `list_kind(kind, limit, offset, fields)`. `fields` 를 주면 SQLite 는 파이썬에서, Supabase 는 PostgREST `select=f:data->f` 로 최상위 키만 받아 후보 300건을 내려받지 않는다. 한 번에 최대 500건.

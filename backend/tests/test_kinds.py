@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 import fakeredis
 import pytest
 
-from backend.agent.breed import BreedNormalizer
+from backend.normalization.breed import BreedNormalizer
 from backend.tests.conftest import make_settings
 from backend.tools.kinds import KindRepository
 from scripts.init_kinds_sqlite import SqliteSink
@@ -83,7 +83,7 @@ async def test_refresh_invalidates_and_skips_within_seven_days(repository, monke
 
 
 def test_species_change_and_explicit_clear_do_not_inherit_breed():
-    from backend.agent.criteria import merge_conditions
+    from backend.normalization.criteria import merge_conditions
     prior = {'species': 'dog', 'breed': '푸들'}
     assert not merge_conditions({'species': 'cat'}, prior, None)[0]['breed']
     assert not merge_conditions({'species': 'dog', 'breed': ''}, prior, {'breed': '푸들'})[0]['breed']
@@ -236,7 +236,7 @@ def test_search_rejects_unknown_or_wrong_species_code(repository, species, code)
 
 
 def test_clearing_or_changing_species_clears_session_code_and_name():
-    from backend.agent.criteria import merge_conditions
+    from backend.normalization.criteria import merge_conditions
     prior = {'species': 'dog', 'breed_code': '1', 'breed': '푸들'}
     for current in ({'species': 'dog', 'breed_code': ''}, {'species': 'cat'}):
         merged, _ = merge_conditions(current, prior, prior)

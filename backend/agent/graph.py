@@ -8,7 +8,7 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
-from backend.agent import criteria as crit
+from backend.normalization import criteria as crit
 from backend.agent.llm import LlmError
 from backend.agent.radius import apply_radius
 from backend.agent import assess as assess_rules

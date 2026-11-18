@@ -1,8 +1,8 @@
 import csv
 from pathlib import Path
 
-from backend.agent.color_tokenizer import EXCLUDED_COLOR_VALUES
-from backend.agent.color_tokenizer import tokenize_color_words
+from backend.normalization.color import EXCLUDED_COLOR_VALUES
+from backend.normalization.color import tokenize_color_words
 from backend.agent.ranking import score
 
 

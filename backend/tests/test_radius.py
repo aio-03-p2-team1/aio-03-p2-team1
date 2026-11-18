@@ -203,7 +203,7 @@ def test_center_geocode_failure_is_not_cached_and_keeps_results():
 
 
 def test_radius_step_is_validated():
-    from backend.agent.criteria import normalize
+    from backend.normalization.criteria import normalize
 
     assert normalize({"radius_step": "2"})[0]["radius_step"] == 2
     assert "radius_step" not in normalize({"radius_step": "9"})[0]
@@ -243,7 +243,7 @@ def test_user_pin_is_center_without_geocoding_lost_place():
 
 @pytest.mark.parametrize("lat, lng", [(10.0, 126.8), (37.5, 200.0), ("abc", 126.8)])
 def test_bad_pin_falls_back_to_address(lat, lng):
-    from backend.agent import criteria as crit
+    from backend.normalization import criteria as crit
 
     criteria, _, errors = crit.normalize({**base(days=2), "lost_lat": lat, "lost_lng": lng})
     assert errors == [] and "lost_lat" not in criteria  # 범위 밖·숫자 아님 → 좌표 버리고 주소로
@@ -254,7 +254,7 @@ def test_bad_pin_falls_back_to_address(lat, lng):
 
 
 def test_new_lost_place_does_not_reuse_previous_pin():
-    from backend.agent import criteria as crit
+    from backend.normalization import criteria as crit
 
     session = {"lost_place": "서울특별시 마포구 망원동", "lost_lat": "37.55", "lost_lng": "126.90"}
     merged, _ = crit.merge_conditions({"lost_place": LOST_PLACE}, session, None)
