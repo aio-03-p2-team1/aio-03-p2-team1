@@ -186,6 +186,39 @@ def test_refinement_is_reused_by_search_without_a_second_feature_extraction():
     assert len(refiner.calls) == 1
 
 
+def test_widen_follow_up_without_description_keeps_the_refinement():
+    """넓히기 버튼은 바뀐 조건만 보낸다. 설명 글이 없으면 같은 대화의 글과 비교해 다듬기 결과를 그대로 쓴다."""
+    refiner = FakeTextRefiner()
+    ctx = build_ctx()
+    ctx.photo_llm = refiner
+    client = TestClient(create_app(ctx), headers={"Origin": ORIGIN})
+    with client:
+        signup(client)
+        refined = client.post("/api/v1/searches/refine", json={"description": "흰색 강아지, 빨간 목줄"}).json()
+        first = client.post("/api/v1/searches", json={
+            "criteria": {"species": "dog", "region": "서울특별시", "lost_date": "2026-11-17",
+                         "description": refined["description"]},
+            "refinement_id": refined["refinement_id"],
+        })
+        assert first.status_code == 200
+        widened = client.post("/api/v1/searches", json={
+            "criteria": {"region": "전체", "radius_step": 3},
+            "thread_id": first.json()["thread_id"],
+            "refinement_id": refined["refinement_id"],
+        })
+        assert widened.status_code == 200
+        assert widened.json()["criteria"]["description"] == refined["description"]
+        assert widened.json()["llm_features"]["colors"] == ["흰색"]
+        # 새 대화에서 설명 글 없이 다듬기 번호만 보내면 여전히 거절한다.
+        orphan = client.post("/api/v1/searches", json={
+            "criteria": {"species": "dog", "region": "전체", "lost_date": "2026-11-17"},
+            "refinement_id": refined["refinement_id"],
+        })
+        assert orphan.status_code == 422
+        assert orphan.json()["detail"]["code"] == "invalid_refinement"
+    assert len(refiner.calls) == 1
+
+
 def test_refinement_photo_retrieval_error_falls_back_to_text_in_one_call():
     refiner = FakeTextRefiner()
     ctx = build_ctx()
