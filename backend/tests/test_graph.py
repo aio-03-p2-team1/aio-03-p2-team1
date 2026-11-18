@@ -239,6 +239,20 @@ def test_etc_animal_kind_is_checked_by_text_then_photo(monkeypatch):
     assert [c["outcome"] for c in run["tool_calls"] if c["tool"] == "animal_kind_photo"] == ["ok"]
 
 
+def test_input_review_does_not_ask_on_follow_up_after_first_search_went_ahead():
+    """첫 검색에서 묻지 않고 찾았으면, 지역 넓히기처럼 같은 대화로 이어 찾을 때 모순 질문을 새로 하지 않는다."""
+    reviewer = FakeReviewer("search", "ask")
+    animal = FakeAnimal(pages=[[api_item(1)]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    first = search(d, {"species": "dog", "region": "경기도", "lost_date": START, "description": "흰색 강아지"}, photo=PHOTO)
+    assert first["input_review"]["action"] == "search"
+    second = search(d, {"region": "전체"}, photo=PHOTO, thread_id=first["thread_id"])
+    assert len(reviewer.calls) == 2  # 이어 찾을 때도 검토는 하되
+    assert second["status"] == "completed" and second["input_review"]["action"] == "search"  # 묻지 않는다
+    assert not any(q.get("field") == "input_review" for q in second.get("questions") or [])
+
+
 def test_input_review_failure_is_reported_not_hidden():
     d = deps(FakeAnimal(pages=[[api_item(1)]]))
     d["llm"] = FakeReviewer(error="llm_timeout")
