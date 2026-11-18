@@ -68,7 +68,7 @@ ANALYSIS_MAX_SIDE = 1024
 ANALYSIS_JPEG_QUALITY = 85
 
 
-def shrink_for_analysis(image_data: bytes, mime_type: str) -> tuple[bytes, str]:
+def shrink_for_analysis(image_data: bytes, mime_type: str, max_side: int = ANALYSIS_MAX_SIDE) -> tuple[bytes, str]:
     """긴 변이 ANALYSIS_MAX_SIDE 를 넘으면 줄여 JPEG 로 바꾼다. 작은 사진은 그대로 둔다.
 
     휴대폰 사진의 방향 정보(EXIF)를 먼저 반영해 돌리고, 투명 배경은 흰색으로 채운다. 실패하면 원본을 그대로 쓴다.
@@ -78,9 +78,9 @@ def shrink_for_analysis(image_data: bytes, mime_type: str) -> tuple[bytes, str]:
     try:
         with Image.open(BytesIO(image_data)) as opened:
             image = ImageOps.exif_transpose(opened)
-            if max(image.size) <= ANALYSIS_MAX_SIDE:
+            if max(image.size) <= max_side:
                 return image_data, mime_type
-            image.thumbnail((ANALYSIS_MAX_SIDE, ANALYSIS_MAX_SIDE))
+            image.thumbnail((max_side, max_side))
             if image.mode in ("RGBA", "LA", "P"):
                 rgba = image.convert("RGBA")
                 background = Image.new("RGB", rgba.size, (255, 255, 255))

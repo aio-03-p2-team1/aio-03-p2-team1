@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { inputReviewView } from '../src/lib/inputReview.js'
+import { inputReviewView, kindCheckText } from '../src/lib/inputReview.js'
 
 const review = {
   action: 'search',
@@ -33,4 +33,19 @@ test('ask action exposes the question and missing review shows nothing', () => {
   assert.equal(view.question, '어느 색이 맞나요?')
   assert.equal(inputReviewView(null), null)
   assert.equal(inputReviewView({ action: 'search', message: '' }), null)
+})
+
+test('filters from the text come first in the review lines', () => {
+  const view = inputReviewView({ ...review, filters: ["글에 '푸들'이(가) 있어 푸들 계열만 찾아요."] }, '')
+  assert.equal(view.lines[0], "글에 '푸들'이(가) 있어 푸들 계열만 찾아요.")
+})
+
+test('kind check summary explains what was kept and dropped', () => {
+  assert.equal(
+    kindCheckText({ target: '새', checked: 12, kept: 3, kept_by_text: 1, kept_by_photo: 2, other_kind: 7, unknown: 2 }),
+    '기타 동물 12건 중 새로 확인된 공고 3건 (글 1건 · 사진 2건) · 제외: 다른 동물 7건, 종류를 확인하지 못한 2건',
+  )
+  assert.equal(kindCheckText({ target: '새', checked: 4, kept: 0, kept_by_text: 0, kept_by_photo: 0, other_kind: 4, unknown: 0 }),
+    '기타 동물 4건 중 새로 확인된 공고 0건 · 제외: 다른 동물 4건')
+  assert.equal(kindCheckText(null), '')
 })
