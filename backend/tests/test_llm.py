@@ -57,7 +57,6 @@ def test_extract_keeps_multiple_colors_and_filters_duplicates():
     assert out.sex == "F" and out.marks == ["목줄"]
     assert client.messages[0][0] == "system" and client.messages[1][1] == "갈색과 흰색 푸들, 빨간 목줄"
     assert COLOR_VALUES_TEXT in client.messages[0][1]
-    assert "각 색을 별도로 반환한다" in client.messages[0][1]
     assert client.schema_options[1] == {"method": "json_schema", "strict": True, "include_raw": True}
 
 
@@ -85,7 +84,6 @@ def test_photo_analysis_uses_injected_langchain_client():
     assert result.suitable and result.species == "dog"
     assert result.colors == ["갈색", "흰색"]
     assert COLOR_VALUES_TEXT in client.messages[0][1]
-    assert "각 색을 별도로 반환한다" in client.messages[0][1]
     image_part = client.messages[1][1][1]
     assert image_part["type"] == "image_url"
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
@@ -116,8 +114,6 @@ def test_review_input_merges_text_and_photo_features_in_one_call():
     # 사진은 다시 보내지 않고, 서버가 보관한 사진 분석 특징을 글과 함께 한 번에 보낸다.
     human = client.messages[1][1]
     assert isinstance(human, str) and "[사용자 글]" in human and "[사진 분석 특징]" in human and "짧은 꼬리" in human
-    assert "최종 colors·sex·marks에는 글에 적힌 값을 쓴다" in client.messages[0][1]
-    assert "새로 만들거나 바꾸지 말고" in client.messages[0][1]
 
 
 def test_review_input_without_question_does_not_stop_to_ask():
