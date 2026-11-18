@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
 from backend.routers import posts as board
+from backend.routers.poster_templates import SVG_TEMPLATE_SIZES, SVG_TEMPLATES
 from backend.tools.lost_animal_api import LostAnimalApiError
 
 router = APIRouter(tags=["posters"])
@@ -28,7 +29,7 @@ MAX_POSTERS_PER_USER = 5
 ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
 ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,80}$")
 
-TEMPLATES: list[dict[str, Any]] = [
+LEGACY_TEMPLATES: list[dict[str, Any]] = [
     {
         'id': 'basic', 'name': '사진 중심형', 'description': '화이트 · 네이비 / 큰 사진과 중앙 정렬', 'width': 794, 'height': 1123,
         "components": [
@@ -96,6 +97,9 @@ TEMPLATES: list[dict[str, Any]] = [
     },
 ]
 
+TEMPLATES = [*SVG_TEMPLATES, *LEGACY_TEMPLATES]
+
+
 class PosterBody(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
@@ -109,13 +113,15 @@ def _validate_document(body: PosterBody) -> dict[str, Any]:
     if body.template_id not in {item["id"] for item in TEMPLATES}:
         raise ApiError(422, "poster_component_invalid", "등록된 템플릿을 선택해 주세요.")
     ids: set[str] = set()
+    background_size = SVG_TEMPLATE_SIZES.get(body.template_id)
+    background_seen = False
     for component in body.components:
         component_id = str(component.get("id", ""))
         kind = component.get("type")
         if not ID_RE.fullmatch(component_id) or component_id in ids:
             raise ApiError(422, "poster_component_invalid", "전단지 구성 요소 ID를 확인해 주세요.")
         ids.add(component_id)
-        if not isinstance(kind, str) or kind not in {"text", "image", "shape"}:
+        if not isinstance(kind, str) or kind not in {"text", "image", "shape", "background"}:
             raise ApiError(422, "poster_component_invalid", "지원하지 않는 전단지 구성 요소입니다.")
         for key in ("x", "y", "width", "height"):
             value = component.get(key)
@@ -123,6 +129,13 @@ def _validate_document(body: PosterBody) -> dict[str, Any]:
                 raise ApiError(422, "poster_component_invalid", "구성 요소의 위치와 크기를 확인해 주세요.")
         if component["width"] <= 0 or component["height"] <= 0:
             raise ApiError(422, "poster_component_invalid", "구성 요소의 크기는 0보다 커야 합니다.")
+        if kind == "background":
+            if (background_seen or background_size != (body.width, body.height)
+                    or component.get("backgroundKey") != body.template_id
+                    or (component["x"], component["y"], component["width"], component["height"])
+                    != (0, 0, body.width, body.height)):
+                raise ApiError(422, "poster_component_invalid", "전단지 배경을 확인해 주세요.")
+            background_seen = True
         if kind == "text":
             content = component.get("content", "")
             if not isinstance(content, str) or len(content) > 2000:
@@ -148,6 +161,8 @@ def _validate_document(body: PosterBody) -> dict[str, Any]:
             raise ApiError(422, "poster_component_invalid", "텍스트 스타일을 확인해 주세요.")
         if kind == "image" and component.get("assetId") is not None and not re.fullmatch(r"[0-9a-f]{32}", str(component["assetId"])):
             raise ApiError(422, "poster_component_invalid", "이미지 자산 ID를 확인해 주세요.")
+    if background_size and not background_seen:
+        raise ApiError(422, "poster_component_invalid", "전단지 배경이 필요합니다.")
     return {"templateId": body.template_id, "width": body.width, "height": body.height, "components": body.components}
 
 
@@ -160,7 +175,7 @@ async def _check_asset_ownership(doc: dict[str, Any], owner: str, ctx: AppContex
 
 @router.get("/poster/templates")
 async def list_templates():
-    return {"items": [{k: v for k, v in template.items() if k != "components"} for template in TEMPLATES]}
+    return {"items": [{k: v for k, v in template.items() if k != "components"} for template in SVG_TEMPLATES]}
 
 
 @router.get("/poster/templates/{template_id}")

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Stage, Layer, Rect } from 'react-konva'
+import { Stage, Layer } from 'react-konva'
 import { api } from '../lib/api.js'
 import { errorMessage } from '../lib/format.js'
-import { CanvasItem } from '../components/PosterCanvasItem.jsx'
+import { CanvasItem, PosterBackground, usePosterBackground } from '../components/PosterCanvasItem.jsx'
 
 /** 화면 폭에 맞춰 전단지를 줄여 보여 줄 배율(최대 1배). */
 function useFitScale(width) {
@@ -28,7 +28,8 @@ export default function PosterDetailPage() {
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [box, scale] = useFitScale(poster?.width)
-  const sorted = useMemo(() => [...(poster?.components || [])].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)), [poster])
+  const sorted = useMemo(() => (poster?.components || []).filter((item) => item.type !== 'background').sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)), [poster])
+  const background = usePosterBackground(poster)
 
   useEffect(() => {
     let live = true
@@ -77,11 +78,12 @@ export default function PosterDetailPage() {
         <Link className="primary-button" to={`/poster?edit=${encodeURIComponent(poster.id)}`}>수정</Link>
       </div>
       <section className="panel poster-detail-canvas" aria-label="전단지 미리보기">
+        {background.error && <p role="alert">전단지 배경을 불러오지 못했습니다.</p>}
         <div ref={box} className="poster-detail-fit">
           <div className="poster-detail-scale" style={{ width: poster.width * scale, height: poster.height * scale }}>
             <Stage width={poster.width * scale} height={poster.height * scale} scaleX={scale} scaleY={scale} listening={false}>
               <Layer>
-                <Rect x={0} y={0} width={poster.width} height={poster.height} fill="#FFFFFF" />
+                <PosterBackground poster={poster} image={background.image} />
                 {sorted.map((item) => <CanvasItem key={item.id} item={item} readOnly />)}
               </Layer>
             </Stage>

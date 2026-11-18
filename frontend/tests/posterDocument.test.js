@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createPosterFromTemplate, POSTER_FIELDS, posterPayload, switchPosterTemplate } from '../src/lib/posterDocument.js'
+import { applyPosterDraft } from '../src/lib/postPoster.js'
 
 const basic = {
   id: 'basic', width: 794, height: 1123,
@@ -13,6 +14,32 @@ const ids = () => {
   let next = 0
   return () => `generated-${++next}`
 }
+
+test('board draft survives switching from A4 to Shorts and back', () => {
+  const svgTemplate = (id, width, height) => ({
+    ...basic, id, width, height,
+    components: [
+      { id: 'paper', type: 'background', backgroundKey: id, x: 0, y: 0, width, height },
+      ...basic.components
+    ]
+  })
+  const a4 = svgTemplate('lost-a4', 794, 1123)
+  const shorts = svgTemplate('lost-shorts', 720, 1280)
+  const assetId = 'a'.repeat(32)
+  const draft = applyPosterDraft(createPosterFromTemplate(a4, ids()), {
+    fields: { title: '보리를 찾아요', pet_name: '보리' }, assetId
+  })
+  const vertical = switchPosterTemplate(draft, shorts, ids())
+  const back = switchPosterTemplate(vertical, a4, ids())
+  for (const [doc, template] of [[vertical, shorts], [back, a4]]) {
+    const payload = posterPayload(doc)
+    assert.deepEqual([payload.templateId, payload.width, payload.height], [template.id, template.width, template.height])
+    assert.deepEqual(payload.components.filter((item) => item.type === 'background'), [template.components[0]])
+    assert.equal(payload.components.find((item) => item.fieldKey === 'title').content, '보리를 찾아요')
+    assert.equal(payload.components.find((item) => item.fieldKey === 'pet_name').content, '보리')
+    assert.equal(payload.components.find((item) => item.type === 'image').assetId, assetId)
+  }
+})
 
 test('template document provides all standard text fields on the A4 canvas', () => {
   const doc = createPosterFromTemplate(basic, ids())

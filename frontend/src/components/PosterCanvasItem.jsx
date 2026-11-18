@@ -2,22 +2,46 @@ import { useEffect, useState } from 'react'
 import { Rect, Text, Image as KonvaImage } from 'react-konva'
 import { API_BASE } from '../lib/api.js'
 import { POSTER_FONT, POSTER_LINE_HEIGHT } from '../lib/posterText.js'
+import a4Background from '../assets/posters/lost-a4.svg'
+import shortsBackground from '../assets/posters/lost-shorts.svg'
 
 // 전단지 편집기(PosterPage)와 전단지 상세(PosterDetailPage)가 함께 쓰는 캔버스 요소.
 // readOnly 이면 끌기·선택·변형을 끄고 그대로 그리기만 한다.
 
-export function useAssetImage(assetId) {
-  const [image, setImage] = useState(null)
+const backgrounds = new Map([
+  ['lost-a4', a4Background],
+  ['lost-shorts', shortsBackground],
+])
+
+function useCanvasImage(src) {
+  const [loaded, setLoaded] = useState(null)
   useEffect(() => {
-    if (!assetId) { setImage(null); return }
-    let live = true
+    if (!src) return
     const next = new window.Image()
-    next.onload = () => live && setImage(next)
-    next.onerror = () => live && setImage(null)
-    next.src = `${API_BASE}/poster/assets/${assetId}`
-    return () => { live = false }
-  }, [assetId])
+    next.onload = () => setLoaded({ src, image: next })
+    next.onerror = () => setLoaded({ src, image: null })
+    next.src = src
+    return () => { next.onload = null; next.onerror = null }
+  }, [src])
+  return loaded?.src === src ? loaded : null
+}
+
+export function useAssetImage(assetId) {
+  return useCanvasImage(assetId ? `${API_BASE}/poster/assets/${assetId}` : null)?.image
+}
+
+export function usePosterBackground(poster) {
+  const background = poster?.components.find((item) => item.type === 'background')
+  const src = backgrounds.get(background?.backgroundKey)
+  const loaded = useCanvasImage(src)
+  const error = Boolean(background && (!src || (loaded && !loaded.image)))
+  return { image: loaded?.image, error, ready: !background || Boolean(loaded?.image) }
+}
+
+export function PosterBackground({ poster, image }) {
   return image
+    ? <KonvaImage x={0} y={0} width={poster.width} height={poster.height} image={image} listening={false} />
+    : <Rect x={0} y={0} width={poster.width} height={poster.height} fill="#FFFFFF" listening={false} />
 }
 
 export function imageCrop(image, item) {
