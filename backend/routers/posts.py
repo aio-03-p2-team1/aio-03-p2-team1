@@ -155,8 +155,12 @@ async def _with_breed_codes(items: list[dict], ctx: AppContext) -> list[dict]:
             if saved_code:
                 matches = {row["kind_code"] for row in catalogs[species] if row["kind_code"] == saved_code}
             else:
-                matches = {row["kind_code"] for row in catalogs[species]
-                           if normalize(row["name"]) == query or normalize(row.get("alias") or "") == query}
+                # 큐레이션 별칭은 공식 품종명과 겹칠 수 있다(예: "푸들" → "토이 푸들").
+                # 별칭이 하나의 코드에 연결되면 공식 이름 일치보다 우선한다.
+                alias_matches = {row["kind_code"] for row in catalogs[species]
+                                 if normalize(row.get("alias") or "") == query}
+                matches = alias_matches or {row["kind_code"] for row in catalogs[species]
+                                            if normalize(row["name"]) == query}
             if len(matches) == 1:
                 item["breed_code"] = matches.pop()
         result.append(item)

@@ -21,8 +21,11 @@ class BreedNormalizer:
         if not query:
             return None
         rows = await self.repository.rows(species)
-        matches = {r['kind_code']: r for r in rows if
-                   normalize(r['name']) == query or (r.get('alias') and normalize(r['alias']) == query)}
+        # 큐레이션 별칭은 공식 품종명과 겹칠 수 있다(예: "푸들" → "토이 푸들").
+        # 별칭이 하나의 코드에 연결되면 공식 이름 일치보다 우선한다.
+        alias_matches = {r['kind_code']: r for r in rows
+                         if r.get('alias') and normalize(r['alias']) == query}
+        matches = alias_matches or {r['kind_code']: r for r in rows if normalize(r['name']) == query}
         if len(matches) == 1:
             return next(iter(matches.values()))
         if not query or self.client is None:
