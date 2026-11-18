@@ -231,74 +231,79 @@ def route_after_plan(state: SearchState) -> str:
     return "validate" if state.get("issues") else "execute"
 
 
-async def execute(state: SearchState, config) -> dict:
+async def _fetch_page(state: SearchState, config, query: dict[str, Any], page: int, reason: str) -> dict:
+    """최초 조회·에이전트 재조회가 같은 통신 재시도·전체 도구 예산을 사용한다."""
     deps = _deps(config)
     settings = deps["settings"]
     animal = deps["animal"]
-    criteria = state["criteria"]
     sleep = deps.get("sleep", asyncio.sleep)
     budget = settings.max_tool_calls - len(state.get("tool_calls") or [])
     calls: list[dict[str, Any]] = []
-    items: list[dict[str, Any]] = []
     retries = state.get("retry_count", 0)
-    total = 0
-    page = 1
-    fetched_at = None
+    result = None
     error = None
-    args_base = {
-        "region_code": criteria.get("region_code"),
-        "start": criteria["start_date"],
-        "end": criteria["end_date"],
-        "species": criteria["species"],
-        "kind": criteria.get("breed_code"),
-    }
-    while page <= 1:
-        attempt = 0
-        while True:
-            if len(calls) >= budget:
-                error = {"code": "tool_budget", "message": ERROR_MESSAGES["tool_budget"]}
-                break
-            args = {**args_base, "page": page, "rows": ROWS_PER_PAGE}
-            try:
-                result = await animal.search(
-                    region_code=args["region_code"],
-                    start=date.fromisoformat(args["start"]),
-                    end=date.fromisoformat(args["end"]),
-                    species=args["species"],
-                    kind=args["kind"],
-                    page=page,
-                    rows=ROWS_PER_PAGE,
-                )
-            except AnimalApiError as exc:
-                calls.append(_call("animal_search", args, exc.code, "공고 조회", attempt=attempt))
-                if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
-                    await sleep(RETRY_BACKOFF_SECONDS[attempt])
-                    attempt += 1
-                    retries += 1
-                    continue
-                error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code), "page": page}
-                break
-            calls.append(_call("animal_search", args, "ok", "공고 조회", count=len(result.items), attempt=attempt))
-            items.extend(result.items[:ROWS_PER_PAGE])
-            total = result.total_count
-            fetched_at = result.fetched_at
+    attempt = 0
+    while True:
+        if len(calls) >= budget:
+            error = {"code": "tool_budget", "message": ERROR_MESSAGES["tool_budget"]}
             break
-        if error:
+        args = {**query, "page": page, "rows": ROWS_PER_PAGE}
+        try:
+            result = await animal.search(region_code=args["region_code"], start=date.fromisoformat(args["start"]),
+                                         end=date.fromisoformat(args["end"]), species=args["species"],
+                                         kind=args["kind"], page=page, rows=ROWS_PER_PAGE)
+        except AnimalApiError as exc:
+            calls.append(_call("animal_search", args, exc.code, reason, attempt=attempt))
+            if exc.retryable and attempt < len(RETRY_BACKOFF_SECONDS):
+                await sleep(RETRY_BACKOFF_SECONDS[attempt])
+                attempt += 1
+                retries += 1
+                continue
+            error = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code), "page": page}
             break
-        break  # 요청당 원본 API 1페이지(최대 1,000건)만 조회한다.
-    pages_fetched = page if not error else page - 1
+        calls.append(_call("animal_search", args, "ok", reason, count=len(result.items), attempt=attempt))
+        break
+    return {"items": result.items[:ROWS_PER_PAGE] if result else [], "total_count": result.total_count if result else 0,
+            "fetched_at": result.fetched_at if result else _now(), "tool_calls": calls,
+            "retry_count": retries, "error": error}
+
+
+async def execute(state: SearchState, config) -> dict:
+    criteria = state["criteria"]
+    query = {"region_code": criteria.get("region_code"), "start": criteria["start_date"],
+             "end": criteria["end_date"], "species": criteria["species"], "kind": criteria.get("breed_code")}
+    fetched = await _fetch_page(state, config, query, 1, "공고 조회")
     return {
-        "raw_items": items,
-        "total_count": total,
-        "pages_fetched": max(pages_fetched, 0),
-        "fetched_at": fetched_at or _now(),
-        "data_source": animal.source,
-        "retry_count": retries,
-        "tool_calls": calls,
-        "error": error,
-        "pending_fix": None,
-        "trace": ["execute"],
+        "raw_items": fetched["items"], "search_query": query, "total_count": fetched["total_count"],
+        "pages_fetched": 0 if fetched["error"] else 1, "fetched_at": fetched["fetched_at"],
+        "data_source": _deps(config)["animal"].source, "retry_count": fetched["retry_count"],
+        "tool_calls": fetched["tool_calls"], "error": fetched["error"], "pending_fix": None, "trace": ["execute"],
     }
+
+
+async def research(state: SearchState, config) -> dict:
+    """기존 agent가 고른 재검색을 실행한다. 전략 선택을 위한 별도 LLM 호출은 없다."""
+    plan = state["agent_search_plan"]
+    fetched = await _fetch_page(state, config, plan["query"], plan["page"], "검색 에이전트의 공고 재조회")
+    log_ = [*(state.get("agent_log") or []), {"step": "research_result", "strategy": plan["action"],
+            "ok": not fetched["error"], "count": len(fetched["items"]),
+            "error_code": fetched["error"]["code"] if fetched["error"] else None}]
+    update = {"tool_calls": fetched["tool_calls"], "retry_count": fetched["retry_count"],
+              "agent_search_plan": None, "agent_log": log_, "trace": ["research"]}
+    if fetched["error"]:
+        # 이전에 성공한 범위·조건·후보는 보존하고 실패를 명시한다.
+        update.update(error=fetched["error"], issues=[{"type": "tool_error", "code": fetched["error"]["code"], "fixable": False}],
+                      agent_done=True, agent_request=None,
+                      agent_decision=_agent_decision(state, "tool_error", "search_notices", log_))
+        return update
+    raw = fetched["items"]
+    if plan["action"] == "next_page":
+        raw = [*(state.get("raw_items") or []), *raw]
+    update.update(criteria=plan["criteria"], llm_features=plan["features"], raw_items=raw,
+                  search_query=plan["query"], pages_fetched=plan["page"], total_count=fetched["total_count"],
+                  fetched_at=fetched["fetched_at"], radius_items=None, issues=[], error=None, pending_fix=None)
+    # 종류·지역·기간·특징 검색 문장은 바꾸지 않아 기존 공고의 코사인 점수는 재사용한다.
+    return update
 
 
 async def radius_node(state: SearchState, config) -> dict:
@@ -511,6 +516,7 @@ def _agent_decision(state: SearchState, source: str, final_tool: str | None, log
     conf = state.get("confidence") or {}
     return {"source": source, "final_tool": final_tool, "steps": state.get("agent_steps", 0),
             "reruns": state.get("agent_reruns", 0), "log": log_, "prompt_version": agent_mod.AGENT_PROMPT_VERSION,
+            "researches": state.get("agent_researches", 0),
             "confidence_version": conf.get("version")}
 
 
@@ -584,7 +590,7 @@ async def agent_tools_node(state: SearchState, config) -> dict:
                              "검색 에이전트 도구 호출")],
         "trace": ["agent_tools"],
     }
-    if result["next"]:
+    if result["next"] in ("rank", "radius", "research"):
         update["agent_rerun_pending"] = True
     if result["done"]:
         update.update(agent_done=True, agent_request=result["request"],
@@ -600,6 +606,8 @@ def route_after_agent(state: SearchState) -> str:
 
 
 def route_after_agent_tools(state: SearchState) -> str:
+    if state.get("agent_next") == "ask":
+        return "ask"
     if state.get("agent_done"):
         return "locate"
     return state.get("agent_next") or "agent"
@@ -658,6 +666,7 @@ def build_graph(entry: str = "analyze"):
     g.add_node("breed", normalize_breed)
     g.add_node("plan", plan)
     g.add_node("execute", execute)
+    g.add_node("research", research)
     g.add_node("radius", radius_node)
     g.add_node("rank", rank_node)
     g.add_node("validate", validate)
@@ -674,6 +683,8 @@ def build_graph(entry: str = "analyze"):
     g.add_conditional_edges("breed", lambda s: "finalize" if s.get("error") else "plan", {"plan": "plan", "finalize": "finalize"})
     g.add_conditional_edges("plan", route_after_plan, {"validate": "validate", "execute": "execute"})
     g.add_edge("execute", "radius")
+    g.add_conditional_edges("research", lambda s: "finalize" if s.get("error") else "radius",
+                            {"finalize": "finalize", "radius": "radius"})
     g.add_edge("radius", "rank")
     g.add_edge("rank", "validate")
     g.add_conditional_edges(
@@ -688,7 +699,8 @@ def build_graph(entry: str = "analyze"):
     )
     g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "validate": "validate"})
     g.add_conditional_edges("agent_tools", route_after_agent_tools,
-                            {"agent": "agent", "rank": "rank", "radius": "radius", "locate": "locate"})
+                            {"agent": "agent", "rank": "rank", "radius": "radius", "research": "research",
+                             "ask": "ask", "locate": "locate"})
     g.add_edge("locate", "finalize")
     g.add_edge("finalize", END)
     return g.compile()

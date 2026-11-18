@@ -75,7 +75,7 @@ def test_read_results_hides_contacts_ids_and_dates():
                              "happen_date": "2026-11-10", "care": {"tel": "010-0000-0000"}, "semantic_score": 0.71234,
                              "evidence": {"matched": ["털색: 흰색"]}}]}
     row = SA.read_results(state, 5)[0]
-    assert len(SA.TOOLS) == 6  # 읽기는 메시지로 주고 도구로 부르지 않음
+    assert len(SA.TOOLS) == 7  # 읽기는 메시지로 주고 실제 공고 재검색 도구를 제공한다.
     assert set(row) == {"순위", "품종", "털색", "성별", "나이", "특징", "유사도", "일치", "불일치", "미확인"}
     assert row["유사도"] == 0.712
 

@@ -295,6 +295,8 @@ export default function SearchPage() {
     const criteria = breedRequest(values)
     for (const [k, v] of Object.entries(values)) if (k !== 'breed' && v.trim()) criteria[k] = v.trim()
     if (loc?.region) criteria.region = loc.region
+    // 전체 지역 확대에 동의한 뒤 사진·정보를 보완해도 이전 세션의 반경으로 다시 좁히지 않는다.
+    if (loc?.region === '전체' || loc?.region === 'all') criteria.radius_step = 3
     if (loc?.address) criteria.lost_place = loc.address
     // 지도에서 찍은 점을 반경 중심으로 보낸다(서버가 한국 범위 검사). 미리 보기와 실제 검색 범위가 같아진다.
     if (loc?.address && Number.isFinite(loc?.lat) && Number.isFinite(loc?.lng)) {
@@ -324,7 +326,7 @@ export default function SearchPage() {
 
   function widenRegion() {
     setLocation({ region: '전체', address: '' })
-    submit({ region: '전체' }, run.thread_id)
+    submit({ region: '전체', radius_step: 3 }, run.thread_id)
   }
 
   // 반경 넓히기: 사용자가 버튼을 눌러 동의한 경우에만 다음 단계로 같은 세션에서 다시 찾는다.

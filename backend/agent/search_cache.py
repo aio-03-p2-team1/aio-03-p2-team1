@@ -10,7 +10,7 @@ from redis.exceptions import RedisError
 from backend.errors import ApiError
 
 TTL = 600
-VERSION = "search-review-v1"
+VERSION = "search-research-v1"
 
 
 def condition_key(owner, criteria, *, source, model, reflection=True):

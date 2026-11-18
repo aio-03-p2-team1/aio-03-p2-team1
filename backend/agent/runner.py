@@ -35,7 +35,7 @@ RUN_FIELDS = (
 AGENT_FIELDS = ("agent_request", "agent_decision")
 # 에이전트 적용 시 캐시는 검토 전 상태를 저장한다. 재정렬·반경 확대에 필요한 원본과 점수도 보관한다.
 # 이 필드는 공개 run/저장 이력에는 넣지 않는다.
-REVIEW_FIELDS = ("raw_items", "radius_items", "semantic_scores", "total_count", "pages_fetched", "fetched_at")
+REVIEW_FIELDS = ("raw_items", "radius_items", "semantic_scores", "total_count", "pages_fetched", "fetched_at", "search_query")
 
 
 def agent_history(thread: dict[str, Any], declined: list[str] | None) -> dict[str, Any]:
