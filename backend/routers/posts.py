@@ -31,7 +31,7 @@ from backend.schemas.api import MAX_POST_PHOTO_BYTES, PostBody, PostUpdateBody
 from backend.timeutil import kst_today  # noqa: F401  (tests 에서 posts.kst_today 로도 import)
 from backend.tools.lost_animal_api import LostAnimalApiError
 from backend.tools.kinds import normalize
-from backend.tools.kind_aliases import is_curated_alias
+from backend.normalization.kind_aliases import is_curated_alias
 
 router = APIRouter(tags=["posts"])
 
@@ -46,7 +46,7 @@ PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _DATA_URL = re.compile(r"^data:(image/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=\s]+)$")
 _POST_ID = re.compile(r"^[0-9a-f]{32}$")
 _LOST_ID = re.compile(r"^lost-\d{8}-[0-9a-f]{12}$")  # lost_animal_api.lost_id() 형식
-PAGE_ROWS = 20  # 목록 한 페이지 글 수
+PAGE_ROWS = 21  # 목록 한 페이지 글 수(3열 카드 7줄)
 LOST_WAIT_SECONDS = 8  # 분실 신고 첫 조회를 기다리는 최대 시간. 넘으면 회원 글 먼저 보여 주고 조회는 계속한다
 MAX_POST_VOICES = 3
 MAX_VOICE_BYTES = 10 * 1024 * 1024

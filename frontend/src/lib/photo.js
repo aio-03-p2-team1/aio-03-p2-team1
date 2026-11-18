@@ -6,9 +6,9 @@ const PHOTO_ERROR_MESSAGES = {
   photo_analysis_failed: '오류가 발생했습니다.',
 }
 const PHOTO_REASON_MESSAGES = {
-  animal_not_detected: '사진에서 동물을 확인하지 못했어요. 동물이 보이는 사진을 올려 주세요.',
-  appearance_unclear: '동물의 외형을 알아보기 어려워요. 더 선명한 사진을 올려 주세요.',
-  subject_not_distinct: '찾을 동물이 중심에서 구분되지 않아요. 동물이 중심에 보이는 사진을 올려 주세요.',
+  animal_not_detected: '사진에서 동물을 확인하지 못했어요. 전단지나 여러 사진을 합친 이미지라면 동물 사진 한 장을 올리거나 동물 부분만 잘라서 올려 주세요.',
+  appearance_unclear: '동물의 외형을 알아보기 어려워요. 더 선명한 사진이나 동물이 크게 나온 사진을 올려 주세요.',
+  subject_not_distinct: '찾을 동물이 중심에서 구분되지 않아요. 여러 동물이 함께 있다면 찾는 아이만 보이게 잘라서 올려 주세요.',
 }
 
 export function photoSelectionError(file) {

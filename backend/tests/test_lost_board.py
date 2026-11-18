@@ -223,7 +223,7 @@ def test_filters_and_pages_use_one_cached_fetch():
         cats = client.get("/api/v1/posts?species=cat").json()
         gyeonggi = client.get("/api/v1/posts?region=경기도").json()
         week = client.get("/api/v1/posts?days=7").json()
-    assert first["pages"] == 3 and len(first["items"]) == 20 and len(second["items"]) == 20
+    assert first["pages"] == 3 and len(first["items"]) == 21 and len(second["items"]) == 21
     assert {i["id"] for i in first["items"]}.isdisjoint({i["id"] for i in second["items"]})
     assert cats["count"] == 1 and gyeonggi["count"] == 1
     assert week["count"] < first["count"]

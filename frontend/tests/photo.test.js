@@ -34,6 +34,12 @@ test('unsuitable photo maps its reason code to guidance', () => {
   assert.equal(unsuitablePhotoMessage({ suitable: true, reason_code: 'animal_not_detected' }), '')
 })
 
+test('animal not detected guidance tells how to handle posters and collages', () => {
+  const message = unsuitablePhotoMessage({ suitable: false, reason_code: 'animal_not_detected' })
+  assert.match(message, /전단지/)
+  assert.match(message, /잘라서/)
+})
+
 test('photo traits already in the description are not repeated', async () => {
   const { newPhotoTraits, photoTraitLine } = await import('../src/lib/photo.js')
   const text = '털색: 하얀색, 성별: 수컷\n빨간목줄 하고 있어요'

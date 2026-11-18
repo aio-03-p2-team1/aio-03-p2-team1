@@ -7,10 +7,8 @@ import httpx
 from redis.exceptions import RedisError
 
 from backend.storage import StorageError
+from backend.normalization.text import normalize
 
-
-def normalize(value):
-    return ''.join(value.split()).casefold()
 
 
 class KindRepository:

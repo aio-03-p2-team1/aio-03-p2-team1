@@ -7,7 +7,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 from backend import timeutil
-from backend.agent import criteria as crit
+from backend.normalization import criteria as crit
 from backend.agent import radius
 
 
