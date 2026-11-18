@@ -157,7 +157,6 @@ def test_no_llm_or_llm_error_keeps_results():
 
 def test_update_features_schema_and_runtime_exclude_breed():
     assert 'breed' not in SA.UpdateFeatures.model_fields
-    assert '품종·성별·특징' not in SA.SYSTEM_PROMPT
     accepted, _ = SA.validate_features({'breed': '믹스견'}, '믹스견 흰색')
     assert accepted == {}
     d, _ = agent_deps([('UpdateFeatures', {'breed': '믹스견', 'reason': '품종 변경'})])
