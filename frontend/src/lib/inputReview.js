@@ -27,12 +27,40 @@ export function kindCheckText(check) {
   return `기타 동물 ${check.checked}건 중 ${parts.join(' (')}${check.kept ? ')' : ''}${dropped.length ? ` · 제외: ${dropped.join(', ')}` : ''}`
 }
 
-// 입력 검토가 물은 글·사진 모순에 사용자가 사진 값을 고르면 정리한 글의 그 항목 줄을 사진 값으로 바꾼다.
-// 같은 항목 줄([털색]: …)이 없으면 아래에 새 줄로 덧붙인다(덧붙여서 같은 항목이 두 번 적히지 않게).
+// 글 값이 '기타'처럼 뭉뚱그린 값이면 사진에서 본 값을 덧붙여 자세히 적는다(예: 기타: 회색, 검정, 빨강).
+const GENERIC_VALUES = new Set(['기타', '모름', '미상', '없음', '잘 모름'])
+
+export function isGenericValue(value) {
+  return GENERIC_VALUES.has(String(value || '').trim())
+}
+
+// 모순 항목마다 보여 줄 두 버튼. 뭉뚱그린 글 값이면 '예(사진 값 넣기)/아니오(그대로)',
+// 서로 다른 값이면 '글대로/사진대로'.
+export function conflictChoices(conflict) {
+  const text = String(conflict?.text_value || '').trim()
+  const photo = String(conflict?.photo_value || '').trim()
+  if (!conflict?.item || !photo) return []
+  if (!text || isGenericValue(text)) {
+    const detail = text ? `${text}: ${photo}` : photo
+    return [
+      { side: 'photo', label: `예, 사진 값 넣기 (${detail})` },
+      { side: 'text', label: `아니오, ${text || '비워 두기'}` },
+    ]
+  }
+  return [
+    { side: 'text', label: `글대로: ${text}` },
+    { side: 'photo', label: `사진대로: ${photo}` },
+  ]
+}
+
+// 사진 값을 고르면 정리한 글의 그 항목 줄을 바꾼다. 글 값이 '기타'처럼 뭉뚱그린 값이면 '기타: 사진 값'으로,
+// 아니면 사진 값으로 바꾼다. 같은 항목 줄([털색]: …)이 없으면 아래에 새 줄로 덧붙인다(같은 항목이 두 번 적히지 않게).
 export function applyPhotoValue(text, conflict) {
   const item = String(conflict?.item || '').trim()
-  const value = String(conflict?.photo_value || '').trim()
-  if (!item || !value) return text
+  const photo = String(conflict?.photo_value || '').trim()
+  if (!item || !photo) return text
+  const written = String(conflict?.text_value || '').trim()
+  const value = written && isGenericValue(written) ? `${written}: ${photo}` : photo
   const line = `[${item}]: ${value}`
   const lines = String(text || '').split('\n')
   const at = lines.findIndex((l) => l.trimStart().startsWith(`[${item}]`))

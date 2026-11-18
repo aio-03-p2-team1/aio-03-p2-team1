@@ -16,7 +16,7 @@ import { photoAnalysisError, photoErrorMessage, photoSelectionError, photoTraitL
 import { useRegions } from './useRegions.js'
 import { addAnswer, answerChips, applyAnswers, removeAnswer, visibleRequest } from '../lib/agentRequest.js'
 import { takePostSearch } from '../lib/postSearch.js'
-import { applyPhotoValue, inputReviewView, kindCheckText } from '../lib/inputReview.js'
+import { applyPhotoValue, conflictChoices, inputReviewView, kindCheckText } from '../lib/inputReview.js'
 import runningRaccoon from '../assets/running-raccoon.png'
 
 const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)
@@ -647,8 +647,9 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
 function InputReview({ review, awaiting, onChoose }) {
   const view = inputReviewView(review)
   if (!view) return null
-  // 모순을 물은 상태면 항목마다 '글대로'·'사진대로' 버튼을 둔다. 값이 비면 그쪽 버튼은 숨긴다.
-  const choices = awaiting && view.question ? (review.conflicts || []).filter((c) => c.item) : []
+  // 모순을 물은 상태면 항목마다 버튼 두 개를 둔다. 글 값이 '기타'처럼 뭉뚱그린 값이면 '예(사진 값 넣기)/아니오',
+  // 서로 다른 값이면 '글대로/사진대로'.
+  const choices = awaiting && view.question ? (review.conflicts || []).filter((c) => conflictChoices(c).length) : []
   return (
     <div className="input-review" role="status">
       <p className="input-review-title"><strong>{view.title}</strong> {view.message}</p>
@@ -657,12 +658,9 @@ function InputReview({ review, awaiting, onChoose }) {
         <div className="input-review-choices">
           {choices.map((c) => (
             <div key={c.item} className="input-review-choice">
-              {c.text_value && (
-                <button type="button" className="secondary-button" onClick={() => onChoose(c, 'text')}>글대로: {c.text_value}</button>
-              )}
-              {c.photo_value && (
-                <button type="button" className="secondary-button" onClick={() => onChoose(c, 'photo')}>사진대로: {c.photo_value}</button>
-              )}
+              {conflictChoices(c).map((choice) => (
+                <button key={choice.side} type="button" className="secondary-button" onClick={() => onChoose(c, choice.side)}>{choice.label}</button>
+              ))}
             </div>
           ))}
         </div>
