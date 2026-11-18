@@ -392,9 +392,8 @@ async def validate(state: SearchState, config) -> dict:
                        "next_step": radius.get("step", 0) + 1, "excluded": radius.get("excluded", 0)})
     elif not candidates and state.get("raw_items") is not None and criteria.get("region") not in (None, "all") and "region_code" in criteria:
         issues.append({"type": "empty_narrow", "field": "region"})
-    # 결과가 있으면 확신 신호를 계산한다. 낮으면 검색 에이전트(agent 노드)가 결과를 읽고 판단·수정한다.
-    confidence = (confidence_signals(candidates, criteria, state.get("llm_features"), state.get("photo_features"))
-                  if candidates else None)
+    # 빈 결과도 입력 신호를 남겨, 이미 받은 정보를 에이전트가 다시 묻지 않게 한다.
+    confidence = confidence_signals(candidates, criteria, state.get("llm_features"), state.get("photo_features"))
     return {"issues": issues, "confidence": confidence, "trace": ["validate"]}
 
 FIXES = {
@@ -404,19 +403,24 @@ FIXES = {
     "empty_narrow": {"strategy": "ask_user_to_widen", "next": "ask", "fix": {}},
     "empty_radius": {"strategy": "ask_user_to_widen_radius", "next": "ask", "fix": {}},
 }
+EMPTY_ISSUES = {"empty_narrow", "empty_radius"}
 
 
 def route_after_validate(state: SearchState, config) -> str:
     issues = [i for i in state.get("issues") or [] if i["type"] in FIXES]
-    if not issues:
+    # 중복·조건 위반·지역 매핑은 기존 규칙으로 먼저 수정한다.
+    # 빈 결과는 LLM이 원인을 읽고 전략을 선택하고, LLM이 없거나 실패하면 기존 성찰로 돌아간다.
+    structural = [i for i in issues if i["type"] not in EMPTY_ISSUES]
+    if not structural:
         if state.get("error") or state.get("candidates") is None:
             return "finalize"
-        # 에이전트가 조건을 고쳐 다시 찾은 뒤면 다시 에이전트로(새 결과를 읽고 비교). 이미 끝냈으면 위치 조회.
-        if state.get("agent_done"):
+        if not state.get("agent_done"):
+            if (_deps(config).get("search_agent") or state.get("agent_messages")
+                    or (state.get("confidence") or {}).get("low")):
+                # 조회·정렬까지만 캐시한 뒤, 대화별 판단은 별도 실행한다.
+                return "review" if _deps(config).get("_defer_agent") else "agent"
+        if not issues:
             return "locate"
-        if state.get("agent_messages") or (state.get("confidence") or {}).get("low"):
-            return "agent"
-        return "locate"
     if not state.get("reflection_enabled", True):
         return "finalize"
     if state.get("reflection_count", 0) >= _deps(config)["settings"].max_reflections:
@@ -584,12 +588,15 @@ async def agent_tools_node(state: SearchState, config) -> dict:
         update["agent_rerun_pending"] = True
     if result["done"]:
         update.update(agent_done=True, agent_request=result["request"],
+                      # 에이전트가 빈 결과를 검토하고 요청 또는 종료를 선택했다.
+                      # 빈 결과 자체는 미해결 데이터 오류가 아니다.
+                      issues=[i for i in state.get("issues") or [] if i["type"] not in EMPTY_ISSUES],
                       agent_decision=_agent_decision({**state, **update}, "llm", name, log_))
     return update
 
 
 def route_after_agent(state: SearchState) -> str:
-    return "locate" if state.get("agent_done") else "agent_tools"
+    return "validate" if state.get("agent_done") else "agent_tools"
 
 
 def route_after_agent_tools(state: SearchState) -> str:
@@ -643,7 +650,7 @@ async def finalize(state: SearchState, config) -> dict:
     }
 
 
-def build_graph():
+def build_graph(entry: str = "analyze"):
     g = StateGraph(SearchState)
     g.add_node("analyze", analyze)
     g.add_node("ask", ask)
@@ -660,7 +667,7 @@ def build_graph():
     g.add_node("locate", locate)
     g.add_node("finalize", finalize)
 
-    g.add_edge(START, "analyze")
+    g.add_edge(START, entry)
     g.add_conditional_edges("analyze", route_after_analyze, {"ask": "ask", "context": "context"})
     g.add_edge("ask", END)
     g.add_conditional_edges("context", route_after_context, {"breed": "breed", "finalize": "finalize"})
@@ -672,14 +679,14 @@ def build_graph():
     g.add_conditional_edges(
         "validate",
         route_after_validate,
-        {"reflect": "reflect", "agent": "agent", "locate": "locate", "finalize": "finalize"},
+        {"reflect": "reflect", "agent": "agent", "review": END, "locate": "locate", "finalize": "finalize"},
     )
     g.add_conditional_edges(
         "reflect",
         route_after_reflect,
         {"execute": "execute", "rank": "rank", "plan": "plan", "ask": "ask", "finalize": "finalize"},
     )
-    g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "locate": "locate"})
+    g.add_conditional_edges("agent", route_after_agent, {"agent_tools": "agent_tools", "validate": "validate"})
     g.add_conditional_edges("agent_tools", route_after_agent_tools,
                             {"agent": "agent", "rank": "rank", "radius": "radius", "locate": "locate"})
     g.add_edge("locate", "finalize")
@@ -687,3 +694,4 @@ def build_graph():
     return g.compile()
 
 GRAPH = build_graph()
+REVIEW_GRAPH = build_graph(entry="validate")

@@ -40,6 +40,7 @@ DEFAULT_REASON = {
 assert set(FIELD_OPTIONS["color"]) <= set(Color.__args__)  # 털색 보기는 검색 색 목록 안에서만
 
 REASON_LABELS = {
+    "empty_result": "현재 조건에 맞는 후보가 없음",
     "few_features": "입력한 특징이 적음",
     "mixed_breed": "믹스견이라 글만으로 구분이 어려움",
     "weak_similarity": "가장 비슷한 후보도 유사도가 낮음",
@@ -50,6 +51,9 @@ REASON_LABELS = {
 
 def allowed_actions(confidence: dict[str, Any], history: dict[str, Any]) -> dict[str, Any]:
     """반복 요청 제한과 이미 받은 정보를 반영해 고를 수 있는 행동을 계산한다(서버 규칙)."""
+    # 충분한 결과의 검토가 불필요한 추가 질문으로 이어지지 않게 한다.
+    if confidence.get("low") is False:
+        return {"photo": False, "fields": []}
     signals = confidence.get("signals") or {}
     asked = history.get("asked_fields") or []
     declined = history.get("declined") or []

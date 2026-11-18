@@ -1,7 +1,7 @@
-"""검색 에이전트: 결과가 애매할 때 LLM이 도구로 결과를 읽고(read) → 판단하고 → 조건을 고쳐 다시 찾는다(act).
+"""검색 에이전트: 정상 검색마다 LLM이 결과를 읽고 → 판단하고 → 필요하면 조건을 고쳐 다시 찾는다.
 
 그래프 안의 루프 (LangGraph 노드 2개):
-    validate ─(확신 낮음)→ agent ⇄ agent_tools ─(조건 수정)→ rank 또는 radius → validate → agent …
+    validate ─(빈 결과 포함)→ agent ⇄ agent_tools ─(조건 수정)→ rank 또는 radius → validate → agent …
                                      └─(요청·확정)→ locate → finalize
 - agent       : LLM 한 걸음. 지금까지의 대화(결과·도구 결과 포함)를 보고 도구 하나를 고른다(bind_tools, tool_choice=required).
 - agent_tools : 고른 도구를 서버가 검증·실행한다. 수정 도구는 조건을 고친 뒤 다시 검색한다.
@@ -41,28 +41,34 @@ from backend.schemas.common import Color
 
 log = logging.getLogger("dasimanna.agent")
 
-AGENT_PROMPT_VERSION = "search-agent-v2"
+AGENT_PROMPT_VERSION = "search-agent-v3"
 MAX_STEPS = 4  # LLM 걸음(도구 선택) 최대 횟수. 흔한 흐름은 수정 1번 + 종료 1번 = 2걸음
 MAX_RERUNS = 2  # 조건을 고쳐 다시 찾는 최대 횟수
 TOP_READ = 5  # LLM에 보여 줄 상위 후보 수
 SEX_WORDS = {"M": ("수컷", "숫컷", "수놈", "남아", "남자아이"), "F": ("암컷", "암놈", "여아", "여자아이")}
 
 SYSTEM_PROMPT = f"""너는 잃어버린 반려동물 검색 결과를 점검하는 에이전트다.
-검색은 이미 한 번 끝났고 결과가 애매하다는 신호가 있다. 메시지에 사용자 원문, 현재 조건, 상위 후보 요약이 들어 있다.
+검색은 이미 한 번 끝났다. 후보가 충분한 검색과 후보가 없는 검색도 모두 검토한다.
+메시지에 사용자 원문, 현재 조건, 단계별 조회·필터 건수, 상위 후보 요약이 들어 있다.
 그것을 읽고 판단하고, 필요하면 도구로 조건을 고쳐 다시 찾는다.
 
 진행 방법:
 1. 메시지의 사용자 원문과 상위 후보를 읽는다.
 2. 판단한다: 사용자 설명의 털색·성별·특징이 검색 조건에 제대로 들어갔는가? 상위 후보가 설명과 맞는가?
+   - 확신 충분이면 원문에 근거한 명백한 오류가 없는 한 finish 한다. 사진·추가 정보는 요청하지 않는다.
    - 설명에는 있는데 조건에 빠진 특징이 있으면 update_features 로 넣는다.
    - 품종·성별 조건 때문에 맞을 법한 후보가 밀려나면 relax_condition 으로 푼다.
-   - 후보가 너무 적거나 다 맞지 않으면 widen_radius 로 반경을 넓힌다.
+   - 후보가 없으면 검색_단계의 빈_결과_원인을 먼저 확인한다.
+     원본_공고_없음이면 재정렬·반경 확대로 새 공고가 생기지 않는다. 도움이 되는 정보 요청 또는 finish 를 선택한다.
+     반경_필터이면 widen_radius, 조건_필터이면 품종 완화 등 가능한 수정과 정보 요청 중 근거가 있는 전략을 고른다.
+   - widen_radius 는 이미 조회한 공고 안에서만 반경을 넓힌다. 조회 지역·기간을 바꾸거나 새 API를 호출하지 않는다.
 3. 고친 뒤에는 새 결과 메시지를 읽고 이전과 비교한다. 다시 찾기는 최대 {MAX_RERUNS}번이다.
 4. 더 고칠 것이 없으면 끝낸다: 결과가 그럴듯하면 finish, 글만으로 구분이 어려우면(믹스견 등) request_photo,
    받지 못한 정보가 구분에 도움이 되면 request_info.
 
 규칙:
 - 한 번에 도구 하나만 호출한다.
+- 도구로 고칠 필요가 없으면 finish 한다. 개입을 늘리려고 조건을 바꾸거나 정보를 요청하지 않는다.
 - 사용자 설명에 없는 특징을 만들어 넣지 않는다. 서버가 원문 근거가 없는 값은 거부한다.
 - 공고 번호, 날짜, 숫자, 연락처, 보호소 이름을 지어내지 않는다.
 - reason 은 사용자에게 보일 수 있는 한국어 한 문장(60자 이내), 존댓말, 숫자 없이 쓴다."""
@@ -248,9 +254,23 @@ def _summary(state: dict[str, Any]) -> dict[str, Any]:
             "top_matched": len((top.get("evidence") or {}).get("matched") or [])}
 
 
+def search_summary(state: dict[str, Any]) -> dict[str, Any]:
+    """조회와 필터를 구분한다. API 실패는 이 검토 경로에 들어오지 않는다."""
+    raw = state.get("raw_items") or []
+    radius_items = state.get("radius_items")
+    after_radius = radius_items if radius_items is not None else raw
+    candidates = state.get("candidates") or []
+    cause = None
+    if not candidates:
+        cause = "원본_공고_없음" if not raw else ("반경_필터" if not after_radius else "조건_필터")
+    return {"조회_총건수": state.get("total_count", 0), "받은_공고": len(raw),
+            "반경_필터_후": len(after_radius), "조건_필터_후": len(candidates), "빈_결과_원인": cause}
+
+
 def context_text(state: dict[str, Any]) -> str:
     """LLM에 미리 넣어 주는 읽을거리: 사용자 원문·현재 조건·상위 후보 요약(읽기 도구 호출을 줄이려고)."""
     return ("\n사용자 원문과 현재 조건:\n" + _json(read_criteria(state))
+            + "\n검색_단계:\n" + _json(search_summary(state))
             + f"\n상위 후보 {TOP_READ}개:\n" + _json(read_results(state, TOP_READ)))
 
 

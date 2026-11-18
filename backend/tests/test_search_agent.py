@@ -1,13 +1,23 @@
 """검색 에이전트 루프: 읽기 → 판단 → 조건 수정 → 다시 찾기 → 종료. LLM은 가짜 client(실제 호출 아님)."""
 
+import asyncio
+import json
+
+import fakeredis
+import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from backend.agent import search_agent as SA
 from backend.agent.ranking import confidence_signals
+from backend.agent.runner import run_search
+from backend.agent.search_cache import SearchCache
 
+from .conftest import FakeAnimal, api_item
 from .test_graph import START, deps, search
 
 MIXED = {"species": "dog", "region": "전체", "lost_date": START, "description": "믹스견 흰색 엉덩이 얼룩"}
+SUFFICIENT = {"species": "dog", "region": "전체", "lost_date": START,
+              "color": "갈색", "sex": "F", "description": "곱슬털"}
 
 
 class FakeAgentClient:
@@ -171,3 +181,161 @@ def test_stored_photo_features_stop_photo_request_and_feed_ranking():
     assert run["agent_decision"]["log"] and any(e.get("tool") == "request_photo" and e["ok"] is False
                                                  for e in run["agent_decision"]["log"])
     assert set(run["llm_features"]["colors"]) == {"흰색"} and run["llm_features"]["sex"] == "M"
+
+
+def test_high_confidence_result_is_reviewed_once():
+    d, client = agent_deps()
+    d["animal"] = FakeAnimal(pages=[[api_item(1)]])
+    run = search(d, SUFFICIENT)
+    assert run["confidence"]["low"] is False
+    assert run["status"] == "completed" and len(client.calls) == 1
+    assert tools_used(run) == ["finish"] and run["agent_request"] is None
+    assert run["agent_decision"]["reruns"] == 0
+
+
+@pytest.mark.parametrize("tool,args", [
+    ("RequestPhoto", {"reason": "사진을 올려 주세요."}),
+    ("RequestInfo", {"field": "size", "reason": "크기를 알려 주세요."}),
+])
+def test_high_confidence_review_rejects_unnecessary_questions(tool, args):
+    d, _ = agent_deps([(tool, args)])
+    d["animal"] = FakeAnimal(pages=[[api_item(1)]])
+    run = search(d, SUFFICIENT)
+    assert run["confidence"]["low"] is False and run["agent_request"] is None
+    assert run["agent_decision"]["log"][1]["ok"] is False
+    assert tools_used(run)[-1] == "finish"
+
+
+@pytest.mark.parametrize("region", ["경기도", "전체"])
+def test_empty_api_result_is_reviewed_with_input_signals(region):
+    d, client = agent_deps([("RequestInfo", {"field": "size", "reason": "크기를 알려 주세요."})])
+    d["animal"] = FakeAnimal(pages=[[]])
+    run = search(d, {**SUFFICIENT, "region": region})
+    assert run["candidates"] == [] and run["status"] == "completed"
+    assert run["agent_request"]["field"] == "size"
+    assert run["confidence"]["reasons"] == ["empty_result"]
+    assert run["confidence"]["signals"]["color_given"] and run["confidence"]["signals"]["sex_given"]
+    assert run["issues"] == [] and "reflect" not in run["trace"]
+    assert "원본_공고_없음" in client.calls[0][1].content
+    assert len(d["animal"].calls) == 1
+
+
+def test_empty_breed_filter_can_be_relaxed_and_reviewed_again():
+    d, client = agent_deps([("RelaxCondition", {"field": "breed", "reason": "품종 표기가 다를 수 있어요."})])
+    d["animal"] = FakeAnimal(pages=[[api_item(1, kindNm="말티즈")]])
+    run = search(d, {**SUFFICIENT, "region": "경기도", "breed": "푸들"})
+    assert run["status"] == "completed" and len(run["candidates"]) == 1
+    assert tools_used(run) == ["relax_condition", "finish"]
+    assert run["agent_decision"]["reruns"] == 1 and "breed" not in run["criteria"]
+    assert "조건_필터" in client.calls[0][1].content
+    assert run["issues"] == [] and len(d["animal"].calls) == 1
+
+
+def test_empty_radius_can_be_widened_by_agent():
+    from .test_radius import base, items, kakao
+
+    d, client = agent_deps([("WidenRadius", {"reason": "조회된 공고를 더 넓은 반경에서 확인해요."})])
+    d["animal"] = FakeAnimal(pages=[items("서울특별시 노원구")])
+    d["kakao"] = kakao()
+    run = search(d, base(days=2))
+    assert run["status"] == "completed" and run["candidates"]
+    assert tools_used(run) == ["widen_radius", "finish"]
+    assert "반경_필터" in client.calls[0][1].content
+    assert run["agent_decision"]["reruns"] == 1 and len(d["animal"].calls) == 1
+
+
+def test_agent_may_finish_empty_result_without_unresolved_issue():
+    d, _ = agent_deps()
+    d["animal"] = FakeAnimal(pages=[[]])
+    run = search(d, {**SUFFICIENT, "region": "경기도"})
+    assert run["status"] == "completed" and run["end_reason"] == "empty_result"
+    assert run["issues"] == [] and tools_used(run) == ["finish"]
+
+
+def test_empty_result_falls_back_to_existing_question_when_agent_fails():
+    d, client = agent_deps(error=TimeoutError())
+    d["animal"] = FakeAnimal(pages=[[]])
+    run = search(d, {**SUFFICIENT, "region": "경기도"})
+    assert len(client.calls) == 1 and run["agent_decision"]["source"] == "llm_error"
+    assert run["status"] == "awaiting_input" and run["questions"][0]["field"] == "region"
+    assert "reflect" in run["trace"] and run["criteria"]["region"] == "경기도"
+
+
+def test_missing_input_and_api_failure_do_not_call_review_agent():
+    d, client = agent_deps()
+    assert search(d, {"species": "dog"})["status"] == "awaiting_input"
+    d["animal"] = FakeAnimal(errors=["animal_auth"])
+    run = search(d, SUFFICIENT)
+    assert run["status"] == "failed" and run["error"]["code"] == "animal_auth"
+    assert client.calls == []
+
+
+def test_cached_sufficient_result_gets_fresh_review_without_new_retrieval():
+    async def scenario():
+        d, client = agent_deps()
+        d["animal"] = FakeAnimal(pages=[[api_item(1)]])
+        d["search_cache"] = SearchCache(fakeredis.FakeAsyncRedis())
+        first = await run_search(d, "owner", {"criteria": SUFFICIENT})
+        second = await run_search(d, "owner", {"criteria": SUFFICIENT})
+        assert not first["cache_hit"] and second["cache_hit"]
+        assert len(client.calls) == 2 and second["agent_decision"]["source"] == "llm"
+        assert len(d["animal"].calls) == len(d["embedder"].calls) == 1
+        assert second["candidates"] == first["candidates"] and second["tool_call_count"] == 1
+        assert second["trace"][0] == "cache_hit" and "agent" in second["trace"]
+        assert "raw_items" not in second and "semantic_scores" not in second
+        snapshot = await d["search_cache"].get(first["cache_key"])
+        assert "agent_request" not in snapshot and "agent_decision" not in snapshot
+        assert snapshot["raw_items"] and snapshot["semantic_scores"]
+    asyncio.run(scenario())
+
+
+def test_cached_empty_result_uses_current_thread_question_limits():
+    async def scenario():
+        question = ("RequestInfo", {"field": "size", "reason": "크기를 알려 주세요."})
+        d, client = agent_deps([question, question])
+        d["animal"] = FakeAnimal(pages=[[]])
+        d["search_cache"] = SearchCache(fakeredis.FakeAsyncRedis())
+        first = await run_search(d, "owner", {"criteria": SUFFICIENT})
+        second = await run_search(d, "owner", {"criteria": SUFFICIENT, "thread_id": first["thread_id"]})
+        assert first["agent_request"]["field"] == "size"
+        assert second["cache_hit"] and second["agent_request"] is None
+        assert second["agent_decision"]["log"][1]["ok"] is False
+        assert len(client.calls) == 3 and len(d["animal"].calls) == 1
+    asyncio.run(scenario())
+
+
+def test_agent_changes_do_not_pollute_cached_base_result():
+    async def scenario():
+        d, client = agent_deps([("UpdateFeatures", {"colors": ["흰색"], "reason": "설명의 털색을 반영해요."})])
+        d["animal"] = FakeAnimal(pages=[[api_item(1)]])
+        d["search_cache"] = SearchCache(fakeredis.FakeAsyncRedis())
+        criteria = {**MIXED, "color": "갈색"}
+        first = await run_search(d, "owner", {"criteria": criteria})
+        second = await run_search(d, "owner", {"criteria": criteria})
+        assert first["criteria"]["color"] == "흰색"
+        thread = await d["store"].get("owner", "thread", first["thread_id"])
+        assert thread["criteria"]["color"] == "갈색"  # 자동 수정은 사용자가 확인한 조건으로 저장하지 않는다.
+        assert second["cache_hit"] and second["criteria"]["color"] == "갈색"
+        assert second["agent_decision"]["reruns"] == 0
+        assert len(client.calls) == 3 and len(d["animal"].calls) == 1
+    asyncio.run(scenario())
+
+
+def test_parallel_cached_searches_each_get_review_and_fetch_only_once():
+    async def scenario():
+        d, client = agent_deps()
+        d["animal"] = FakeAnimal(pages=[[api_item(1)]])
+        d["search_cache"] = SearchCache(fakeredis.FakeAsyncRedis())
+        runs = await asyncio.gather(*(run_search(d, "owner", {"criteria": SUFFICIENT}) for _ in range(3)))
+        assert sum(r["cache_hit"] for r in runs) == 2
+        assert all(r["agent_decision"]["source"] == "llm" for r in runs)
+        assert len(client.calls) == 3 and len(d["animal"].calls) == len(d["embedder"].calls) == 1
+        assert len({r["thread_id"] for r in runs}) == 3
+    asyncio.run(scenario())
+
+
+def test_search_summary_exposes_only_stage_counts():
+    summary = SA.search_summary({"total_count": 2, "raw_items": [{"care": {"tel": "secret"}}],
+                                 "radius_items": [], "candidates": []})
+    assert summary["빈_결과_원인"] == "반경_필터"
+    assert "secret" not in json.dumps(summary)

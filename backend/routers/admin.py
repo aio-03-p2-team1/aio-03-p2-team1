@@ -50,7 +50,7 @@ RUN_LIST_FIELDS = (
 RUN_STAT_FIELDS = (
     "status", "end_reason", "reflection_enabled", "reflection_count", "retry_count", "cache_hit", "elapsed_ms",
     "tool_calls", "confidence", "agent_decision", "agent_request", "issues", "reflections", "ranking_method",
-    "error", "created_at",
+    "error", "created_at", "trace",
 )
 
 
@@ -348,10 +348,10 @@ def _group_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def agent_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
-    """실행 문서 목록 → 에이전트 정확도 개선용 집계. 캐시 적중 실행은 그래프를 돌지 않았으므로 도구·성찰 집계에서 뺀다."""
+    """실제 실행한 그래프만 집계한다. 공고 캐시 적중 후 에이전트 검토한 실행도 포함한다."""
     runs = [clean_run(r)[0] for r in runs]
     total = len(runs)
-    executed = [r for r in runs if not r.get("cache_hit")]
+    executed = [r for r in runs if not r.get("cache_hit") or "agent" in (r.get("trace") or [])]
     tool_use: Counter = Counter()
     tool_fail: Counter = Counter()
     for r in executed:
@@ -380,7 +380,7 @@ def agent_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "total_runs": total,
         "executed_runs": len(executed),
-        "cache_hit_rate": _rate(total - len(executed), total),
+        "cache_hit_rate": _rate(sum(bool(r.get("cache_hit")) for r in runs), total),
         "status": dict(Counter(r.get("status") or "unknown" for r in runs)),
         "end_reason": dict(Counter(r.get("end_reason") or "-" for r in runs)),
         "errors": dict(Counter((r.get("error") or {}).get("code") for r in runs if r.get("error"))),
