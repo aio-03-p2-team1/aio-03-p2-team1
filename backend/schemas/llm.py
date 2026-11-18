@@ -40,26 +40,39 @@ class FeatureExtractionResult(StrictSchema):
     prompt_version: str
 
 
-class RefinedDescriptionModelResponse(StrictSchema):
-    """Template fields and searchable facts, extracted from one text/photo request."""
+class ReviewConflict(StrictSchema):
+    """글과 사진 분석이 어긋난 항목. 최종 특징에는 글의 값을 쓴다."""
+
+    item: str
+    text_value: str
+    photo_value: str
+
+
+class InputReviewModelResponse(StrictSchema):
+    """검색 전 입력 검토(글 + 서버가 보관한 사진 분석 결과)를 한 번의 구조화 호출로 받는다."""
 
     fur_color: str
     features: str
     situation: str
     other: str
-    text_colors: list[Color]
-    text_sex: Sex
-    text_marks: list[str]
-    photo_suitable: bool
-    photo_colors: list[Color]
-    photo_sex: Sex
-    photo_marks: list[str]
+    colors: list[Color]
+    sex: Sex
+    marks: list[str]
+    duplicates: list[str]
+    conflicts: list[ReviewConflict]
+    action: Literal["search", "ask"]
+    question: str
+    message: str
 
 
-class RefinedDescriptionResult(StrictSchema):
-    description: str
+class InputReviewResult(StrictSchema):
+    organized_text: str
     features: dict[str, object]
-    photo_features: dict[str, object] | None
+    duplicates: list[str]
+    conflicts: list[dict[str, str]]
+    action: Literal["search", "ask"]
+    question: str
+    message: str
     prompt_version: str
 
 

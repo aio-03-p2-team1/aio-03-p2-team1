@@ -12,8 +12,8 @@ from backend.schemas.llm import (
     FeatureExtractionRequest,
     FeatureExtractionModelResponse,
     FeatureExtractionResult,
-    RefinedDescriptionModelResponse,
-    RefinedDescriptionResult,
+    InputReviewModelResponse,
+    InputReviewResult,
     PhotoAnalysisRequest,
     PhotoAnalysisModelResponse,
     PhotoAnalysisResult,
@@ -66,13 +66,18 @@ PHOTO_TASK_INSTRUCTIONS = (
     "animal_present가 false이면 종·품종 코드·성별·색·표식을 모두 비운다. suitable 여부는 사진 내용으로만 판단하고 confidence 기준을 낮추지 않는다. "
 )
 
-REFINEMENT_TASK_INSTRUCTIONS = (
-    "글 설명과 선택 사진을 함께 보고 템플릿과 검색 특징을 정리한다. "
-    "성별은 글에 직접 표현된 경우에만 글의 특징으로 반환한다. "
-    "사진에서는 실제로 보이는 털색과 식별 단서를 추출하고, 사진에서 동물이 분명히 보이지 않으면 사진 특징을 비운다. "
-    "글과 사진의 특징이 충돌하면 글에 적힌 값을 우선하며, 사진은 글에 없는 항목만 보완한다. "
-    "사진에서 추출한 특징과 글에서 추출한 특징은 각각 해당 필드에만 기록한다. "
-    "템플릿 필드는 [털색], [특징], [상황], [기타]에 들어갈 짧은 한국어 값으로 반환하고, 근거 없는 항목은 빈 문자열로 둔다."
+INPUT_REVIEW_TASK_INSTRUCTIONS = (
+    "검색 에이전트의 입력 검토 단계다. 사용자가 적은 글과 서버가 이미 분석해 둔 사진 특징을 함께 읽고 검색 전에 문맥을 정리한다. "
+    "글 안의 '사진에서 확인한 특징:' 줄은 사진 분석에서 온 내용이므로 사진 특징과 같은 출처로 본다. "
+    "같은 의미의 색·표식·상황이 글 안에서나 글과 사진 사이에서 여러 번 나오면 하나로 합치고, 합친 항목을 duplicates에 짧게 적는다. "
+    "글과 사진이 털색·성별·표식처럼 같은 항목에서 서로 다른 값을 말하면 conflicts에 항목·글 값·사진 값을 적고, 최종 colors·sex·marks에는 글에 적힌 값을 쓴다. "
+    "사진은 글에 없는 항목만 보완한다. 사진 특징이 없거나 쓸 수 없다고 표시되면 글만으로 정리한다. "
+    "성별은 글에 직접 표현됐거나 사진 특징에 있을 때만 M·F로 반환한다. "
+    "정리한 글은 [털색], [특징], [상황], [기타]에 들어갈 짧은 한국어 값으로 반환하고 근거 없는 항목은 빈 문자열로 둔다. "
+    "장소·날짜·시간·이름·연락처는 새로 만들거나 바꾸지 말고 원문에 있는 그대로만 [상황]이나 [기타]에 옮긴다. "
+    "action은 검색에 큰 영향을 주는 털색이나 성별이 글과 사진에서 정면으로 어긋나 어느 쪽이 맞는지 사용자에게 확인해야 할 때만 ask로, 그 외에는 search로 한다. "
+    "ask이면 question에 사용자에게 물을 한 문장 질문을 쓰고, search이면 question은 빈 문자열로 둔다. "
+    "message에는 사용자에게 보여 줄 판단을 1~2문장으로 쓴다: 무엇을 합쳤고 무엇이 어긋났으며 어떤 기준으로 찾을지. 검토할 내용이 없으면 그렇다고 짧게 쓴다."
 )
 
 
@@ -85,8 +90,8 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-REFINEMENT_PROMPT_VERSION = "feature-refine-v2"
-REFINEMENT_SYSTEM_PROMPT = _build_system_prompt(REFINEMENT_TASK_INSTRUCTIONS)
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v1"
+INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
 class LlmError(RuntimeError):
@@ -180,55 +185,43 @@ class FeatureExtractor:
             prompt_version=PROMPT_VERSION,
         )
 
-    async def refine_description(self, description: str, image: bytes | None = None,
-                                 mime_type: str | None = None) -> RefinedDescriptionResult:
-        """Format source text and optional image in one multimodal invocation."""
-        source_text = description.strip()
-        if len(source_text) > 1000 or (not source_text and image is None):
+    async def review_input(self, description: str, photo: dict | None = None) -> InputReviewResult:
+        """검색 전 입력 검토: 글과 서버가 보관한 사진 분석 결과의 중복·모순·문맥을 한 번에 정리한다."""
+        source_text = (description or "").strip()
+        usable_photo = photo if photo and photo.get("suitable") else None
+        if len(source_text) > 1000 or (not source_text and usable_photo is None):
             raise LlmError("llm_request")
-        human = [{"type": "text", "text": "게시글의 기존 설명을 템플릿으로 정리하고 검색 특징도 구조화하세요.\n[기존 설명]\n" + (source_text or "(입력된 설명 없음)")}]
-        if image is not None and mime_type:
-            encoded = base64.b64encode(image).decode("ascii")
-            human.append({"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{encoded}", "detail": "high"}})
+        photo_text = json.dumps(
+            {k: usable_photo.get(k) for k in ("species", "breed", "colors", "sex", "marks")} if usable_photo
+            else "사진 특징 없음", ensure_ascii=False)
+        human = ("[사용자 글]\n" + (source_text or "(입력된 글 없음)") + "\n\n[사진 분석 특징]\n" + photo_text)
         response = await self._invoke_structured(
-            [("system", REFINEMENT_SYSTEM_PROMPT), ("human", human)],
-            RefinedDescriptionModelResponse,
+            [("system", INPUT_REVIEW_SYSTEM_PROMPT), ("human", human)],
+            InputReviewModelResponse,
         )
-        photo_usable = image is not None and response.photo_suitable
-        text_colors = list(dict.fromkeys(c for c in response.text_colors if c in ALLOWED_COLORS))
-        photo_colors = list(dict.fromkeys(c for c in response.photo_colors if c in ALLOWED_COLORS)) if photo_usable else []
-        text_marks = [m.strip()[:30] for m in response.text_marks if m.strip()][:6]
-        photo_marks = [m.strip()[:30] for m in response.photo_marks if m.strip()][:6] if photo_usable else []
-        text_sex = response.text_sex if response.text_sex in ("M", "F") else ""
-        photo_sex = response.photo_sex if photo_usable and response.photo_sex in ("M", "F") else ""
-        # Text from the notice wins within each category when visual and written evidence disagree.
-        photo_colors = [] if text_colors else photo_colors
-        photo_sex = "" if text_sex else photo_sex
-        photo_marks = [] if text_marks else photo_marks
-        features = {
-            "colors": text_colors or photo_colors,
-            "sex": text_sex or photo_sex,
-            "marks": text_marks or photo_marks,
-        }
-        # Source text wins each category; photo-derived values fill categories that the text does not mention.
+        colors = list(dict.fromkeys(c for c in response.colors if c in ALLOWED_COLORS))
+        marks = list(dict.fromkeys(m.strip()[:30] for m in response.marks if m.strip()))[:6]
+        sex = response.sex if response.sex in ("M", "F") else ""
         sections = (
             ("털색", response.fur_color),
             ("특징", response.features),
             ("상황", response.situation),
             ("기타", response.other),
         )
-        formatted = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
-        photo_features = {
-            "suitable": photo_usable,
-            "species": "", "breed": "", "breed_code": "",
-            "colors": photo_colors, "sex": photo_sex, "marks": photo_marks,
-            "reason_code": None if photo_usable else "appearance_unclear",
-        } if image is not None else None
-        return RefinedDescriptionResult(
-            description=formatted,
-            features=features,
-            photo_features=photo_features,
-            prompt_version=REFINEMENT_PROMPT_VERSION,
+        organized = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
+        question = response.question.strip()[:200]
+        # 질문할 내용이 비었으면 묻지 않고 찾는다(빈 질문으로 멈추지 않게).
+        action = "ask" if response.action == "ask" and question else "search"
+        return InputReviewResult(
+            organized_text=organized,
+            features={"colors": colors, "sex": sex, "marks": marks},
+            duplicates=[d.strip()[:40] for d in response.duplicates if d.strip()][:8],
+            conflicts=[{"item": c.item.strip()[:20], "text_value": c.text_value.strip()[:40],
+                        "photo_value": c.photo_value.strip()[:40]} for c in response.conflicts if c.item.strip()][:6],
+            action=action,
+            question=question if action == "ask" else "",
+            message=response.message.strip()[:300],
+            prompt_version=INPUT_REVIEW_PROMPT_VERSION,
         )
 
     async def analyze_photo(self, image: bytes, mime_type: str) -> PhotoAnalysisResult:

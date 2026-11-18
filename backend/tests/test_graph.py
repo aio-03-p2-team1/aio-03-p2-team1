@@ -86,6 +86,95 @@ def test_api_response_error_without_breed_code_still_fails():
     assert len(animal.calls) == 1
 
 
+class FakeReviewer:
+    """검색 전 입력 검토(review_input)를 흉내 낸다. 판단(바로 찾기/먼저 묻기)을 차례로 돌려준다."""
+
+    model = "fake-review"
+
+    def __init__(self, *actions, error=None):
+        self.actions = list(actions) or ["search"]
+        self.error = error
+        self.calls = []
+
+    async def review_input(self, description, photo=None):
+        from backend.agent.llm import LlmError
+        from backend.schemas.llm import InputReviewResult
+
+        self.calls.append((description, photo))
+        if self.error:
+            raise LlmError(self.error)
+        action = self.actions.pop(0) if len(self.actions) > 1 else self.actions[0]
+        return InputReviewResult(
+            organized_text="[털색]: 흰색\n[특징]: 빨간 목줄",
+            features={"colors": ["흰색"], "sex": "", "marks": ["빨간 목줄"]},
+            duplicates=["흰색(글과 사진)"],
+            conflicts=[{"item": "털색", "text_value": "흰색", "photo_value": "갈색"}] if action == "ask" else [],
+            action=action,
+            question="글에는 흰색, 사진에는 갈색으로 보여요. 어느 쪽이 맞나요?" if action == "ask" else "",
+            message="흰색이 글과 사진에 겹쳐 하나로 합쳤어요.",
+            prompt_version="input-review-v1",
+        )
+
+
+PHOTO = {"suitable": True, "species": "dog", "breed": "", "colors": ["흰색"], "sex": "", "marks": []}
+
+
+def test_input_review_runs_before_search_and_its_features_are_used():
+    reviewer = FakeReviewer("search")
+    animal = FakeAnimal(pages=[[api_item(1)]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    run = search(d, {"species": "dog", "region": "전체", "lost_date": START,
+                     "description": "사진에서 확인한 특징: 흰색\n흰색 강아지, 빨간 목줄"}, photo=PHOTO)
+    assert run["status"] == "completed"
+    assert reviewer.calls == [("사진에서 확인한 특징: 흰색\n흰색 강아지, 빨간 목줄", PHOTO)]
+    review = run["input_review"]
+    assert review["action"] == "search" and review["message"] and review["duplicates"] == ["흰색(글과 사진)"]
+    assert review["organized_text"].startswith("[털색]: 흰색") and review["photo_used"] is True
+    assert run["llm_features"]["colors"] == ["흰색"] and run["llm_features"]["marks"] == ["빨간 목줄"]
+    reviews = [c for c in run["tool_calls"] if c["tool"] == "input_review"]
+    assert reviews and reviews[0]["outcome"] == "ok" and reviews[0]["action"] == "search"
+    assert len(animal.calls) == 1
+
+
+def test_input_review_asks_before_search_once_per_thread():
+    reviewer = FakeReviewer("ask", "ask")
+    animal = FakeAnimal(pages=[[api_item(1)]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    criteria = {"species": "dog", "region": "전체", "lost_date": START, "description": "흰색 강아지"}
+    first = search(d, criteria, photo=PHOTO)
+    assert first["status"] == "awaiting_input"
+    assert first["questions"] == [{"field": "input_review", "message": "글에는 흰색, 사진에는 갈색으로 보여요. 어느 쪽이 맞나요?"}]
+    assert first["input_review"]["action"] == "ask" and first["input_review"]["conflicts"]
+    assert animal.calls == []  # 묻는 동안 공고를 조회하지 않는다
+    second = search(d, criteria, photo=PHOTO, thread_id=first["thread_id"])
+    assert second["status"] == "completed"  # 같은 대화에서는 다시 묻지 않고 글 기준으로 찾는다
+    assert second["input_review"]["action"] == "search" and second["input_review"]["question"] == ""
+    assert len(animal.calls) == 1
+
+
+def test_widen_follow_up_without_description_reuses_the_thread_text():
+    """넓히기 버튼은 바뀐 조건만 보낸다. 같은 대화의 글로 다시 검토하고 오류 없이 이어 찾는다(기존 다듬기 422 회귀)."""
+    reviewer = FakeReviewer("search")
+    animal = FakeAnimal(pages=[[api_item(1)]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    first = search(d, {"species": "dog", "region": "경기도", "lost_date": START, "description": "흰색 강아지, 빨간 목줄"})
+    second = search(d, {"region": "전체", "radius_step": 3}, thread_id=first["thread_id"])
+    assert second["status"] == "completed" and not second.get("error")
+    assert second["criteria"]["description"] == "흰색 강아지, 빨간 목줄"
+    assert reviewer.calls[-1][0] == "흰색 강아지, 빨간 목줄"
+
+
+def test_input_review_failure_is_reported_not_hidden():
+    d = deps(FakeAnimal(pages=[[api_item(1)]]))
+    d["llm"] = FakeReviewer(error="llm_timeout")
+    run = search(d, {"species": "dog", "region": "전체", "lost_date": START, "description": "흰색 강아지"})
+    assert run["status"] == "failed" and run["error"]["code"] == "llm_timeout"
+    assert [c["outcome"] for c in run["tool_calls"] if c["tool"] == "input_review"] == ["llm_timeout"]
+
+
 def test_invalid_dates_detected():
     d = deps()
     future = (date.today() + timedelta(days=3)).isoformat()

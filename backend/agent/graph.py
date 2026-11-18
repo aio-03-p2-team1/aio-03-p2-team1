@@ -132,10 +132,46 @@ async def context(state: SearchState, config) -> dict:
         "trace": ["context"],
     }
     # 사진 특징은 설명 글 LLM 추출과 별개로 넣는다(로컬 모드처럼 LLM 추출이 꺼져 있어도 반영).
-    if state.get("photo_features"):
-        update["llm_features"] = photo_store.merge_features(state.get("llm_features"), state.get("photo_features"))
+    photo = state.get("photo_features")
+    if photo:
+        update["llm_features"] = photo_store.merge_features(state.get("llm_features"), photo)
     llm = deps.get("llm")
-    if llm and criteria.get("description") and not state.get("features_precomputed"):
+    usable_photo = bool(photo and photo.get("suitable"))
+    if llm and hasattr(llm, "review_input") and (criteria.get("description") or usable_photo):
+        # 검색 에이전트의 입력 검토: 글과 사진 분석 특징의 중복·모순·문맥을 정리하고, 바로 찾을지 먼저 물을지 정한다.
+        started = time.perf_counter()
+        try:
+            review = await llm.review_input(criteria.get("description") or "", photo)
+        except LlmError as exc:
+            update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
+            update["tool_calls"] = [_call("input_review", {"model": llm.model}, exc.code, "글·사진 특징 검토")]
+            return update
+        ms = round((time.perf_counter() - started) * 1000)
+        features = dict(review.features)
+        if usable_photo and photo.get("breed") and not features.get("breed"):
+            features["breed"] = photo["breed"]
+        update["llm_features"] = features
+        action = review.action
+        already_asked = bool((state.get("agent_history") or {}).get("review_asked"))
+        if action == "ask" and already_asked:
+            # 같은 대화에서 한 번 물었으면 다시 묻지 않고 글을 기준으로 찾는다.
+            action = "search"
+        update["input_review"] = {
+            "source": "llm",
+            "action": action,
+            "message": review.message,
+            "question": review.question if action == "ask" else "",
+            "duplicates": review.duplicates,
+            "conflicts": review.conflicts,
+            "organized_text": review.organized_text,
+            "photo_used": usable_photo,
+            "prompt_version": review.prompt_version,
+        }
+        if action == "ask":
+            update["questions"] = [{"field": "input_review", "message": review.question}]
+        update["tool_calls"] = [_call("input_review", {"model": llm.model}, "ok", "글·사진 특징 검토", ms=ms,
+                                      action=action, duplicates=len(review.duplicates), conflicts=len(review.conflicts))]
+    elif llm and criteria.get("description"):
         started = time.perf_counter()
         try:
             features = await llm.extract(criteria["description"])
@@ -143,7 +179,7 @@ async def context(state: SearchState, config) -> dict:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("llm_feature_extract", {"model": llm.model}, exc.code, "자유 서술에서 특징 추출")]
             return update
-        update["llm_features"] = photo_store.merge_features(features.model_dump(), state.get("photo_features"))
+        update["llm_features"] = photo_store.merge_features(features.model_dump(), photo)
         update["tool_calls"] = [
             _call(
                 "llm_feature_extract",
@@ -175,7 +211,12 @@ def user_answer_features(features: dict[str, Any] | None, criteria: dict[str, An
 
 
 def route_after_context(state: SearchState) -> str:
-    return "finalize" if state.get("error") else "breed"
+    if state.get("error"):
+        return "finalize"
+    # 입력 검토가 글과 사진의 큰 모순을 찾아 확인이 필요하다고 판단하면 검색 전에 묻는다.
+    if (state.get("input_review") or {}).get("action") == "ask":
+        return "ask"
+    return "breed"
 
 
 async def normalize_breed(state: SearchState, config) -> dict:
@@ -713,7 +754,7 @@ def build_graph(entry: str = "analyze"):
     g.add_edge(START, entry)
     g.add_conditional_edges("analyze", route_after_analyze, {"ask": "ask", "context": "context"})
     g.add_edge("ask", END)
-    g.add_conditional_edges("context", route_after_context, {"breed": "breed", "finalize": "finalize"})
+    g.add_conditional_edges("context", route_after_context, {"breed": "breed", "ask": "ask", "finalize": "finalize"})
     g.add_conditional_edges("breed", lambda s: "finalize" if s.get("error") else "plan", {"plan": "plan", "finalize": "finalize"})
     g.add_conditional_edges("plan", route_after_plan, {"validate": "validate", "execute": "execute"})
     g.add_edge("execute", "radius")

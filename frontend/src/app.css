@@ -82,16 +82,15 @@ button[disabled]{opacity:.65;cursor:progress}
 .search-fields-v2 .form-pair label,.search-fields-v2 .search-description{margin-top:0}
 .search-description-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .search-description-head label{color:#59554e;font-size:12px;font-weight:700}
-.refine-button{display:inline-flex;align-items:center;gap:6px;padding:5px 9px;border:1px solid #d8d6d1;border-radius:7px;background:#d5d5d599;color:#625f5a;font-size:11px;font-weight:700;cursor:pointer;transition:background .15s ease,color .15s ease}
-.refine-button:hover:not(:disabled){background:#c9c8c3;color:#393733}
-.refine-button:disabled{opacity:.65;cursor:wait}
-.refine-button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
-.description-wrap{position:relative;isolation:isolate;display:flex;flex:1;min-height:120px}
+.description-wrap{position:relative;display:flex;flex:1;min-height:120px}
 .description-wrap textarea{flex:1}
-.description-wrap.is-refining textarea{color:transparent;text-shadow:0 0 8px #777;resize:none}
-.refine-shimmer{position:absolute;z-index:1;inset:1px;overflow:hidden;border-radius:7px;pointer-events:none;background:repeating-linear-gradient(135deg,#a8a8a8eb 0 16px,#c3c3c3ee 16px 34px,#adadaddf 34px 48px);}
-.refine-shimmer::after{content:"";position:absolute;inset:-60% auto -60% -45%;width:35%;transform:skewX(-20deg);background:linear-gradient(90deg,transparent,#f6f6f655,transparent);animation:refine-sweep 1.15s ease-in-out infinite}
-@keyframes refine-sweep{to{left:125%}}
+.input-review{margin:0 0 16px;padding:14px 16px;border:1px solid #e3dccf;border-radius:12px;background:#fbf8f1;color:#4f4940;font-size:14px;line-height:1.6}
+.input-review-title{margin:0}
+.input-review-title strong{margin-right:6px;color:#7a5d1f}
+.input-review-question{margin:6px 0 0;font-weight:700;color:#8a4b2a}
+.input-review ul{margin:6px 0 0;padding-left:18px;color:#6a6358;font-size:13px}
+.input-review-organized{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px;margin-top:10px}
+.input-review-organized pre{flex:1 1 280px;margin:0;padding:10px 12px;border:1px solid #ece5d8;border-radius:9px;background:#fff;font:inherit;font-size:13px;white-space:pre-wrap}
 .field-block{display:flex;flex-direction:column;gap:6px;min-width:0}
 .field-label{color:#59554e;font-size:12px;font-weight:700}
 .search-fields-v2 .field-block>label.field-label{display:flex;flex-direction:column;gap:6px}
