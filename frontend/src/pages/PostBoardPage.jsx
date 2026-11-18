@@ -76,9 +76,12 @@ export default function PostBoardPage() {
   }, [user])
 
   return (
-    <main className="page-main board-page">
+    <main className="page-main board-page post-board-page">
       <div className="page-heading board-heading">
-        <h1>실종 정보 게시판</h1>
+        <div className="board-title">
+          <h1>실종 정보 게시판</h1>
+          <p>실종 정보를 등록하고 조회할 수 있어요.</p>
+        </div>
         <button type="button" className="primary-button" onClick={openForm} aria-expanded={formOpen}>
           실종 정보 등록
         </button>
