@@ -40,7 +40,7 @@ class SearchState(TypedDict, total=False):
 
     memory_used: dict[str, Any]
     llm_features: dict[str, Any]
-    features_precomputed: bool  # 단일 텍스트·사진 정리 호출 결과를 context 에서 재사용
+    input_review: dict[str, Any] | None  # 검색 전 입력 검토(글·사진 특징의 중복·모순 정리, 판단 멘트, 바로 찾기/먼저 묻기). context 가 채움
     photo_features: dict[str, Any] | None  # 서버가 보관한 사진 분석 결과(photo_store). 사진을 받았는지 판단은 이 값으로만
     semantic_scores: dict[str, float] | None
     ranking_method: str

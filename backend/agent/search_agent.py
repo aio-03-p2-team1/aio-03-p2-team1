@@ -43,7 +43,7 @@ from backend.schemas.common import Color
 
 log = logging.getLogger("dasimanna.agent")
 
-AGENT_PROMPT_VERSION = "search-agent-v5"
+AGENT_PROMPT_VERSION = "search-agent-v6"  # v6: 읽기 정보에 검색 전 입력 검토(중복·모순) 추가
 MAX_STEPS = 4  # LLM 걸음(도구 선택) 최대 횟수. 흔한 흐름은 수정 1번 + 종료 1번 = 2걸음
 MAX_RERUNS = 2  # 조건을 고쳐 다시 찾는 최대 횟수
 MAX_RESEARCHES = 1  # 최초 조회 외 실제 공고 API 재조회 최대 횟수(통신 재시도와 구분)
@@ -209,6 +209,9 @@ def read_criteria(state: dict[str, Any]) -> dict[str, Any]:
         "사용자가_고른_조건": sorted(k for k, o in ((state.get("context_summary") or {}).get("origin") or {}).items()
                                 if o in ("request", "session") and k in USER_CONDITION_KEYS and c.get(k) not in (None, "")),
         "재질문_답변": answered_values(state),
+        # 검색 전 입력 검토에서 합친 중복과 글·사진 모순(최종 특징은 글 기준). 같은 모순을 다시 묻지 않는다.
+        "입력_검토": {k: v for k, v in (state.get("input_review") or {}).items()
+                    if k in ("duplicates", "conflicts") and v},
     }
 
 

@@ -18,7 +18,7 @@ from backend.agent.graph import GRAPH, REVIEW_GRAPH
 from backend.normalization import criteria as crit
 from backend.agent.search_cache import condition_key, review_cache_key
 from backend.agent.embeddings import DIMENSIONS
-from backend.agent.llm import PROMPT_VERSION, REFINEMENT_PROMPT_VERSION
+from backend.agent.llm import INPUT_REVIEW_PROMPT_VERSION, PROMPT_VERSION
 from backend.agent.radius import RADIUS_VERSION
 from backend.agent.search_agent import AGENT_PROMPT_VERSION
 from backend.errors import ApiError
@@ -29,7 +29,7 @@ RUN_FIELDS = (
     "reflection_enabled", "reflection_count", "reflections", "retry_count", "scope", "error", "trace",
     "data_source",
     "ranking_method", "cache_key", "cache_hit", "snapshot_id", "radius",
-    "confidence", "agent_request", "agent_decision", "photo_features",
+    "confidence", "agent_request", "agent_decision", "photo_features", "input_review",
 )
 # 에이전트 요청은 대화(thread)마다 다르므로(이미 물은 것, '모르겠어요') 캐시에 넣지 않는다.
 AGENT_FIELDS = ("agent_request", "agent_decision")
@@ -56,6 +56,8 @@ def agent_history(thread: dict[str, Any], declined: list[str] | None,
         "sex": criteria.get("sex") == RELAX_VALUE,
     }
     confirmed = set(history.get("confirmed_fields") or []) | {f for f in asked if changed.get(f)}
+    # 입력 검토가 글·사진 모순을 한 번 물었으면 같은 대화에서는 다시 묻지 않는다.
+    history["review_asked"] = bool(history.get("review_asked")) or "input_review" in asked
     relaxed = set(history.get("relaxed_fields") or [])
     if criteria.get("sex") == RELAX_VALUE:
         relaxed.add("sex")
@@ -73,7 +75,8 @@ def next_history(history: dict[str, Any], request: dict[str, Any] | None) -> dic
     history = {"photo_requests": history.get("photo_requests", 0), "info_requests": history.get("info_requests", 0),
                "asked_fields": list(history.get("asked_fields") or []), "declined": list(history.get("declined") or []),
                "confirmed_fields": list(history.get("confirmed_fields") or []),
-               "relaxed_fields": list(history.get("relaxed_fields") or [])}
+               "relaxed_fields": list(history.get("relaxed_fields") or []),
+               "review_asked": bool(history.get("review_asked"))}
     if request and request["type"] == "photo":
         history["photo_requests"] += 1
     elif request and request["type"] == "info":
@@ -111,19 +114,17 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "trace": [],
         "agent_history": history,
         "photo_features": request.get("photo"),  # 서버가 보관한 사진 분석 결과(없으면 None)
-        "llm_features": request.get("precomputed_features") or {},
-        "features_precomputed": bool(request.get("features_precomputed")),
+        "llm_features": {},
     }
     # 에이전트 루프(걸음 최대 4, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
-    # 게시글로 찾기(다듬기 요청)는 이미 허용된 모델 호출 한 번을 썼으므로 검색 에이전트 LLM 루프를 돌리지 않는다.
-    graph_deps = {**deps, "search_agent": None} if request.get("features_precomputed") else deps
+    graph_deps = deps
     config = {"configurable": graph_deps, "recursion_limit": 80}
     cache = deps.get("search_cache")
     key = condition_key(owner, normalized, source=deps["animal"].source,
                         model={"embedding": getattr(deps.get("embedder"), "model", "sample"), "dimensions": DIMENSIONS,
                                "features": getattr(deps.get("llm"), "model", None),
-                               "feature_prompt": REFINEMENT_PROMPT_VERSION if request.get("features_precomputed") else PROMPT_VERSION,
-                               "precomputed_features": bool(request.get("features_precomputed")),
+                               # 입력 검토(글·사진 정리)를 쓰면 그 프롬프트 판이, 아니면 특징 추출 프롬프트 판이 결과를 정한다.
+                               "feature_prompt": INPUT_REVIEW_PROMPT_VERSION if hasattr(deps.get("llm"), "review_input") else PROMPT_VERSION,
                                "review": AGENT_PROMPT_VERSION if graph_deps.get("search_agent") else None,
                                # 성별 조건 빼기에 동의한 대화는 설명의 성별 특징도 쓰지 않아 결과가 다르다.
                                "relaxed": history.get("relaxed_fields") or [],

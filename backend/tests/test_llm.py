@@ -6,6 +6,7 @@ import pytest
 
 from backend.agent.llm import (
     COLOR_VALUES_TEXT,
+    INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
     FeatureExtractor,
@@ -56,7 +57,7 @@ def test_extract_keeps_multiple_colors_and_filters_duplicates():
     assert out.sex == "F" and out.marks == ["목줄"]
     assert client.messages[0][0] == "system" and client.messages[1][1] == "갈색과 흰색 푸들, 빨간 목줄"
     assert COLOR_VALUES_TEXT in client.messages[0][1]
-    assert "각 색상을 모두 한 번씩 반환한다" in client.messages[0][1]
+    assert "각 색을 별도로 반환한다" in client.messages[0][1]
     assert client.schema_options[1] == {"method": "json_schema", "strict": True, "include_raw": True}
 
 
@@ -84,27 +85,53 @@ def test_photo_analysis_uses_injected_langchain_client():
     assert result.suitable and result.species == "dog"
     assert result.colors == ["갈색", "흰색"]
     assert COLOR_VALUES_TEXT in client.messages[0][1]
-    assert "각 색상을 모두 별도 항목으로 반환하고" in client.messages[0][1]
+    assert "각 색을 별도로 반환한다" in client.messages[0][1]
     image_part = client.messages[1][1][1]
     assert image_part["type"] == "image_url"
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
-def test_refine_description_formats_template_and_extracts_text_photo_once():
+def review_payload(**overrides):
     payload = {
-        "fur_color": "흰색", "features": "갈색 귀와 짧은 꼬리", "situation": "서울에서 실종",
-        "other": "", "text_colors": ["흰색"], "text_sex": "F", "text_marks": ["빨간 목줄"],
-        "photo_suitable": True, "photo_colors": ["갈색"], "photo_sex": "", "photo_marks": ["짧은 꼬리"],
+        "fur_color": "흰색", "features": "빨간 목줄, 짧은 꼬리", "situation": "11월 12일 수원 정자동에서 실종", "other": "",
+        "colors": ["흰색", "갈색"], "sex": "F", "marks": ["빨간 목줄", "빨간 목줄", "짧은 꼬리"],
+        "duplicates": ["흰색(글과 사진)"],
+        "conflicts": [{"item": "털색", "text_value": "흰색", "photo_value": "갈색"}],
+        "action": "search", "question": "", "message": "흰색은 글과 사진에 겹쳐 하나로 합쳤고, 털색은 글 기준으로 찾을게요.",
     }
-    client = FakeChatClient(payload)
-    result = asyncio.run(extractor(client).refine_description("흰색, 암컷, 빨간 목줄", b"image", "image/jpeg"))
-    assert result.description == "[털색]: 흰색\n[특징]: 갈색 귀와 짧은 꼬리\n[상황]: 서울에서 실종"
-    assert result.features == {"colors": ["흰색"], "sex": "F", "marks": ["빨간 목줄"]}
-    assert result.photo_features["suitable"] is True
-    assert result.photo_features["colors"] == [] and result.photo_features["marks"] == []
-    assert len([m for m in client.messages if m[0] == "human"]) == 1
-    assert "공고 텍스트 값만 최종 특징" in client.messages[0][1]
-    assert client.messages[1][1][1]["type"] == "image_url"
+    payload.update(overrides)
+    return payload
+
+
+def test_review_input_merges_text_and_photo_features_in_one_call():
+    client = FakeChatClient(review_payload())
+    photo = {"suitable": True, "species": "dog", "breed": "", "colors": ["갈색"], "sex": "", "marks": ["짧은 꼬리"]}
+    result = asyncio.run(extractor(client).review_input("사진에서 확인한 특징: 갈색\n흰색 암컷, 빨간 목줄", photo))
+    assert result.organized_text == "[털색]: 흰색\n[특징]: 빨간 목줄, 짧은 꼬리\n[상황]: 11월 12일 수원 정자동에서 실종"
+    assert result.features == {"colors": ["흰색", "갈색"], "sex": "F", "marks": ["빨간 목줄", "짧은 꼬리"]}
+    assert result.duplicates == ["흰색(글과 사진)"]
+    assert result.conflicts == [{"item": "털색", "text_value": "흰색", "photo_value": "갈색"}]
+    assert result.action == "search" and result.question == ""
+    assert result.prompt_version == INPUT_REVIEW_PROMPT_VERSION
+    # 사진은 다시 보내지 않고, 서버가 보관한 사진 분석 특징을 글과 함께 한 번에 보낸다.
+    human = client.messages[1][1]
+    assert isinstance(human, str) and "[사용자 글]" in human and "[사진 분석 특징]" in human and "짧은 꼬리" in human
+    assert "최종 colors·sex·marks에는 글에 적힌 값을 쓴다" in client.messages[0][1]
+    assert "새로 만들거나 바꾸지 말고" in client.messages[0][1]
+
+
+def test_review_input_without_question_does_not_stop_to_ask():
+    client = FakeChatClient(review_payload(action="ask", question="  "))
+    result = asyncio.run(extractor(client).review_input("갈색 강아지", None))
+    assert result.action == "search" and result.question == ""
+    assert "사진 특징 없음" in client.messages[1][1]
+
+
+def test_review_input_rejects_empty_input_without_calling_model():
+    client = FakeChatClient(review_payload())
+    with pytest.raises(LlmError) as exc:
+        asyncio.run(extractor(client).review_input("  ", {"suitable": False}))
+    assert exc.value.code == "llm_request" and client.messages is None
 
 
 def test_color_value_template_is_rendered_into_both_prompts():

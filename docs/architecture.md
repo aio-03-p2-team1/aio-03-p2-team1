@@ -31,7 +31,7 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | --- | --- | --- |
 | `/` 전체 공고 | `img/dasimanna-cards-board.html` | `GET /notices`, `GET /regions` |
 | `/notices/:id` 공고 상세 | `img/dasimanna-cards-detail.html` | `GET /notices/{id}` 또는 `GET /runs/{run_id}` + 위치 API. '구조 위치' 옆 🗺️ 버튼은 구조 위치 글(`happen_place`)을 브라우저 카카오 SDK(주소 검색 → 장소 검색)로 찾아 작은 지도 창에 표시(좌표 저장 안 함, 못 찾으면 카카오맵 링크만). 창 밖 클릭·Esc 로 닫힘 |
-| `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches/refine`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 텍스트 다듬기는 원문과 선택 사진을 한 번에 모델에 전달하고 템플릿 설명·검색 특징을 사용자별 Redis 임시 저장소에 둔다. 다음 검색은 `refinement_id`를 보내 그래프의 특징 재추출 호출을 건너뛴다. 게시판에서 넘어온 글은 다듬은 텍스트로 자동 검색한다. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
+| `/search` 우리 아이 찾기(로그인) | `img/dasimanna-cards-search.html` | `POST /photo-analysis`, `POST /searches`, `GET /runs`, `GET /runs/{id}`. 글과 사진 특징의 중복·모순 정리는 검색 그래프의 입력 검토(`context` 노드, `input_review`)가 하고, 결과 위 '에이전트 입력 검토' 카드에 판단·합친 중복·어긋난 정보와 정리한 글([정리한 글로 입력란 바꾸기])을 보여 준다. 게시판에서 넘어온 글은 사진 분석 후 바로 검색한다. 실종 지역은 카카오 지도 모달에서 고른 위치의 시·도를 `/regions` 공식 이름으로 맞춰 `region` 으로, 주소를 `lost_place` 로 보낸다(브라우저 카카오 SDK, `VITE_KAKAO_JS_KEY`) |
 | `/my` 마이페이지(로그인) | `img/dasimanna-cards-my.html` | `GET /auth/me`(내 정보: 이름·이메일), `GET /runs?limit=50`(검색 기록, 화면에서 5개씩 페이지 나눔), `GET /posts/mine`(내가 쓴 게시글). 기록을 누르면 `/search?run=<run_id>` 로 이동해 `GET /runs/{id}` 결과를 다시 보여 준다, `GET /posters`(내가 만든 전단지, 누르면 `/posters/{id}` 상세) |
 | `/board` 실종 정보 게시판 | `img/dasimanna-cards-board.html`(실종 정보 게시판 영역) | `GET /posts?species&region&days&page`(회원 글 + 공공데이터 분실 신고, 21건씩), `GET /regions`, 등록 `POST /posts`(로그인). 읽기는 공개 |
 | `/board/:postId` 실종 정보 상세 | `img/dasimanna-cards-post-detail.html` | `GET/PATCH /posts/{id}`, `GET /posts/{id}/photo`, 삭제 `DELETE /posts/{id}`(작성자). 본문 아래 음성(최대 3개)과 댓글: 음성 `POST/GET/DELETE /posts/{id}/voices...`, 댓글 `GET/POST /posts/{id}/comments`, `DELETE /posts/{id}/comments/{comment_id}` |
@@ -47,8 +47,9 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 flowchart TD
   S([START]) --> A[analyze<br/>요청 분석·입력 검증·세션 조건 병합]
   A -- 필수 누락·입력 오류 --> Q[ask<br/>추가 질문]
-  A -- 충분 --> C[context<br/>장기 기억·LLM 특징 추출]
+  A -- 충분 --> C[context<br/>장기 기억·입력 검토(글·사진 중복·모순 정리)]
   C -- LLM 오류 --> F
+  C -- 털색·성별 모순 확인 필요 --> Q
   C --> B[breed<br/>규칙 우선·DB 도구 AI 품종 정규화]
   B --> P[plan<br/>지역 코드 매핑·조회 계획]
   P -- 인자 매핑 실패 --> V
@@ -85,7 +86,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | `analyze` | `request`(+세션 조건) | `criteria`, `missing`, `input_errors`, `questions`, `context_summary.origin` | 누락·오류 → `ask`, 아니면 `context` |
 | `ask` | `criteria`, `raw_items` | `status=awaiting_input`, `scope` | END |
-| `context` | `criteria`, `profile_id` | 기억으로 선택 항목 보완, `memory_used`, `llm_features`, `error`(LLM) | 오류 → `finalize`, 아니면 `plan` |
+| `context` | `criteria`, `profile_id`, `photo_features` | 기억으로 선택 항목 보완, `memory_used`, 입력 검토 `input_review`·`llm_features`(글 우선), 확인 질문 `questions`, `error`(LLM) | 오류 → `finalize`, 확인 필요(대화당 1회) → `ask`, 아니면 `breed` |
 | `plan` | `criteria`, `pending_fix` | `criteria.region_code`, `plan`, `issues(arg_mapping)` | 매핑 실패 → `validate`, 아니면 `execute` |
 | `execute` | `criteria`, 한도 설정 | `raw_items`, `total_count`, `pages_fetched`, `retry_count`, `error` | `radius` |
 | `research` | 서버가 검증한 `agent_search_plan`, 이전 조회·후보, 남은 도구 예산 | 성공 시 원본·조회 조건·페이지·범위 갱신, 실패 시 이전 조건/후보 보존·오류 기록 | 성공 → `radius`, 실패 → `finalize` |
@@ -112,7 +113,7 @@ flowchart TD
 | 확신 낮음·미조회 페이지 | 기존 에이전트가 `search_notices(next_page)` 선택 → 같은 조회 조건(품종 필터 포함)의 다음 페이지를 실제 공고 API로 최대 1회 재조회. 품종 필터 해제 재조회(`relax_breed`)는 v5에서 없앰 | `agent_decision.log`, `researches`, `scope` |
 | 다른 지역 조회 필요 | `search_notices(widen_region)`은 `ask`로 종료. 사용자가 전체 지역 버튼을 누르면 같은 세션의 새 요청으로 조회 | `questions.field=region`, 사용자 후속 `criteria.region=all` |
 | 품종 코드 선택 | 코드 목록에서 품종명을 검증하고 공공 API에 `kind=<breed_code>` 전달, 응답 품종명도 확인 | `criteria.breed_code`, `kind` |
-| live 모드 + 자유 서술 있음 | LangChain `ChatOpenAI` 기반 `llm_feature_extract` (특징만 구조화). `refinement_id`가 있으면 저장된 단일 호출 결과를 재사용 | 모델·프롬프트 버전 |
+| live 모드 + 자유 서술 또는 쓸 수 있는 사진 특징 | `input_review`: 글과 서버가 보관한 사진 분석 특징을 한 번의 구조화 호출로 검토(중복 합치기·모순 기록·[털색]/[특징]/[상황]/[기타] 정리·판단 멘트). 최종 특징은 글 우선. 털색·성별이 정면으로 어긋나면 검색 전에 `ask`(같은 대화에서 한 번만) | `input_review`, `tool_calls[].input_review` |
 | LLM 설정 + 정상 조회·정렬 완료(빈 결과·캐시 적중 포함) | `agent`가 결과 검토 후 수정·질문·확정 선택. 확신 충분이면 사진·정보 요청은 서버가 거부 | `agent_decision`, `tool_calls[].agent_*` |
 | 결과 0건 + 에이전트가 `finish` + 더 넓힐 지역·반경이 있음(`empty_narrow`·`empty_radius`) | 판단을 기록하고 `validate`로 돌아가 기존 성찰 질문(지역·반경 넓히기 동의)으로 끝낸다. 지역 전체처럼 넓힐 범위가 없으면 0건 완료 | `agent_decision.empty_fallback`, `questions` |
 | 실종 위치(`lost_place`) + 카카오 키 + 실종 14일 이내 | `kakao_geocode_regions`: 실종 위치(좌표가 없을 때)·공고 관할 시군구·구조 장소 읍면동 좌표(성공만 캐시, 검색당 신규 80건 상한) | 반경 km·요청·캐시 수 |
@@ -131,17 +132,13 @@ sequenceDiagram
   participant LLM as LangChain OpenAI
   participant AN as 구조동물 API
   participant K as 카카오
-  U->>API: 조건 입력 또는 텍스트 다듬기
-  opt 텍스트 다듬기(원문 해시로 동시 요청 잠금)
-    API->>LLM: 설명 텍스트 + 선택 사진, 단일 구조화 호출
-    LLM-->>API: [털색]/[특징]/[상황]/[기타] + 검색 특징
-    API-->>U: 템플릿 텍스트 + refinement_id
-  end
-  API->>G: run_search(owner, criteria, thread_id)
+  U->>API: 조건 입력(+ 사진 분석 번호)
+  API->>G: run_search(owner, criteria, thread_id, photo)
   G->>G: analyze (누락이면 질문 후 종료)
-  opt refinement_id 가 없음
-    G->>LLM: ChatOpenAI 서술 → {colors, sex, marks} (JSON)
-    LLM-->>G: 특징(품종은 별도 breed 노드에서 정규화)
+  G->>LLM: 입력 검토: 글 + 사진 분석 특징 → 정리 글·{colors, sex, marks}·중복·모순·판단(JSON)
+  LLM-->>G: 검토 결과(품종은 별도 breed 노드에서 정규화)
+  opt 털색·성별 모순으로 확인 필요(대화당 1회)
+    G-->>API: ask(questions.field=input_review)
   end
   G->>AN: sido_v2 (지역 코드)
   G->>AN: abandonmentPublic_v2 page 1..N
@@ -164,7 +161,7 @@ sequenceDiagram
 | `missing` / `input_errors` / `questions` | 누락·오류·질문 | list | [] | analyze, reflect | run, thread |
 | `memory_used` | 장기 기억에서 채운 값 | dict | {} | context | run |
 | `llm_features` | LLM 추출 특징 + 쓸 만한 사진의 특징(`photo_store.merge_features`) | dict | — | context, agent_tools | run |
-| `features_precomputed` | 다듬기 단일 호출 결과를 context가 재사용하는지 표시 | bool | runner | context | — |
+| `input_review` | 검색 전 입력 검토 결과(`action` search\|ask, `message`, `question`, `duplicates`, `conflicts`, `organized_text`, `photo_used`, `prompt_version`) | dict \| None | — | context | run |
 | `photo_features` | 서버가 보관한 사진 분석 결과(`suitable`, 종류·품종·털색·성별·특징). 사진을 받았는지 판단은 이 값으로만 | dict \| None | 요청 `photo_analysis_id` | runner | run |
 | `context_summary` | 값 출처, 모델 입력 필드 | dict | — | analyze, context | run |
 | `plan` | 조회 계획 | list | — | plan | run |
@@ -193,15 +190,13 @@ sequenceDiagram
 
 ## 5. 기억·컨텍스트
 
-다듬기 결과를 전달한 게시글 검색은 `features_precomputed=true`로 특징 재추출과 선택형 검색 에이전트를 생략한다. 텍스트·사진 정리 호출 한 번으로 끝내기 위한 제한이며, 나머지 검색 흐름은 기존 에이전트 동작을 유지한다.
-
 - 적용 순서: 현재 요청 → 같은 세션(`thread` 문서) → 장기 기억(`memory` 문서, 선택 특징만) → 기본값. 출처는 `context_summary.origin` 에 남긴다.
 - 장기 기억은 사용자가 `PUT /memory` 로 확인한 특징만 저장한다. 검색 범위(종류·지역·기간)는 저장하지 않는다. LLM 추정값은 저장하지 않는다.
 - 특징 추출 모델 입력은 자유 서술(최대 1,000자)이다. 검색 검토 모델에는 원문·현재 특징·단계별 건수·상위 후보 요약도 전달한다. 공고 번호·날짜·주소·연락처는 후보 요약에서 제외하며 이메일·키는 넣지 않는다.
 - 체크포인트: 한 요청 안에서 그래프가 끝까지 실행되고, 추가 질문 상태는 `thread` 문서에 저장되므로 재시작 후 같은 `thread_id` 로 이어 간다.
 - 요약 전략(토큰 예산·요약 임계값)은 **미구현**. 현재 LLM 입력은 단일 서술이라 요약이 필요하지 않다. 대화형 입력을 늘리면 추가한다.
 - 특징·사진 분석은 `ChatOpenAI`, 임베딩은 `OpenAIEmbeddings`를 사용한다. 각 어댑터 생성자는 LangChain 호환 클라이언트를 선택적으로 받아 테스트에서 모의 클라이언트를 주입할 수 있다. 기본 런타임은 API 키와 timeout으로 실제 LangChain 클라이언트를 구성한다.
-- `POST /searches/refine`은 원문 SHA-256 해시와 Redis NX 잠금으로 같은 사용자·원문의 동시 중복 처리를 막는다. 설명과 선택 사진은 한 번의 구조화 LLM 호출로 템플릿과 검색 특징을 만들며, 공고 텍스트가 사진과 충돌하면 텍스트 값을 우선한다. 결과는 사용자 한정 1시간 저장 후 `refinement_id`로 검색에 전달한다. 사진 취득·검증에 실패하면 설명만 같은 호출에 전달하고, 검색 그래프는 저장된 특징을 재사용해 다시 추출하지 않는다.
+- 입력 검토(`input_review`)는 별도 API·임시 저장 없이 검색 그래프의 `context` 노드에서 실행한다. 모델 입력은 사용자 글(최대 1,000자)과 서버가 보관한 사진 분석 특징(종·품종·털색·성별·표식)뿐이며 사진을 다시 보내지 않는다. 장소·날짜·이름·연락처는 원문에 있는 그대로만 옮기고 새로 만들지 않는다. 검토 결과로 검색하더라도 검색 에이전트(결과 검토)는 그대로 실행하며, 에이전트 읽기 정보에 `입력_검토`(합친 중복·모순)를 넣는다(search-agent-v6). 검토 호출이 실패하면 기존 특징 추출 실패와 같이 오류로 끝낸다(샘플·추정으로 대체하지 않음).
 - 모델 입출력 규격은 `backend/schemas/llm.py`, HTTP 요청·응답 규격은 `backend/schemas/api.py`의 Pydantic 모델로 정의한다. LLM 응답은 `with_structured_output(..., method="json_schema", strict=True)`로 생성한 뒤 검증하고, 사진 분석 결과는 HTTP 응답 모델로 변환할 때 사용자 안내 문구를 구성한다. 그래프 상태·HTTP 응답 경계에서만 dict로 직렬화한다.
 
 ## 5.1 LangSmith 추적
@@ -255,7 +250,6 @@ flowchart LR
 | `GET /notices` · `GET /notices/{id}` | 없음 | `animal_*`, `notice_not_cached` (화면 설계로 추가한 조회 전용 경로) |
 | `POST /auth/register` · `login` · `GET /auth/me` · `POST /auth/logout` | 쿠키 | `email_taken`, `invalid_credentials`, `login_rate_limited`, `auth_unavailable` |
 | `POST /searches` | 필요 | `not_authenticated`, `invalid_request` |
-| `POST /searches/refine` | 필요 | `text_refinement_not_configured`, `text_refinement_in_progress`(409), `text_refinement_rate_limited`(429), `llm_*` |
 | `POST /photo-analysis` | 필요 | `photo_analysis_not_configured`, `photo_analysis_rate_limited`, `invalid_photo`, `photo_too_large`, `photo_too_many_pixels`, `unsupported_photo_format`, `photo_not_found`(404), `photo_source_not_allowed`, `photo_fetch_failed`, `lost_board_unavailable`(503), `llm_*` |
 | `GET /runs` · `GET /runs/{id}?page=1&page_size=20` | 필요(소유자) | `run_not_found`, `invalid_page`, `search_cache_unavailable` |
 | `GET /runs/{id}/candidates/{cid}` | 필요(소유자) | `candidate_not_found` |
@@ -277,7 +271,7 @@ flowchart LR
 
 전단지 목록 `GET /posters`는 로그인 사용자 소유의 DB 문서만 조회해 `items=[{id,title,pet_name,template_id,template_name,lost_place,photo_asset_id,updated_at}]`, `limit=5`를 반환한다. 마이페이지에서 `/poster?edit=<id>`로 바로 편집기를 열며, 삭제 전 확인 팝업을 표시한다. 신규 저장은 백엔드가 DB에서 해당 사용자의 `kind=poster` 문서를 조회해 5개 이상이면 `422 poster_limit`으로 거부한다. 기존 문서 수정에는 개수 제한을 적용하지 않으며 삭제 후 신규 저장할 수 있다.
 
-실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 음성은 게시글 소유자만 추가·삭제할 수 있고 게시글당 3개·파일당 10 MiB·60초로 제한한다. 서버는 Mutagen으로 형식과 재생 시간을 검증하고 변환·압축하지 않는다. 허용 형식은 MP3·M4A/MP4·WAV·OGG Vorbis/Opus이며 파일명은 UUID로 생성한다. Supabase에서는 private Storage bucket(`post-audio`, `backend/config.py`의 코드 상수)에 바이너리를 저장하고, SQLite에서는 `POST_AUDIO_LOCAL_DIR`에 둔다. 게시글 문서에는 음성 ID·저장 키·형식·크기·길이·엔티티화된 설명만 저장한다. 설명은 API 출력 때 복원한 뒤 React 텍스트로 렌더링한다. 음성 섹션은 상세 내용과 댓글 사이에 표시한다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다. 상세 화면의 [이 정보로 구조 공고 찾기]는 글의 종류·시·도·실종 주소·날짜 및 품종코드(`form.breed_code`, 품종 셀렉트), 털색·성별·나이·특징(설명 글 앞에 붙임)으로 검색 화면을 미리 채운다(`frontend/src/lib/postSearch.js`). 검색 화면에 들어오면 텍스트와 선택 사진을 `/searches/refine`에 한 번 전달해 템플릿을 입력란에 표시하고 자동 검색한다. 사진 취득·검증 실패 시 설명만 다듬어 검색하고, 결과 특징은 `refinement_id`로 서버에서 재사용해 검색 그래프가 재추출하지 않는다. 상태는 로그인 화면을 거쳐도 이어지도록 sessionStorage 로 한 번만 전달한다. 분실 신고의 지역(`orgNm`)은 첫 낱말(시·도)만 쓴다. 그 오른쪽 [전단지 만들기](내가 쓴 회원 글에만 보임)는 글의 제목·이름·종류·품종·실종 날짜·장소·특징을 전단지 문구로 바꾸고(`frontend/src/lib/postPoster.js`), 글에 사진이 있으면 `POST /poster/assets/from-post`(`{postId}`)로 서버가 사진을 전단지 자산으로 복사한 뒤, 문구·자산 ID 를 sessionStorage(`dasimanna:post-poster`)에 두고 `/poster` 편집기로 이동한다. 편집기는 새 전단지일 때 이 초안을 기본 템플릿에 한 번 적용하고 지운다. 저장은 사용자가 편집기에서 직접 하며 이때 5개 제한이 적용된다. 사진 주소는 클라이언트가 보내지 않고 서버가 게시글 ID 로 찾는다: 회원 글은 저장된 사진, 분실 신고는 원본 사진 주소(animal.go.kr 만 허용, https 실패 시 http 재시도, 15MB 제한)를 받아 업로드와 같은 검증·WebP 변환을 거친다. 사진을 못 받으면 502 `poster_photo_unavailable` 이고 사진 없이 편집기로 가며 알린다. 게시글에는 연락처가 없으므로 연락처 칸은 안내 문구 그대로 둔다.
+실종 정보 게시판은 사용자별 격리의 예외인 공개 데이터다. 게시글은 공용 소유자 키 `board` 아래 `kind=post` 문서로 저장하고, 작성자 키는 `data.author` 에만 두어 응답에는 `mine`(내 글 여부)만 내보낸다. 실종 위치는 검색 화면과 같은 지도 선택창(`RegionPicker`, `allowAll=false`)으로 받아 공식 시·도 이름(`region`)과 동 단위 주소(`lost_place`)만 저장한다(좌표는 저장하지 않음). 연락처는 받지 않고, 사진은 브라우저에서 긴 변 1024px JPEG 로 줄인 data URL(400KB 이하, JPG·PNG·WebP)만 받는다. 음성은 게시글 소유자만 추가·삭제할 수 있고 게시글당 3개·파일당 10 MiB·60초로 제한한다. 서버는 Mutagen으로 형식과 재생 시간을 검증하고 변환·압축하지 않는다. 허용 형식은 MP3·M4A/MP4·WAV·OGG Vorbis/Opus이며 파일명은 UUID로 생성한다. Supabase에서는 private Storage bucket(`post-audio`, `backend/config.py`의 코드 상수)에 바이너리를 저장하고, SQLite에서는 `POST_AUDIO_LOCAL_DIR`에 둔다. 게시글 문서에는 음성 ID·저장 키·형식·크기·길이·엔티티화된 설명만 저장한다. 설명은 API 출력 때 복원한 뒤 React 텍스트로 렌더링한다. 음성 섹션은 상세 내용과 댓글 사이에 표시한다. 한 사람당 게시글은 10개까지다. 그래프 도구(`board_search`)와는 아직 연결하지 않았다. 상세 화면의 [이 정보로 구조 공고 찾기]는 글의 종류·시·도·실종 주소·날짜 및 품종코드(`form.breed_code`, 품종 셀렉트), 털색·성별·나이·특징(설명 글 앞에 붙임)으로 검색 화면을 미리 채운다(`frontend/src/lib/postSearch.js`). 검색 화면에 들어오면 글의 사진이 있으면 서버가 사진을 꺼내 분석한 뒤(`/photo-analysis` `post_id`) 바로 검색하고, 사진이 없거나 분석에 실패하면 글만으로 검색한다. 글과 사진 특징의 정리는 검색 그래프의 입력 검토가 한다. 상태는 로그인 화면을 거쳐도 이어지도록 sessionStorage 로 한 번만 전달한다. 분실 신고의 지역(`orgNm`)은 첫 낱말(시·도)만 쓴다. 그 오른쪽 [전단지 만들기](내가 쓴 회원 글에만 보임)는 글의 제목·이름·종류·품종·실종 날짜·장소·특징을 전단지 문구로 바꾸고(`frontend/src/lib/postPoster.js`), 글에 사진이 있으면 `POST /poster/assets/from-post`(`{postId}`)로 서버가 사진을 전단지 자산으로 복사한 뒤, 문구·자산 ID 를 sessionStorage(`dasimanna:post-poster`)에 두고 `/poster` 편집기로 이동한다. 편집기는 새 전단지일 때 이 초안을 기본 템플릿에 한 번 적용하고 지운다. 저장은 사용자가 편집기에서 직접 하며 이때 5개 제한이 적용된다. 사진 주소는 클라이언트가 보내지 않고 서버가 게시글 ID 로 찾는다: 회원 글은 저장된 사진, 분실 신고는 원본 사진 주소(animal.go.kr 만 허용, https 실패 시 http 재시도, 15MB 제한)를 받아 업로드와 같은 검증·WebP 변환을 거친다. 사진을 못 받으면 502 `poster_photo_unavailable` 이고 사진 없이 편집기로 가며 알린다. 게시글에는 연락처가 없으므로 연락처 칸은 안내 문구 그대로 둔다.
 
 **게시판 품종코드(board-breed-v1):** `PostBody`는 선택값 `breed_code`(최대 20자)를 받는다. 등록 화면은 검색 화면과 동일한 `/kinds` 목록을 사용하고 축종을 바꾸면 코드를 초기화한다. 서버는 해당 축종의 활성 코드로 검증해 `breed`를 공식명으로 채우고 `breed_code`와 함께 문서에 저장한다. 다른 축종/미등록 코드는 `invalid_breed_code`(422), 기준정보 조회 실패는 기존 저장소 오류(503)로 응답한다. 기존 이름 기반 등록도 지원하며 공식명·별칭이 유일하게 일치할 때만 코드를 저장한다. 목록·상세·내 글과 분실 신고 상세 응답에 `breed_code`를 제공한다. 코드 없는 기존 글과 공공데이터 분실 신고의 `kindCd`(코드가 아닌 품종명)는 읽을 때 축종별 공식명·별칭과 대조한다. 요청당 축종별 목록을 한 번 조회하며 기존 Redis 캐시를 재사용한다. 알 수 없거나 모호하면 빈 코드로 둔다. LLM으로 코드를 추측하지 않으며 원본 분실 신고 캐시·기존 저장 문서를 변경하지 않는다. 프론트는 품종명을 특징란에 추가하지 않고 확인된 코드만 셀렉트에 전달한다.
 
@@ -418,6 +412,6 @@ LLM이 설정된 정상 검색 전체에서 **도구 호출(function calling)로
 
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 
-텍스트 특징 추출·사진 분석·텍스트 다듬기는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 다듬기는 글과 사진을 함께 받으며 충돌 시 글을 우선하고 사진에서 보이는 식별 단서는 빈 특징을 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 다듬기 feature-refine-v2, 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v1, 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
 
 검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.
