@@ -392,6 +392,6 @@ Supabase의 `documents.kind` check 제약에는 `poster`, `asset`을 포함해�
 
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 
-프롬프트/조건 캐시 버전은 특징 추출 feature-extract-v7, 다듬기 feature-refine-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+텍스트 특징 추출·사진 분석·텍스트 다듬기는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 다듬기는 글과 사진을 함께 받으며 충돌 시 글을 우선하고 사진에서 보이는 식별 단서는 빈 특징을 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 다듬기 feature-refine-v2 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
 
 검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.
