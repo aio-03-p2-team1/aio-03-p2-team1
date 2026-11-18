@@ -225,7 +225,10 @@ function AgentTab() {
               ['확신 낮음 비율', percent(d.confidence.low_rate)],
               ['에이전트가 돈 실행', number(d.agent.runs, '건')],
             ]} />
-            <p className="fineprint">캐시 적중 실행은 그래프를 돌지 않아 도구·성찰 집계에서 뺐어요. 실제 사용자 검색 기록을 그대로 집계한 값이에요.</p>
+            <p className="fineprint">
+              캐시 적중 실행은 그래프를 돌지 않아 도구·성찰 집계에서 뺐어요. 실제 사용자 검색 기록을 그대로 집계한 값이에요.
+              {d.malformed_runs > 0 && ` 지금과 저장 형식이 다른 예전 기록 ${d.malformed_runs}건은 형식이 맞지 않는 값을 비우고 집계했어요.`}
+            </p>
           </Section>
 
           <Section title="성찰 켬/끔 비교 (시험 보고서 지표 원자료)">
@@ -332,7 +335,7 @@ function RunsTab() {
                       <td>{formatDateTime(r.created_at)}</td>
                       <td>{r.email || r.owner?.slice(0, 8)}</td>
                       <td>{runSummary(r.criteria)}</td>
-                      <td><span className={`run-status run-status-${r.status}`}>{runStatusLabel(r.status)}</span>{r.error ? ` · ${r.error}` : ''}</td>
+                      <td><span className={`run-status run-status-${r.status}`}>{runStatusLabel(r.status)}</span>{r.error ? ` · ${r.error}` : ''}{r.malformed ? ' · 예전 형식' : ''}</td>
                       <td>{r.reflection_count} · {r.retry_count} · {r.tool_call_count}{r.reflection_enabled === false ? ' (성찰 끔)' : ''}</td>
                       <td>{r.confidence_low ? r.confidence_reasons.map(statLabel).join(', ') || '낮음' : '충분'}</td>
                       <td>{r.agent_source ? `${statLabel(r.agent_source)} → ${r.agent_final_tool || '-'} (다시 ${r.agent_reruns})` : '-'}</td>

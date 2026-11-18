@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -190,6 +191,17 @@ def create_app(ctx: AppContext | None = None) -> FastAPI:
         return JSONResponse(
             status_code=503,
             content={"detail": {"code": exc.code, "message": "데이터 저장소에 연결하지 못했습니다."}},
+        )
+
+    @app.exception_handler(Exception)
+    async def unhandled_error(request: Request, exc: Exception):
+        # 처리하지 못한 예외도 JSON 으로 답하고, 예외 종류와 위치를 관리자 로그에 남긴다(값·본문은 남기지 않음).
+        frame = traceback.extract_tb(exc.__traceback__)[-1] if exc.__traceback__ else None
+        where = f"{frame.filename.rsplit('/backend/', 1)[-1]}:{frame.lineno} in {frame.name}" if frame else "-"
+        log.error("unhandled %s %s: %s at %s", request.method, request.url.path, type(exc).__name__, where)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": {"code": "internal_error", "message": "서버에서 오류가 났어요. 잠시 후 다시 시도해 주세요."}},
         )
 
     @app.exception_handler(ApiError)
