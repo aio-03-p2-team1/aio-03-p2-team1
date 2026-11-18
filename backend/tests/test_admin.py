@@ -212,3 +212,41 @@ def test_create_admin_script(tmp_path, monkeypatch):
     assert account["role"] == "admin" and account["password_hash"] != "password123"
     asyncio.run(create_admin.main(ADMIN, "관리자", False))  # 다시 실행해도 역할만 유지
     assert asyncio.run(read())["role"] == "admin"
+
+
+def test_admin_tolerates_old_run_shapes():
+    """운영 DB 의 예전 기록(tool_calls 가 숫자, error 가 문자열 등) 때문에 관리자 화면이 500 으로 깨지지 않는다."""
+    ctx, client = make()
+    with client:
+        signup(client, "user@example.com")
+        owner = owner_key("user@example.com")
+        odd = {"status": "completed", "tool_calls": 7, "issues": 3, "reflections": "x", "error": "boom",
+               "confidence": "low", "agent_decision": {"source": "llm", "log": 5}, "elapsed_ms": "12", "trace": "a",
+               "created_at": "2026-11-10T00:00:00+00:00"}
+        asyncio.run(ctx.store.put(owner, "run", "c" * 32, odd))
+        asyncio.run(ctx.store.put(owner, "run", "d" * 32, run_doc()))
+        signup_admin(client, ctx)
+        runs = client.get("/api/v1/admin/runs")
+        assert runs.status_code == 200
+        bad = next(r for r in runs.json()["items"] if r["id"] == "c" * 32)
+        assert bad["malformed"] is True and bad["error"] == "boom" and bad["issues"] == []
+        stats = client.get("/api/v1/admin/agent/stats")
+        assert stats.status_code == 200 and stats.json()["malformed_runs"] == 1
+        assert client.get(f"/api/v1/admin/runs/{owner}/{'c' * 32}").status_code == 200
+
+
+def test_unhandled_error_returns_json_and_logs_location():
+    admin_log.LOG_BUFFER.clear()
+    ctx, client = make()
+    app = client.app
+
+    @app.get("/api/v1/_boom")
+    async def boom():
+        raise TypeError("secret value 123")
+
+    with TestClient(app, headers={"Origin": ORIGIN}, raise_server_exceptions=False) as c:
+        res = c.get("/api/v1/_boom")
+    assert res.status_code == 500 and res.json()["detail"]["code"] == "internal_error"
+    messages = [i["message"] for i in admin_log.LOG_BUFFER.entries()]
+    assert any("TypeError" in m and "test_admin.py" in m for m in messages)
+    assert not any("secret value" in m for m in messages)

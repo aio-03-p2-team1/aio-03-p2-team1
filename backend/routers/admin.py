@@ -54,6 +54,64 @@ RUN_STAT_FIELDS = (
 )
 
 
+# 운영 DB 에는 지금 코드와 형태가 다른 예전 실행 기록이 섞여 있다(예: tool_calls 가 목록이 아니라 숫자).
+# 관리자 화면은 기록 하나 때문에 전체가 500 으로 깨지지 않도록, 읽을 때 형태를 맞추고 맞지 않는 값은 비운다.
+_RUN_LISTS = ("tool_calls", "issues", "reflections", "trace", "questions")
+_RUN_DICTS = ("criteria", "confidence", "agent_decision", "agent_request", "radius", "scope")
+_RUN_NUMS = ("reflection_count", "retry_count", "tool_call_count", "elapsed_ms")
+
+
+def _as_list(value: Any) -> list[dict[str, Any]]:
+    return [v for v in value if isinstance(v, dict)] if isinstance(value, list) else []
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def clean_run(run: Any) -> tuple[dict[str, Any], bool]:
+    """실행 문서 → (형태를 맞춘 사본, 맞지 않는 값이 있었는지)."""
+    if not isinstance(run, dict):
+        return {}, True
+    out = dict(run)
+    odd = False
+    for key in _RUN_LISTS:
+        if key in out and out[key] is not None:
+            cleaned = _as_list(out[key]) if key != "trace" else [v for v in out[key] if isinstance(v, str)] if isinstance(out[key], list) else []
+            if key == "tool_calls" and isinstance(out[key], (int, float)) and not isinstance(out[key], bool):
+                if out.get("tool_call_count") is None:  # 예전 기록: 호출 목록 대신 개수만 저장
+                    out["tool_call_count"] = int(out[key])
+            odd = odd or not isinstance(out[key], list) or len(cleaned) != len(out[key])
+            out[key] = cleaned
+    for key in _RUN_DICTS:
+        if key in out and out[key] is not None and not isinstance(out[key], dict):
+            odd = True
+            out[key] = None
+    if "error" in out and out["error"] is not None and not isinstance(out["error"], dict):
+        odd = True
+        out["error"] = {"code": str(out["error"])[:80]}
+    for key in _RUN_NUMS:
+        value = out.get(key)
+        if value is not None and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            odd = True
+            out[key] = None
+    decision = out.get("agent_decision")
+    if decision is not None:
+        log_ = decision.get("log")
+        if log_ is not None and not isinstance(log_, list):
+            odd = True
+        out["agent_decision"] = {**decision, "log": _as_list(log_)}
+    conf = out.get("confidence")
+    if conf is not None:
+        reasons = conf.get("reasons")
+        out["confidence"] = {**conf, "reasons": [r for r in reasons if isinstance(r, str)] if isinstance(reasons, list) else []}
+    for key in ("status", "end_reason", "ranking_method", "data_source", "created_at"):
+        if out.get(key) is not None and not isinstance(out[key], str):
+            odd = True
+            out[key] = str(out[key])
+    return out, odd
+
+
 def _check_owner(owner: str) -> None:
     if not OWNER.match(owner):
         raise ApiError(404, "not_found", "대상을 찾을 수 없습니다.")
@@ -191,7 +249,7 @@ async def update_user(owner: str, body: UserPatch, admin: SessionUser = Depends(
 
 
 def _run_row(row: dict[str, Any], accounts: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    run = row["data"]
+    run, odd = clean_run(row["data"])
     decision = run.get("agent_decision") or {}
     conf = run.get("confidence") or {}
     return {
@@ -219,6 +277,7 @@ def _run_row(row: dict[str, Any], accounts: dict[str, dict[str, Any]]) -> dict[s
         "error": (run.get("error") or {}).get("code"),
         "radius_km": (run.get("radius") or {}).get("km"),
         "created_at": run.get("created_at") or row.get("updated_at"),
+        "malformed": odd,
     }
 
 
@@ -242,7 +301,9 @@ async def run_detail(owner: str, run_id: str, _: SessionUser = Depends(require_a
     run = await ctx.store.get(owner, "run", run_id)
     if not run:
         raise ApiError(404, "run_not_found", "실행 기록을 찾을 수 없습니다.")
-    candidates = run.get("candidates") or []
+    raw_candidates = run.get("candidates")
+    run, _ = clean_run(run)
+    candidates = _as_list(raw_candidates)
     top = [{k: c.get(k) for k in ("id", "notice_no", "score", "lexical_score", "semantic_score", "rrf_ranks", "breed",
                                   "color", "sex", "happen_date", "happen_place", "distance_km", "evidence")}
            for c in candidates[:20]]
@@ -282,12 +343,13 @@ def _group_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
         "awaiting_input_rate": _rate(sum(1 for r in runs if r.get("status") == "awaiting_input"), n),
         "avg_reflection_count": _avg([r.get("reflection_count") or 0 for r in runs]),
         "avg_retry_count": _avg([r.get("retry_count") or 0 for r in runs]),
-        "avg_tool_calls": _avg([len(r.get("tool_calls") or []) for r in runs]),
+        "avg_tool_calls": _avg([len(r.get("tool_calls") or []) or r.get("tool_call_count") or 0 for r in runs]),
     }
 
 
 def agent_stats(runs: list[dict[str, Any]]) -> dict[str, Any]:
     """실행 문서 목록 → 에이전트 정확도 개선용 집계. 캐시 적중 실행은 그래프를 돌지 않았으므로 도구·성찰 집계에서 뺀다."""
+    runs = [clean_run(r)[0] for r in runs]
     total = len(runs)
     executed = [r for r in runs if not r.get("cache_hit")]
     tool_use: Counter = Counter()
@@ -354,8 +416,9 @@ async def stats(
     ctx: AppContext = Depends(get_ctx),
 ):
     rows = await ctx.store.list_kind("run", limit, fields=RUN_STAT_FIELDS)
-    runs = [r["data"] for r in rows]
-    return {"scanned": len(runs), "limit": limit, **agent_stats(runs)}
+    cleaned = [clean_run(r["data"]) for r in rows]
+    runs = [run for run, _ in cleaned]
+    return {"scanned": len(runs), "limit": limit, "malformed_runs": sum(1 for _, odd in cleaned if odd), **agent_stats(runs)}
 
 
 # ---------------------------------------------------------------- 게시물
