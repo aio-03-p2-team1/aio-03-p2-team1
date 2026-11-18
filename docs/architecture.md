@@ -86,7 +86,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | `analyze` | `request`(+세션 조건) | `criteria`, `missing`, `input_errors`, `questions`, `context_summary.origin` | 누락·오류 → `ask`, 아니면 `context` |
 | `ask` | `criteria`, `raw_items` | `status=awaiting_input`, `scope` | END |
-| `context` | `criteria`, `profile_id`, `photo_features` | 기억으로 선택 항목 보완, `memory_used`, 입력 검토 `input_review`·`llm_features`(글 우선), 확인 질문 `questions`, `error`(LLM) | 오류 → `finalize`, 확인 필요(대화당 1회) → `ask`, 아니면 `breed` |
+| `context` | `criteria`, `profile_id`, `photo_features` | 기억으로 선택 항목 보완, `memory_used`, 입력 검토 `input_review`·`llm_features`(글 우선), 확인 질문 `questions`, `error`(LLM) | 오류 → `finalize`, 확인 필요(대화의 첫 검색에서만) → `ask`, 아니면 `breed` |
 | `plan` | `criteria`, `pending_fix` | `criteria.region_code`, `plan`, `issues(arg_mapping)` | 매핑 실패 → `validate`, 아니면 `execute` |
 | `execute` | `criteria`, 한도 설정 | `raw_items`, `total_count`, `pages_fetched`, `retry_count`, `error` | `radius` |
 | `research` | 서버가 검증한 `agent_search_plan`, 이전 조회·후보, 남은 도구 예산 | 성공 시 원본·조회 조건·페이지·범위 갱신, 실패 시 이전 조건/후보 보존·오류 기록 | 성공 → `radius`, 실패 → `finalize` |
@@ -115,7 +115,7 @@ flowchart TD
 | 품종 코드 선택 | 코드 목록에서 품종명을 검증하고 공공 API에 `kind=<breed_code>` 전달, 응답 품종명도 확인 | `criteria.breed_code`, `kind` |
 | 품종을 고르거나 글에 품종을 적음(입력 검토 `breed_mention`) | **확실히 거름(0건이 되더라도)**: 같은 계열(크기 접두어만 다른 '토이 푸들'·'푸들')만 남기고, 믹스 공고는 공고 품종·특이사항에 찾는 품종 이름이 있을 때만, 품종 기타·미상은 뺀다(`ranking.breed_matches`). 글에서 찾은 품종은 API 품종 코드로 좁히지 않고(`breed_source=text`) 받은 공고를 계열로 거른다 | `criteria.breed`, `input_review.filters` |
 | 기타 동물 + 글이 말하는 종류(입력 검토 `animal_kind`, 예: 새·토끼·소) | 공공데이터 품종이 '기타축종' 하나뿐이라 `rank` 에서 공고 특이사항 낱말로 먼저 종류를 가리고(`normalization/animal_kind.py`), 글로 모르는 공고만 사진으로 판단(`animal_kind_photo`: 공고 사진을 서버가 받아 512px로 줄여 8장씩 한 번에 판별, 검색당 24장 상한). 찾는 종류로 확인된 공고만 남기고 다른 종류·모름(사진 없음 포함)은 뺀다. 판단은 공고별로 `kind_labels` 에 보관해 다시 정렬할 때 재사용 | `kind_check`, `tool_calls[].animal_kind_photo` |
-| live 모드 + 자유 서술 또는 쓸 수 있는 사진 특징 | `input_review`: 글과 서버가 보관한 사진 분석 특징을 한 번의 구조화 호출로 검토(중복 합치기·모순 기록·[털색]/[특징]/[상황]/[기타] 정리·판단 멘트). 최종 특징은 글 우선. 털색·성별이 정면으로 어긋나면 검색 전에 `ask`(같은 대화에서 한 번만) | `input_review`, `tool_calls[].input_review` |
+| live 모드 + 자유 서술 또는 쓸 수 있는 사진 특징 | `input_review`: 글과 서버가 보관한 사진 분석 특징을 한 번의 구조화 호출로 검토(중복 합치기·모순 기록·[털색]/[특징]/[상황]/[기타] 정리·판단 멘트). 최종 특징은 글 우선. 털색·성별이 정면으로 어긋나면 검색 전에 `ask`(대화의 첫 검색에서만, 이어 찾기에서는 묻지 않고 글 기준) | `input_review`, `tool_calls[].input_review` |
 | LLM 설정 + 정상 조회·정렬 완료(빈 결과·캐시 적중 포함) | `agent`가 결과 검토 후 수정·질문·확정 선택. 확신 충분이면 사진·정보 요청은 서버가 거부 | `agent_decision`, `tool_calls[].agent_*` |
 | 결과 0건 + 에이전트가 `finish` + 더 넓힐 지역·반경이 있음(`empty_narrow`·`empty_radius`) | 판단을 기록하고 `validate`로 돌아가 기존 성찰 질문(지역·반경 넓히기 동의)으로 끝낸다. 지역 전체처럼 넓힐 범위가 없으면 0건 완료 | `agent_decision.empty_fallback`, `questions` |
 | 실종 위치(`lost_place`) + 카카오 키 + 실종 14일 이내 | `kakao_geocode_regions`: 실종 위치(좌표가 없을 때)·공고 관할 시군구·구조 장소 읍면동 좌표(성공만 캐시, 검색당 신규 80건 상한) | 반경 km·요청·캐시 수 |
@@ -139,7 +139,7 @@ sequenceDiagram
   G->>G: analyze (누락이면 질문 후 종료)
   G->>LLM: 입력 검토: 글 + 사진 분석 특징 → 정리 글·{colors, sex, marks}·중복·모순·판단(JSON)
   LLM-->>G: 검토 결과(품종은 별도 breed 노드에서 정규화)
-  opt 털색·성별 모순으로 확인 필요(대화당 1회)
+  opt 털색·성별 모순으로 확인 필요(대화의 첫 검색에서만)
     G-->>API: ask(questions.field=input_review)
   end
   G->>AN: sido_v2 (지역 코드)
