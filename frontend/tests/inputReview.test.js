@@ -11,20 +11,16 @@ const review = {
   organized_text: '[털색]: 흰색\n[특징]: 빨간 목줄',
 }
 
-test('input review shows the judgment, merged duplicates and conflicts', () => {
-  const view = inputReviewView(review, '흰색 강아지')
+test('input review shows the judgment, merged duplicates, conflicts and that the text was rewritten', () => {
+  const view = inputReviewView(review)
   assert.equal(view.title, '에이전트가 입력을 정리했어요')
   assert.equal(view.message, review.message)
   assert.deepEqual(view.lines, [
     '합친 중복: 흰색(글과 사진)',
     '어긋난 정보: 털색 — 글 흰색 / 사진 갈색 (글 기준으로 찾아요)',
+    '특징과 상황을 정리한 글로 바꿨어요.',
   ])
-  assert.equal(view.canApply, true)
   assert.equal(view.question, '')
-})
-
-test('organized text already in the input is not offered again', () => {
-  assert.equal(inputReviewView(review, '[털색]: 흰색\n[특징]: 빨간 목줄 ').canApply, false)
 })
 
 test('ask action exposes the question and missing review shows nothing', () => {
@@ -36,7 +32,7 @@ test('ask action exposes the question and missing review shows nothing', () => {
 })
 
 test('filters from the text come first in the review lines', () => {
-  const view = inputReviewView({ ...review, filters: ["글에 '푸들'이(가) 있어 푸들 계열만 찾아요."] }, '')
+  const view = inputReviewView({ ...review, filters: ["글에 '푸들'이(가) 있어 푸들 계열만 찾아요."] })
   assert.equal(view.lines[0], "글에 '푸들'이(가) 있어 푸들 계열만 찾아요.")
 })
 

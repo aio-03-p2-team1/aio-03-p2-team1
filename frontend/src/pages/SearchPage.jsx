@@ -281,6 +281,13 @@ export default function SearchPage() {
       if (!threadId) setDeclined(extraDeclined)
       const result = await api('/searches', { method: 'POST', body })
       setRun(result)
+      // 에이전트가 글과 사진 특징을 정리했으면 묻지 않고 입력란을 정리한 글로 바로 바꾼다.
+      // 사진 특징 줄도 정리에 합쳐졌으므로 따로 지울 줄로 기억하지 않는다.
+      const organized = (result.input_review?.organized_text || '').trim()
+      if (organized && organized !== (criteria.description || '').trim()) {
+        setForm((current) => ({ ...current, description: organized }))
+        setPhotoFeatureText('')
+      }
       setPageCache((previous) => rememberPage(previous, `${result.run_id}:1`, result))
       setParams({ run: result.run_id, page: '1' })
       loadHistory()
@@ -352,13 +359,6 @@ export default function SearchPage() {
   function openHistory(runId) {
     setParams({ run: runId, page: '1' })
     scrollToResults()
-  }
-
-  // 입력 검토가 정리한 글로 입력란을 바꾼다. 사진 특징 줄도 정리에 합쳐졌으므로 따로 지울 줄로 기억하지 않는다.
-  function applyOrganizedText(text) {
-    setForm((current) => ({ ...current, description: text }))
-    setPhotoFeatureText('')
-    toast('정리한 글로 바꿨어요. 확인한 뒤 다시 찾아볼 수 있어요.')
   }
 
   function openPage(page) {
@@ -440,6 +440,8 @@ export default function SearchPage() {
                 </div>
               </div>
             )}
+            {/* 검색 에이전트의 입력 검토 멘트는 특징과 상황 입력란 바로 위에 보여 준다. */}
+            {!busy && <InputReview review={run?.input_review} />}
             <div className="search-description">
               <div className="search-description-head">
                 <label htmlFor="search-description-input">특징과 상황</label>
@@ -500,9 +502,6 @@ export default function SearchPage() {
             {run?.scope && <p>{scopeText(run.scope)}</p>}
           </div>
         </div>
-        {!busy && !error && (
-          <InputReview review={run?.input_review} currentText={form.description} onApply={applyOrganizedText} />
-        )}
         <Results run={run} busy={busy} error={error} onWiden={widenRegion} onWidenRadius={widenRadius} onRelaxSex={relaxSex} />
         {!error && run?.pagination && (
           <Pagination page={run.pagination.page} pages={run.pagination.pages} disabled={busy}
@@ -633,20 +632,14 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
 }
 
 // 검색 에이전트의 입력 검토: 글과 사진 특징에서 무엇을 합치고 무엇이 어긋났는지, 어떻게 찾을지 보여 준다.
-function InputReview({ review, currentText, onApply }) {
-  const view = inputReviewView(review, currentText)
+function InputReview({ review }) {
+  const view = inputReviewView(review)
   if (!view) return null
   return (
     <div className="input-review" role="status">
       <p className="input-review-title"><strong>{view.title}</strong> {view.message}</p>
       {view.question && <p className="input-review-question">{view.question}</p>}
       {view.lines.length > 0 && <ul>{view.lines.map((line) => <li key={line}>{line}</li>)}</ul>}
-      {view.canApply && (
-        <div className="input-review-organized">
-          <pre>{view.organized}</pre>
-          <button type="button" className="secondary-button" onClick={() => onApply(view.organized)}>정리한 글로 입력란 바꾸기</button>
-        </div>
-      )}
     </div>
   )
 }
