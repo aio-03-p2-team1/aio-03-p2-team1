@@ -355,7 +355,7 @@ LLM이 설정된 정상 검색 전체에서 **도구 호출(function calling)로
 - **캐시:** 조건을 고치기 전 조회 상태를 캐시한다. 적중하면 조회·특징 추출·임베딩을 반복하지 않고 현재 thread의 질문·거절·사진 정보로 다시 검토한다. `agent_request`/`agent_decision`과 자동 수정 결과는 캐시에 넣지 않는다. 자동 수정은 공개 run에만 반영하고 thread의 확인 조건은 원래 사용자 입력·세션 조건을 유지한다. 캐시 키에 검토 적용 여부와 프롬프트 버전을 포함한다. 실제 공고 조회 범위를 바꾸는 새 도구는 추가하지 않았다.
 - **API 계약:** 요청 `POST /searches` 에 `declined: ["photo"|"color"|"size"|"sex"|"marks"]`(최대 5). 응답 run 에 `confidence`, `agent_request`, `agent_decision`. 에이전트가 조건을 고치면 run 의 `criteria` 에 고친 값이 보인다(대화 thread 의 확인 조건에는 사용자 입력만 저장). 의존성 `AppContext.search_agent`(OPENAI_API_KEY 가 있으면 사진 분석과 같은 채팅 모델).
 - **화면:** 입력 카드 '특징과 상황' 위에 요청 카드(파란색), 아래에 답한 값 칩(`털색: 흰색 ✕`). 칩 값은 검색 조건(color·size·sex, 특징은 설명 끝 `추가 특징:`)에 합친다.
-- **검증:** 가짜 도구 client 로 루프·검증·한도·거부를 시험(`backend/tests/test_search_agent.py`). 실제 LLM 판단 품질은 미측정.
+- **검증:** 가짜 도구 client 로 루프·검증·한도·거부를 시험(`backend/tests/test_search_agent.py`). 2026-11-18 실제 LLM으로 고정 정책 시나리오 18회와 실제 공고 검색 2회를 실행했다. 측정 범위·지연·한계는 [시험 보고서 2.1](test-report.md#21-실제-llm-정책-품질응답-시간-2026-11-18)을 참고한다. 실종 동물 식별 정확도는 미측정이다.
 
 ## 13. 품종 검색 (breed-v4)
 
