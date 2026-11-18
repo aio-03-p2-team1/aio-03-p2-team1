@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import secrets
 import logging
 import time
 from typing import Any
@@ -9,10 +10,12 @@ from fastapi import APIRouter, Depends, Query
 
 from backend.agent.llm import LlmError
 from backend.agent import photo_store
+from backend.agent import refinement_store
 from backend.agent.photo import InvalidPhoto, decode_and_validate, shrink_for_analysis
 from backend.tools import remote_photo
 from backend.agent.runner import run_search
-from backend.schemas.api import PhotoAnalysisBody, PhotoAnalysisResponse, SearchBody
+from backend.schemas.api import (PhotoAnalysisBody, PhotoAnalysisResponse, RefineDescriptionBody,
+                                 RefineDescriptionResponse, SearchBody)
 from backend.auth.sessions import AuthUnavailable, SessionUser
 from backend.deps import AppContext, current_user, get_ctx
 from backend.errors import ApiError
@@ -24,6 +27,7 @@ log = logging.getLogger("dasimanna.searches")
 
 LOCATION_LIMIT_PER_MINUTE = 30
 PHOTO_ANALYSIS_LIMIT_PER_MINUTE = 5
+TEXT_REFINEMENT_LIMIT_PER_MINUTE = 5
 
 
 def _deps(ctx: AppContext) -> dict[str, Any]:
@@ -43,6 +47,9 @@ def page_result(run, page=1, page_size=20):
 
 @router.post("/searches")
 async def create_search(body: SearchBody, user: SessionUser = Depends(current_user), ctx: AppContext = Depends(get_ctx)):
+    refinement = await refinement_store.load(ctx.sessions._redis, user.owner, body.refinement_id)
+    if body.refinement_id and (not refinement or refinement.get("description") != body.criteria.description):
+        raise ApiError(422, "invalid_refinement", "다듬은 내용이 만료되었거나 검색 입력과 달라요. 다시 다듬어 주세요.")
     request = {
         "criteria": body.criteria.model_dump(exclude_none=True),
         "thread_id": body.thread_id,
@@ -50,11 +57,70 @@ async def create_search(body: SearchBody, user: SessionUser = Depends(current_us
         "reflection_enabled": body.reflection_enabled,
         "declined": body.declined,
         # 사진 분석 번호로 서버가 보관한 결과를 꺼낸다(설명 글 속 사진 문장은 판단에 쓰지 않는다).
-        "photo": await _load_photo(ctx, user.owner, body.photo_analysis_id),
+        "photo": refinement.get("photo_features") if refinement else await _load_photo(ctx, user.owner, body.photo_analysis_id),
+        "precomputed_features": refinement.get("features") if refinement else None,
+        "features_precomputed": bool(refinement),
     }
     run = await run_search(_deps(ctx), user.owner, request)
     remember_items(run.get("candidates") or [])
     return page_result(run)
+
+
+@router.post("/searches/refine", response_model=RefineDescriptionResponse)
+async def refine_description(body: RefineDescriptionBody, user: SessionUser = Depends(current_user),
+                             ctx: AppContext = Depends(get_ctx)):
+    """One text+optional-photo model call; the returned feature data is kept server-side for the next search."""
+    llm = ctx.photo_llm
+    if not llm or not hasattr(llm, "refine_description"):
+        raise ApiError(503, "text_refinement_not_configured", "텍스트 다듬기 기능을 사용할 수 없습니다.")
+    try:
+        limited = await ctx.sessions.hit_rate_limit(f"text-refine:{user.owner}", TEXT_REFINEMENT_LIMIT_PER_MINUTE, 60)
+    except AuthUnavailable:
+        raise ApiError(503, "auth_unavailable", "로그인 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+    if limited:
+        raise ApiError(429, "text_refinement_rate_limited", "텍스트 다듬기 요청이 너무 잦습니다. 잠시 후 다시 시도해 주세요.")
+    redis = ctx.sessions._redis
+    token = secrets.token_hex(16)
+    try:
+        acquired = await refinement_store.begin(redis, user.owner, body.description, token)
+    except Exception:
+        raise ApiError(503, "text_refinement_unavailable", "텍스트 다듬기 기능에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.")
+    if not acquired:
+        raise ApiError(409, "text_refinement_in_progress", "같은 내용의 텍스트를 다듬고 있어요.")
+    try:
+        image_data = None
+        mime_type = None
+        photo_provided = body.image_base64 is not None or body.post_id is not None
+        try:
+            if body.image_base64 is not None or body.post_id is not None:
+                encoded = body.image_base64 if body.image_base64 is not None else await _post_photo_base64(ctx, body.post_id)
+                image_data, mime_type = decode_and_validate(encoded)
+                image_data, mime_type = shrink_for_analysis(image_data, mime_type)
+        except Exception as exc:
+            # 사진 전송·추출에 실패해도 원문만으로 텍스트를 정리한다.
+            image_data = mime_type = None
+            log.info("refinement photo unavailable; continuing with text only (%s)", type(exc).__name__)
+        try:
+            result = await llm.refine_description(body.description, image_data, mime_type)
+        except LlmError as exc:
+            raise ApiError(502, exc.code, "텍스트를 다듬지 못했습니다. 잠시 후 다시 시도해 주세요.")
+        stored = {
+            "description": result.description,
+            "features": result.features,
+            "photo_features": result.photo_features,
+        }
+        try:
+            refinement_id = await refinement_store.save(redis, user.owner, stored)
+        except Exception:
+            log.warning("refinement result store failed")
+            raise ApiError(503, "text_refinement_unavailable", "다듬은 결과를 검색에 전달하지 못했습니다. 다시 시도해 주세요.")
+        return RefineDescriptionResponse(description=result.description, refinement_id=refinement_id,
+                                         photo_used=image_data is not None and not (photo_provided and result.photo_features is None))
+    finally:
+        try:
+            await refinement_store.finish(redis, user.owner, body.description, token)
+        except Exception:
+            log.warning("refinement lock release failed")
 
 
 async def _load_photo(ctx: AppContext, owner: str, analysis_id: str | None):

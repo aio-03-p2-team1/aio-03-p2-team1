@@ -90,6 +90,23 @@ def test_photo_analysis_uses_injected_langchain_client():
     assert image_part["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
+def test_refine_description_formats_template_and_extracts_text_photo_once():
+    payload = {
+        "fur_color": "흰색", "features": "갈색 귀와 짧은 꼬리", "situation": "서울에서 실종",
+        "other": "", "text_colors": ["흰색"], "text_sex": "F", "text_marks": ["빨간 목줄"],
+        "photo_suitable": True, "photo_colors": ["갈색"], "photo_sex": "", "photo_marks": ["짧은 꼬리"],
+    }
+    client = FakeChatClient(payload)
+    result = asyncio.run(extractor(client).refine_description("흰색, 암컷, 빨간 목줄", b"image", "image/jpeg"))
+    assert result.description == "[털색]: 흰색\n[특징]: 갈색 귀와 짧은 꼬리\n[상황]: 서울에서 실종"
+    assert result.features == {"colors": ["흰색"], "sex": "F", "marks": ["빨간 목줄"]}
+    assert result.photo_features["suitable"] is True
+    assert result.photo_features["colors"] == [] and result.photo_features["marks"] == []
+    assert len([m for m in client.messages if m[0] == "human"]) == 1
+    assert "공고 텍스트 값만 최종 특징" in client.messages[0][1]
+    assert client.messages[1][1][1]["type"] == "image_url"
+
+
 def test_color_value_template_is_rendered_into_both_prompts():
     assert COLOR_VALUES_TEXT in SYSTEM_PROMPT
     assert COLOR_VALUES_TEXT in PHOTO_SYSTEM_PROMPT

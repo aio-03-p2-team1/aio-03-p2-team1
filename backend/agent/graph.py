@@ -135,7 +135,7 @@ async def context(state: SearchState, config) -> dict:
     if state.get("photo_features"):
         update["llm_features"] = photo_store.merge_features(state.get("llm_features"), state.get("photo_features"))
     llm = deps.get("llm")
-    if llm and criteria.get("description"):
+    if llm and criteria.get("description") and not state.get("features_precomputed"):
         started = time.perf_counter()
         try:
             features = await llm.extract(criteria["description"])
