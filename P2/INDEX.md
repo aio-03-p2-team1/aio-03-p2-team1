@@ -3,7 +3,7 @@
 | 자료 | 내용 |
 | --- | --- |
 | [발표 구성](Presentation.md) | 발표 순서, 시연 흐름, 준비할 항목 |
-| [팀 소개 PPT](ppt/dasimanna-team-intro.pptx) | 표지, 팀 소개, 팀원 및 역할 분담 |
+| [발표 PPT](ppt/dasimanna-team-intro.pptx) | 표지, 팀 소개 및 역할 분담, 프로젝트 개요 |
 | [PPT 디자인 초안](ppt/dasimanna-design-draft.pptx) | 시작 화면과 본문 템플릿 2종 |
 | [표지 이미지](img/cover-cat-golden-retriever.png) | 시작 화면용 고양이·골든리트리버 이미지 |
 | [팀원 역할 분담](ref/team-roles.md) | 발표용 역할, 주요 기여, 근거 커밋 |
