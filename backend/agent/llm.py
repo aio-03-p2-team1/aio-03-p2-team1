@@ -212,10 +212,10 @@ class FeatureExtractor:
         species_text = {"dog": "강아지", "cat": "고양이", "etc": "기타 동물"}.get(species, "미지정")
         # 이전 검토가 정리해 입력란에 넣은 글([털색]/[특징]/[상황]/[기타])이면 사진 특징이 이미 합쳐져 있다.
         # 이때 글과 사진에 같은 값이 있는 것은 새 중복이 아니므로 중복으로 보고하지 않는다.
-        organized = is_organized_text(source_text)
+        already_organized = is_organized_text(source_text)
         human = ("[찾는 동물 종류]\n" + species_text + "\n\n[사용자 글]\n" + (source_text or "(입력된 글 없음)")
                  + ("\n(이 글은 이전 검토에서 사진 특징까지 합쳐 정리한 글이다. 글과 사진의 같은 값은 중복으로 보고하지 않는다.)"
-                    if organized else "")
+                    if already_organized else "")
                  + "\n\n[사진 분석 특징]\n" + photo_text)
         response = await self._invoke_structured(
             [("system", INPUT_REVIEW_SYSTEM_PROMPT), ("human", human)],
@@ -232,7 +232,7 @@ class FeatureExtractor:
         )
         organized = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
         question = response.question.strip()[:200]
-        duplicates = [] if organized else [d.strip()[:40] for d in response.duplicates if d.strip()][:8]
+        duplicates = [] if already_organized else [d.strip()[:40] for d in response.duplicates if d.strip()][:8]
         # 질문할 내용이 비었으면 묻지 않고 찾는다(빈 질문으로 멈추지 않게).
         action = "ask" if response.action == "ask" and question else "search"
         return InputReviewResult(
@@ -243,7 +243,7 @@ class FeatureExtractor:
                         "photo_value": c.photo_value.strip()[:40]} for c in response.conflicts if c.item.strip()][:6],
             action=action,
             question=question if action == "ask" else "",
-            message=(ORGANIZED_TEXT_MESSAGE if organized and not response.conflicts and action == "search"
+            message=(ORGANIZED_TEXT_MESSAGE if already_organized and not response.conflicts and action == "search"
                      else response.message.strip()[:300]),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",
