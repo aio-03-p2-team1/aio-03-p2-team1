@@ -34,22 +34,23 @@ export function isGenericValue(value) {
   return GENERIC_VALUES.has(String(value || '').trim())
 }
 
-// 모순 항목마다 보여 줄 두 버튼. 뭉뚱그린 글 값이면 '예(사진 값 넣기)/아니오(그대로)',
-// 서로 다른 값이면 '글대로/사진대로'.
+// 모순 항목마다 보여 줄 두 버튼. 항목 이름과 값의 출처(입력한 값·사진 분석 값)를 함께 보여 준다.
+// 뭉뚱그린 글 값이면 '사진 분석 값 넣기 / 입력한 값 그대로', 서로 다른 값이면 '입력한 값 / 사진 분석 값'.
 export function conflictChoices(conflict) {
+  const item = String(conflict?.item || '').trim()
   const text = String(conflict?.text_value || '').trim()
   const photo = String(conflict?.photo_value || '').trim()
-  if (!conflict?.item || !photo) return []
+  if (!item || !photo) return []
   if (!text || isGenericValue(text)) {
     const detail = text ? `${text}: ${photo}` : photo
     return [
-      { side: 'photo', label: `예, 사진 값 넣기 (${detail})` },
-      { side: 'text', label: `아니오, ${text || '비워 두기'}` },
+      { side: 'photo', label: `사진 분석 ${item} 넣기: ${detail}` },
+      { side: 'text', label: text ? `입력한 ${item} 그대로: ${text}` : `${item} 비워 두기` },
     ]
   }
   return [
-    { side: 'text', label: `글대로: ${text}` },
-    { side: 'photo', label: `사진대로: ${photo}` },
+    { side: 'text', label: `입력한 ${item}: ${text}` },
+    { side: 'photo', label: `사진 분석 ${item}: ${photo}` },
   ]
 }
 
