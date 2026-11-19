@@ -31,7 +31,7 @@ Page:
 
 참고 자료:
 
-`test-report.md`를 `git blame`으로 확인한 후 정리하기.
+[팀원별 역할 분담과 근거 커밋](ref/team-roles.md)
 
 ## 프로젝트 개요
 
