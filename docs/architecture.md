@@ -41,6 +41,8 @@ React(Vite) ──/api/v1──▶ FastAPI ──▶ LangGraph 검색 그래프 
 | `/login` 로그인·회원가입 | `img/dasimanna-cards-auth.html` | `/auth/*` |
 | `/admin` 관리자(관리자 계정만) | — | `GET /admin/overview`(연동·저장소·Redis 상태, 버전·한도), `GET /admin/agent/stats`(에이전트 집계·성찰 켬/끔 비교), `GET /admin/runs`·`GET/DELETE /admin/runs/{owner}/{run_id}`, `GET/PATCH /admin/users`, `GET /admin/posts`·`DELETE /admin/posts/{id}`, `GET /admin/comments`·`DELETE /admin/comments/{post_id}/{id}`, `GET /admin/posters`·`DELETE /admin/posters/{owner}/{id}`, `GET /admin/logs`. 헤더 '관리자' 메뉴는 `GET /auth/me` 의 `is_admin` 이 참일 때만 보인다 |
 
+`/search`의 너구리 로딩은 사진 분석 중에는 즉시 표시하고, `POST /searches` 중에는 300ms 뒤 표시한다. 사진 분석에서 자동 검색으로 이어지면 로딩 화면을 유지한 채 안내 문구만 바꾼다. 검색 기록·결과 페이지 조회에는 표시하지 않으며, 로딩 화면이 열린 동안 뒤의 화면은 조작할 수 없다.
+
 ## 2. StateGraph
 
 ```mermaid
