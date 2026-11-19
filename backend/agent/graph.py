@@ -172,6 +172,12 @@ async def context(state: SearchState, config) -> dict:
             "photo_used": usable_photo,
             "prompt_version": review.prompt_version,
         }
+        # 특징이 하나도 없어 묻는 경우: 화면이 고를 수 있게 서버가 정한 보기를 함께 보낸다(모델이 보기를 만들지 않음).
+        info_fields = getattr(review, "info_fields", None) or []
+        if action == "ask" and info_fields:
+            update["input_review"]["info_request"] = [
+                {"field": f, "label": assess_rules.FIELD_LABELS[f], "options": list(assess_rules.FIELD_OPTIONS[f])}
+                for f in info_fields if f in assess_rules.FIELD_OPTIONS]
         # 글에 적힌 품종·동물 종류는 고른 조건과 같이 확실히 거른다(0건이 되더라도). 고른 품종이 있으면 그것을 쓴다.
         filters = []
         mention = (review.breed_mention or "").strip()

@@ -380,8 +380,9 @@ def test_review_input_asks_for_features_when_text_and_photo_give_none():
                                            message="정리할 외형 정보가 없어요."))
     result = asyncio.run(extractor(client).review_input("믿어주세요", None, "cat"))
     assert result.action == "ask" and result.question == NEED_INFO_QUESTION and result.message == NEED_INFO_MESSAGE
+    assert result.info_fields == ["color", "sex", "marks"]
     # 사진이 있으면 묻지 않는다.
     photo = {"suitable": True, "species": "cat", "breed": "", "colors": [], "sex": "", "marks": []}
     result = asyncio.run(extractor(FakeChatClient(review_payload(colors=[], sex="", marks=[], conflicts=[])))
                          .review_input("믿어주세요", photo, "cat"))
-    assert result.action == "search"
+    assert result.action == "search" and result.info_fields == []

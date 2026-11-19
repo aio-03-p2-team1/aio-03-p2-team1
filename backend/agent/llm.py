@@ -99,7 +99,8 @@ JARGON_WORDS = ("허용 색", "허용값", "허용 값", "정규화", "검색 �
 PHOTO_ONLY_MESSAGE = "글 없이 사진 분석 특징으로 정리해 찾아요."
 # 글에서도 사진에서도 찾을 외형 특징이 하나도 나오지 않으면 검색 전에 한 번 묻는다(대화의 첫 검색에서만).
 NEED_INFO_MESSAGE = "글에서 찾을 만한 외형 특징을 찾지 못했어요."
-NEED_INFO_QUESTION = "털색, 무늬, 목줄이나 옷 같은 특징을 적어 주시거나 사진을 올려 주세요. 이대로 찾으려면 그냥 다시 눌러 주세요."
+NEED_INFO_QUESTION = "아는 특징을 골라 주시거나 사진을 올려 주세요. 잘 모르면 '이대로 찾기'를 눌러 주세요."
+NEED_INFO_FIELDS = ["color", "sex", "marks"]  # 보기는 assess.FIELD_OPTIONS(서버 목록)에서만 나온다
 PHOTO_LINE_PREFIX = "사진에서 확인한 특징:"  # frontend/src/lib/photo.js photoTraitLine 과 같은 머리말
 def friendly_message(message: str) -> str:
     """보호자가 읽을 멘트. 시스템 용어가 섞였으면 쉬운 기본 문장으로 바꾼다."""
@@ -302,6 +303,7 @@ class FeatureExtractor:
                      else friendly_message(response.message)),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",
+            info_fields=list(NEED_INFO_FIELDS) if needs_info else [],
             prompt_version=INPUT_REVIEW_PROMPT_VERSION,
         )
 
