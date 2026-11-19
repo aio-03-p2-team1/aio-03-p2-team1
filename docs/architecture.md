@@ -236,7 +236,7 @@ flowchart LR
 
 ## 7. 후보 정렬 규칙
 
-`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3). 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
+`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3) · 중성화 1 · 나이 1 · 몸무게 1. 중성화·나이·몸무게는 입력 검토가 글에서 확인한 값(`llm_features.neuter`·`age_years`·`weight_kg`, `backend/normalization/profile.py`)이 있을 때만 공고의 `neuterYn`·`age`(출생 연도→발견 해 기준 나이)·`weight`와 비교한다. 보호소 추정값이라 거르지 않고 나이 ±2살·몸무게 ±30%(최소 1kg) 안이면 점수만 더한다. 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
 털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다.
 
@@ -419,6 +419,6 @@ LLM이 설정된 정상 검색 전체에서 **도구 호출(function calling)로
 
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 
-텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v4(v2 글의 품종·기타 동물 종류 추출, v3 같은 대화의 이전 검토 기억 반영, v4 보호자용 쉬운 말·가까운 색으로 바꾸기), 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v5(v2 글의 품종·기타 동물 종류 추출, v3 같은 대화의 이전 검토 기억 반영, v4 보호자용 쉬운 말·가까운 색으로 바꾸기, v5 글의 중성화·나이·몸무게를 [중성화]·[나이]·[몸무게] 줄로 정리. 숫자가 원래 글에 없으면 서버가 버림), 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
 
 검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.

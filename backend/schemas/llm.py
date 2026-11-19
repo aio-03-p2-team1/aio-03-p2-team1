@@ -62,6 +62,9 @@ class InputReviewModelResponse(StrictSchema):
     colors: list[Color]
     sex: Sex
     marks: list[str]
+    neuter: Literal["Y", "N", ""]  # 글에 중성화 여부가 직접 적혔을 때만. 아니면 빈 문자열
+    age: str  # 글에 적힌 나이 표현(예: 3살, 6개월). 없으면 빈 문자열
+    weight: str  # 글에 적힌 몸무게 표현(예: 4kg). 없으면 빈 문자열
     duplicates: list[str]
     conflicts: list[ReviewConflict]
     action: Literal["search", "ask"]

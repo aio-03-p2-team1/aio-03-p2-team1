@@ -100,6 +100,7 @@ def review_payload(**overrides):
         "duplicates": ["흰색(글과 사진)"],
         "conflicts": [{"item": "털색", "text_value": "흰색", "photo_value": "갈색"}],
         "action": "search", "question": "", "message": "흰색은 글과 사진에 겹쳐 하나로 합쳤고, 털색은 글 기준으로 찾을게요.",
+        "neuter": "", "age": "", "weight": "",
         "breed_mention": "푸들", "animal_kind": "",
     }
     payload.update(overrides)
@@ -349,3 +350,22 @@ def test_prompt_cache_key_reaches_openai_request_transport():
 def test_feature_prompt_version_is_current():
     from backend.agent.llm import PROMPT_VERSION
     assert PROMPT_VERSION == 'feature-extract-v8'
+
+
+def test_review_input_organizes_neuter_age_weight_written_in_the_text():
+    client = FakeChatClient(review_payload(neuter="Y", age="3살", weight="4.5kg", conflicts=[], duplicates=[]))
+    result = asyncio.run(extractor(client).review_input("흰색 암컷, 중성화했고 3살, 4.5kg 정도예요", None, "dog"))
+    assert "[중성화]: 했음\n[나이]: 약 3살\n[몸무게]: 약 4.5kg" in result.organized_text
+    assert result.features["neuter"] == "Y" and result.features["age_years"] == 3 and result.features["weight_kg"] == 4.5
+    # 정리한 글을 다시 넣어도 같은 값으로 읽힌다.
+    again = asyncio.run(extractor(FakeChatClient(review_payload(neuter="Y", age="약 3살", weight="약 4.5kg")))
+                        .review_input(result.organized_text, None, "dog"))
+    assert again.features["neuter"] == "Y" and again.features["age_years"] == 3 and again.features["weight_kg"] == 4.5
+
+
+def test_review_input_drops_neuter_age_weight_not_written_in_the_text():
+    # 모델이 글에 없는 값을 내도(사진·품종으로 추정 등) 버린다.
+    client = FakeChatClient(review_payload(neuter="Y", age="5살", weight="7kg"))
+    result = asyncio.run(extractor(client).review_input("흰색 암컷, 빨간 목줄", None, "dog"))
+    assert "neuter" not in result.features and "age_years" not in result.features and "weight_kg" not in result.features
+    assert "[나이]" not in result.organized_text and "[중성화]" not in result.organized_text

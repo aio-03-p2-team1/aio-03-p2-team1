@@ -5,9 +5,10 @@ import math
 from datetime import date
 from typing import Any
 
+from backend.normalization import profile
 from backend.normalization.color import tokenize_color_words
 
-WEIGHTS = {"color": 3, "sex": 2, "keyword": 1}
+WEIGHTS = {"color": 3, "sex": 2, "keyword": 1, "neuter": 1, "age": 1, "weight": 1}
 MAX_KEYWORD_POINTS = 3
 TOP_K = 300
 RRF_K = 60
@@ -142,6 +143,37 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
         else:
             mismatched.append("성별 다름")
 
+    # 글에 적힌 중성화·나이·몸무게(입력 검토가 확인한 값). 공고 값은 보호소 추정이라 거르지 않고 비슷하면 점수만 더한다.
+    neuter = features.get("neuter")
+    if neuter in ("Y", "N"):
+        if item.get("neuter") not in ("Y", "N"):
+            unknown.append("중성화")
+        elif item["neuter"] == neuter:
+            points += WEIGHTS["neuter"]
+            matched.append("중성화 " + ("했음" if neuter == "Y" else "안 했음"))
+        else:
+            mismatched.append("중성화 다름")
+    age_years = features.get("age_years")
+    if isinstance(age_years, (int, float)):
+        notice = profile.notice_age_years(item.get("age"), _reference_year(item))
+        if notice is None:
+            unknown.append("나이")
+        elif profile.age_close(age_years, notice):
+            points += WEIGHTS["age"]
+            matched.append(f"나이 비슷: {item.get('age')}")
+        else:
+            mismatched.append(f"나이: {item.get('age')}")
+    weight_kg = features.get("weight_kg")
+    if isinstance(weight_kg, (int, float)):
+        notice = profile.notice_weight_kg(item.get("weight"))
+        if notice is None:
+            unknown.append("몸무게")
+        elif profile.weight_close(weight_kg, notice):
+            points += WEIGHTS["weight"]
+            matched.append(f"몸무게 비슷: {item.get('weight')}")
+        else:
+            mismatched.append(f"몸무게: {item.get('weight')}")
+
     wanted_keywords = keywords(criteria.get("description")) + [k for k in (features.get("marks") or []) if isinstance(k, str)]
     if wanted_keywords:
         mark = item.get("special_mark") or ""
@@ -153,6 +185,14 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
             matched.append("특징: " + ", ".join(hits[:MAX_KEYWORD_POINTS]))
 
     return {"score": points, "matched": matched, "mismatched": mismatched, "unknown": unknown}
+
+
+def _reference_year(item: dict[str, Any]) -> int:
+    """공고 나이(출생 연도)를 나이로 바꿀 기준 해. 발견 날짜가 있으면 그 해, 없으면 올해."""
+    try:
+        return date.fromisoformat(item["happen_date"]).year
+    except (KeyError, TypeError, ValueError):
+        return date.today().year
 
 
 def _date_gap(item: dict[str, Any], lost_date: str | None) -> int:

@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
 
 from backend.normalization.animal_kind import KIND_NAMES, UNKNOWN
+from backend.normalization import profile
 from backend.normalization.color import ColorDictionary
 from backend.schemas.llm import (
     FeatureExtractionRequest,
@@ -84,6 +85,9 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
     "글이나 사진의 색이 허용 색 목록에 그대로 없으면 빼지 말고 가장 가까운 허용 색으로 바꿔 넣는다(예: 베이지·아이보리 → 크림, 밤색 → 갈색). "
     "breed_mention에는 글에 직접 적힌 품종 이름 하나를 원문 그대로 쓴다(예: 푸들, 말티즈, 코리안숏헤어). '믹스'만 적혔거나 품종이 없으면 빈 문자열로 둔다. 사진만으로 품종을 추정해 넣지 않는다. "
     "[이전 검토(같은 대화)]가 주어지면 같은 대화에서 앞서 한 검토 기억이다. 지금 글이 이전에 정리한 글과 같으면 그 글에는 사진 특징이 이미 합쳐져 있으므로 중복으로 보고하지 않고, 이미 보고한 중복과 사용자가 확정한 항목의 모순은 다시 보고하거나 묻지 않는다. "
+    "neuter·age·weight는 글에 직접 적힌 중성화 여부·나이·몸무게만 옮긴다. neuter는 중성화했다면 Y, 안 했다면 N, 글에 없으면 빈 문자열이다. "
+    "age·weight에는 글에 적힌 숫자와 단위를 그대로 쓰고(예: 3살, 6개월, 4kg, 4.5키로), 사진이나 품종으로 추정하지 않으며 글에 없으면 빈 문자열로 둔다. "
+    "이 세 값은 [털색]·[특징]·[상황]·[기타]에 다시 적지 않는다. "
     "animal_kind는 종류가 기타 동물일 때만 글이 말하는 동물을 허용값 가운데 하나로 쓰고(예: 앵무새·사랑앵무는 새, 송아지는 소), 개·고양이 검색이거나 글로 알 수 없으면 빈 문자열로 둔다."
 )
 
@@ -111,7 +115,7 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-INPUT_REVIEW_PROMPT_VERSION = "input-review-v4"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영, v4: 보호자용 쉬운 말·가까운 색으로 바꾸기
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v5"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영, v4: 보호자용 쉬운 말·가까운 색으로 바꾸기, v5: 글의 중성화·나이·몸무게 정리
 INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
@@ -246,9 +250,16 @@ class FeatureExtractor:
         colors = list(dict.fromkeys(c for c in response.colors if c in ALLOWED_COLORS))
         marks = list(dict.fromkeys(m.strip()[:30] for m in response.marks if m.strip()))[:6]
         sex = response.sex if response.sex in ("M", "F") else ""
+        # 중성화·나이·몸무게는 글에 실제로 적힌 숫자·말이 있을 때만 쓴다(모델이 지어낸 값은 버린다).
+        neuter = profile.user_neuter(response.neuter, source_text)
+        age_years = profile.user_age_years(response.age, source_text)
+        weight_kg = profile.user_weight_kg(response.weight, source_text)
         sections = (
             ("털색", response.fur_color),
             ("특징", response.features),
+            ("중성화", {"Y": "했음", "N": "안 했음"}.get(neuter, "")),
+            ("나이", profile.age_label(age_years) if age_years is not None else ""),
+            ("몸무게", f"약 {weight_kg:g}kg" if weight_kg is not None else ""),
             ("상황", response.situation),
             ("기타", response.other),
         )
@@ -268,7 +279,10 @@ class FeatureExtractor:
         action = "ask" if response.action == "ask" and question and conflicts else "search"
         return InputReviewResult(
             organized_text=organized,
-            features={"colors": colors, "sex": sex, "marks": marks},
+            features={"colors": colors, "sex": sex, "marks": marks,
+                      **({"neuter": neuter} if neuter else {}),
+                      **({"age_years": age_years} if age_years is not None else {}),
+                      **({"weight_kg": weight_kg} if weight_kg is not None else {})},
             duplicates=duplicates,
             conflicts=conflicts,
             action=action,
