@@ -6,6 +6,8 @@ import pytest
 
 from backend.agent.llm import (
     COLOR_VALUES_TEXT,
+    ORGANIZED_TEXT_MESSAGE,
+    is_organized_text,
     INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -139,6 +141,23 @@ def test_classify_animal_photos_sends_all_photos_in_one_call():
     assert labels == ["새", "소", "모름"]  # 빠진 번호는 모름, 범위 밖 번호는 무시
     images = [part for part in client.messages[1][1] if part["type"] == "image_url"]
     assert len(images) == 3 and all(part["image_url"]["detail"] == "low" for part in images)
+
+
+def test_review_input_does_not_report_duplicates_in_its_own_organized_text():
+    """이전 검토가 정리해 입력란에 넣은 글을 다시 검토하면 사진 특징과 겹치는 값을 새 중복으로 보고하지 않는다."""
+    client = FakeChatClient(review_payload(conflicts=[], duplicates=["흰색·회색 털색"], message="흰색이 반복되어 합쳤습니다."))
+    organized = "[털색]: 흰색, 회색\n[특징]: 이마와 얼굴의 회색 줄무늬\n[상황]: 마지막으로 본 곳 공원"
+    photo = {"suitable": True, "species": "cat", "breed": "", "colors": ["흰색", "회색"], "sex": "", "marks": []}
+    result = asyncio.run(extractor(client).review_input(organized, photo, "cat"))
+    assert result.duplicates == []
+    assert result.message == ORGANIZED_TEXT_MESSAGE
+    assert "이전 검토에서 사진 특징까지 합쳐 정리한 글" in client.messages[1][1]
+
+
+def test_is_organized_text_only_for_template_lines():
+    assert is_organized_text("[털색]: 흰색\n[기타]: 4살")
+    assert not is_organized_text("흰색 고양이\n[털색]: 흰색")
+    assert not is_organized_text("")
 
 
 def test_review_input_rejects_empty_input_without_calling_model():

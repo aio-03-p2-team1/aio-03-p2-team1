@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import base64
 import json
+import re
 import httpx
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
@@ -85,6 +86,16 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
 )
 
 
+ORGANIZED_TEXT_MESSAGE = "이미 정리한 글이라 그대로 기준으로 찾아요."
+_ORGANIZED_LINE = re.compile(r"^\[(털색|특징|상황|기타)\]:")
+
+
+def is_organized_text(text: str) -> bool:
+    """입력 검토가 정리해 입력란에 넣은 형식의 글인지([털색]/[특징]/[상황]/[기타] 줄로만 이루어짐)."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    return bool(lines) and all(_ORGANIZED_LINE.match(line) for line in lines)
+
+
 def _build_system_prompt(task_instructions: str) -> str:
     return FEATURE_SYSTEM_PROMPT_TEMPLATE.format(
         color_values=COLOR_VALUES_TEXT,
@@ -94,7 +105,7 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-INPUT_REVIEW_PROMPT_VERSION = "input-review-v2"  # v2: 글의 품종·기타 동물 종류 추출
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v3"  # v2: 글의 품종·기타 동물 종류 추출, v3: 정리된 글 재검토 시 중복 미보고
 INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
@@ -199,7 +210,12 @@ class FeatureExtractor:
             {k: usable_photo.get(k) for k in ("species", "breed", "colors", "sex", "marks")} if usable_photo
             else "사진 특징 없음", ensure_ascii=False)
         species_text = {"dog": "강아지", "cat": "고양이", "etc": "기타 동물"}.get(species, "미지정")
+        # 이전 검토가 정리해 입력란에 넣은 글([털색]/[특징]/[상황]/[기타])이면 사진 특징이 이미 합쳐져 있다.
+        # 이때 글과 사진에 같은 값이 있는 것은 새 중복이 아니므로 중복으로 보고하지 않는다.
+        organized = is_organized_text(source_text)
         human = ("[찾는 동물 종류]\n" + species_text + "\n\n[사용자 글]\n" + (source_text or "(입력된 글 없음)")
+                 + ("\n(이 글은 이전 검토에서 사진 특징까지 합쳐 정리한 글이다. 글과 사진의 같은 값은 중복으로 보고하지 않는다.)"
+                    if organized else "")
                  + "\n\n[사진 분석 특징]\n" + photo_text)
         response = await self._invoke_structured(
             [("system", INPUT_REVIEW_SYSTEM_PROMPT), ("human", human)],
@@ -216,17 +232,19 @@ class FeatureExtractor:
         )
         organized = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
         question = response.question.strip()[:200]
+        duplicates = [] if organized else [d.strip()[:40] for d in response.duplicates if d.strip()][:8]
         # 질문할 내용이 비었으면 묻지 않고 찾는다(빈 질문으로 멈추지 않게).
         action = "ask" if response.action == "ask" and question else "search"
         return InputReviewResult(
             organized_text=organized,
             features={"colors": colors, "sex": sex, "marks": marks},
-            duplicates=[d.strip()[:40] for d in response.duplicates if d.strip()][:8],
+            duplicates=duplicates,
             conflicts=[{"item": c.item.strip()[:20], "text_value": c.text_value.strip()[:40],
                         "photo_value": c.photo_value.strip()[:40]} for c in response.conflicts if c.item.strip()][:6],
             action=action,
             question=question if action == "ask" else "",
-            message=response.message.strip()[:300],
+            message=(ORGANIZED_TEXT_MESSAGE if organized and not response.conflicts and action == "search"
+                     else response.message.strip()[:300]),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",
             prompt_version=INPUT_REVIEW_PROMPT_VERSION,
