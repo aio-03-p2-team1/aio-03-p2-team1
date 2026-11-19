@@ -117,7 +117,7 @@ flowchart TD
 | 품종 코드 선택 | 코드 목록에서 품종명을 검증하고 공공 API에 `kind=<breed_code>` 전달, 응답 품종명도 확인 | `criteria.breed_code`, `kind` |
 | 품종을 고르거나 글에 품종을 적음(입력 검토 `breed_mention`) | **확실히 거름(0건이 되더라도)**: 같은 계열(크기 접두어만 다른 '토이 푸들'·'푸들')만 남기고, 믹스 공고는 공고 품종·특이사항에 찾는 품종 이름이 있을 때만, 품종 기타·미상은 뺀다(`ranking.breed_matches`). 글에서 찾은 품종은 API 품종 코드로 좁히지 않고(`breed_source=text`) 받은 공고를 계열로 거른다 | `criteria.breed`, `input_review.filters` |
 | 기타 동물 + 글이 말하는 종류(입력 검토 `animal_kind`, 예: 새·토끼·소) | 공공데이터 품종이 '기타축종' 하나뿐이라 `rank` 에서 공고 특이사항 낱말로 먼저 종류를 가리고(`normalization/animal_kind.py`), 글로 모르는 공고만 사진으로 판단(`animal_kind_photo`: 공고 사진을 서버가 받아 512px로 줄여 8장씩 한 번에 판별, 검색당 24장 상한). 찾는 종류로 확인된 공고만 남기고 다른 종류·모름(사진 없음 포함)은 뺀다. 판단은 공고별로 `kind_labels` 에 보관해 다시 정렬할 때 재사용 | `kind_check`, `tool_calls[].animal_kind_photo` |
-| live 모드 + 자유 서술 또는 쓸 수 있는 사진 특징 | `input_review`: 글과 서버가 보관한 사진 분석 특징을 한 번의 구조화 호출로 검토(중복 합치기·모순 기록·[털색]/[특징]/[상황]/[기타] 정리·판단 멘트). 최종 특징은 글 우선. 털색·성별이 정면으로 어긋나면 검색 전에 `ask`(대화의 첫 검색에서만, 이어 찾기에서는 묻지 않고 글 기준) | `input_review`, `tool_calls[].input_review` |
+| live 모드 + 자유 서술 또는 쓸 수 있는 사진 특징 | `input_review`: 글과 서버가 보관한 사진 분석 특징을 한 번의 구조화 호출로 검토(중복 합치기·모순 기록·[털색]/[특징]/[상황]/[기타] 정리·판단 멘트). 최종 특징은 글 우선. 털색·성별이 정면으로 어긋나거나, 쓸 사진이 없고 글에서도 외형 특징(털색·성별·표식·중성화·나이·몸무게)이 하나도 나오지 않으면 검색 전에 `ask`(뒤쪽은 서버 고정 질문 `NEED_INFO_QUESTION`과 서버 보기 `input_review.info_request`(털색·성별·특징, `assess.FIELD_OPTIONS`)를 보내 화면이 입력 검토 카드에서 고르게 한다. 고른 값은 검색 조건(`color`·`sex`)과 설명 끝 '추가 특징'으로 같은 대화에서 찾는다. 대화의 첫 검색에서만, 이어 찾기에서는 묻지 않고 그대로 찾음) | `input_review`, `tool_calls[].input_review` |
 | LLM 설정 + 정상 조회·정렬 완료(빈 결과·캐시 적중 포함) | `agent`가 결과 검토 후 수정·질문·확정 선택. 확신 충분이면 사진·정보 요청은 서버가 거부 | `agent_decision`, `tool_calls[].agent_*` |
 | 결과 0건 + 에이전트가 `finish` + 더 넓힐 지역·반경이 있음(`empty_narrow`·`empty_radius`) | 판단을 기록하고 `validate`로 돌아가 기존 성찰 질문(지역·반경 넓히기 동의)으로 끝낸다. 지역 전체처럼 넓힐 범위가 없으면 0건 완료 | `agent_decision.empty_fallback`, `questions` |
 | 실종 위치(`lost_place`) + 카카오 키 + 실종 14일 이내 | `kakao_geocode_regions`: 실종 위치(좌표가 없을 때)·공고 관할 시군구·구조 장소 읍면동 좌표(성공만 캐시, 검색당 신규 80건 상한) | 반경 km·요청·캐시 수 |
@@ -165,7 +165,7 @@ sequenceDiagram
 | `missing` / `input_errors` / `questions` | 누락·오류·질문 | list | [] | analyze, reflect | run, thread |
 | `memory_used` | 장기 기억에서 채운 값 | dict | {} | context | run |
 | `llm_features` | LLM 추출 특징 + 쓸 만한 사진의 특징(`photo_store.merge_features`) | dict | — | context, agent_tools | run |
-| `input_review` | 검색 전 입력 검토 결과(`action` search\|ask, `message`, `question`, `duplicates`, `conflicts`, `organized_text`, `photo_used`, `filters`(글에서 찾아 거른 품종·동물 종류 안내), `prompt_version`) | dict \| None | — | context | run |
+| `input_review` | 검색 전 입력 검토 결과(`action` search\|ask, `message`, `question`, `duplicates`, `conflicts`, `organized_text`, `photo_used`, `filters`(글에서 찾아 거른 품종·동물 종류 안내), `info_request`(특징이 없어 물을 때 고를 보기), `prompt_version`) | dict \| None | — | context | run |
 | `review_memory` | 같은 대화의 직전 입력 검토 기억(`organized_text`, 보고한 `duplicates`, `conflicts`, 사용자가 답해 확정한 `confirmed_items`). 대화 기록(`thread.review`)에 저장하고 다음 검토 입력의 [이전 검토]로 넘긴다. 모델은 이전 호출을 스스로 기억하지 않으므로 서버가 넘긴다 | dict \| None | runner | — | thread |
 | `kind_labels` | 기타 동물 공고별 동물 종류 판단(공고 번호 → `{kind, by: text\|photo}`) | dict | {} | rank | 조건 캐시 |
 | `kind_check` | 기타 동물 종류 거르기 요약(`target`, `checked`, `kept`, `kept_by_text`, `kept_by_photo`, `other_kind`, `unknown`) | dict \| None | — | rank | run |
@@ -419,6 +419,6 @@ LLM이 설정된 정상 검색 전체에서 **도구 호출(function calling)로
 
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 
-텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v5(v2 글의 품종·기타 동물 종류 추출, v3 같은 대화의 이전 검토 기억 반영, v4 보호자용 쉬운 말·가까운 색으로 바꾸기, v5 글의 중성화·나이·몸무게를 [중성화]·[나이]·[몸무게] 줄로 정리. 숫자가 원래 글에 없으면 서버가 버림), 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v6(v2 글의 품종·기타 동물 종류 추출, v3 같은 대화의 이전 검토 기억 반영, v4 보호자용 쉬운 말·가까운 색으로 바꾸기, v5 글의 중성화·나이·몸무게를 [중성화]·[나이]·[몸무게] 줄로 정리. 숫자가 원래 글에 없으면 서버가 버림, v6 화면에서 고른 털색·성별(검색 조건 칸)을 [사용자가 고른 조건]으로 넘겨 멘트에서 함께 말함), 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
 
 검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.

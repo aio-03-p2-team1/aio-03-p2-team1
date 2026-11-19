@@ -357,6 +357,15 @@ export default function SearchPage() {
     submit(buildCriteria({ ...form, description }, answers), run?.thread_id)
   }
 
+  // 특징이 하나도 없어 입력 검토가 물을 때: 보기를 골라 두었다가(여러 개 가능) '고른 특징으로 찾기'나 '이대로 찾기'로 같은 대화에서 찾는다.
+  function toggleReviewInfo(field, value) {
+    setAnswers((current) => ((current[field] || []).includes(value) ? removeAnswer(current, field, value) : addAnswer(current, field, value)))
+  }
+
+  function searchWithReviewInfo() {
+    submit(buildCriteria(form, answers), run?.thread_id)
+  }
+
   function chooseAnswer(field, value) {
     const next = addAnswer(answers, field, value)
     setAnswers(next)
@@ -470,7 +479,8 @@ export default function SearchPage() {
               </div>
             )}
             {/* 검색 에이전트의 입력 검토 멘트는 특징과 상황 입력란 바로 위에 보여 준다. */}
-            {!busy && <InputReview review={run?.input_review} awaiting={run?.status === 'awaiting_input'} picks={reviewPicks} onChoose={chooseReviewValue} />}
+            {!busy && <InputReview review={run?.input_review} awaiting={run?.status === 'awaiting_input'} picks={reviewPicks} onChoose={chooseReviewValue}
+              answers={answers} onToggleInfo={toggleReviewInfo} onSearchInfo={searchWithReviewInfo} />}
             <div className="search-description">
               <div className="search-description-head">
                 <label htmlFor="search-description-input">특징과 상황</label>
@@ -661,9 +671,12 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
 }
 
 // 검색 에이전트의 입력 검토: 글과 사진 특징에서 무엇을 합치고 무엇이 어긋났는지, 어떻게 찾을지 보여 준다.
-function InputReview({ review, awaiting, picks = {}, onChoose }) {
+function InputReview({ review, awaiting, picks = {}, onChoose, answers = {}, onToggleInfo, onSearchInfo }) {
   const view = inputReviewView(review)
   if (!view) return null
+  // 특징이 하나도 없어 물은 상태면 서버가 정한 보기(털색·성별·특징)를 고르게 한다.
+  const infoFields = awaiting && view.question ? review.info_request || [] : []
+  const picked = infoFields.some((f) => answers[f.field]?.length)
   // 모순을 물은 상태면 항목마다 버튼 두 개를 둔다(항목 이름과 입력한 값·사진 분석 값을 함께 표시).
   const choices = awaiting && view.question ? (review.conflicts || []).filter((c) => conflictChoices(c).length) : []
   return (
@@ -686,6 +699,26 @@ function InputReview({ review, awaiting, picks = {}, onChoose }) {
               {choices.length}개 항목을 모두 고르면 바로 찾아요 ({choices.filter((c) => picks[c.item]).length}/{choices.length})
             </p>
           )}
+        </div>
+      )}
+      {infoFields.length > 0 && (
+        <div className="input-review-choices">
+          {infoFields.map((f) => (
+            <div key={f.field} className="input-review-choice" role="group" aria-label={`${f.label} 고르기`}>
+              <span className="input-review-choice-label">{f.label}</span>
+              {f.options.map((option) => {
+                const on = (answers[f.field] || []).includes(option)
+                return (
+                  <button key={option} type="button" aria-pressed={on} className={`secondary-button${on ? ' is-picked' : ''}`}
+                    onClick={() => onToggleInfo(f.field, option)}>{option}</button>
+                )
+              })}
+            </div>
+          ))}
+          <div className="input-review-choice">
+            <button type="button" className="primary-button" disabled={!picked} onClick={onSearchInfo}>고른 특징으로 찾기</button>
+            <button type="button" className="secondary-button" onClick={onSearchInfo}>이대로 찾기</button>
+          </div>
         </div>
       )}
       {view.lines.length > 0 && <ul>{view.lines.map((line) => <li key={line}>{line}</li>)}</ul>}

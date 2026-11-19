@@ -88,6 +88,7 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
     "neuter·age·weight는 글에 직접 적힌 중성화 여부·나이·몸무게만 옮긴다. neuter는 중성화했다면 Y, 안 했다면 N, 글에 없으면 빈 문자열이다. "
     "age·weight에는 글에 적힌 숫자와 단위를 그대로 쓰고(예: 3살, 6개월, 4kg, 4.5키로), 사진이나 품종으로 추정하지 않으며 글에 없으면 빈 문자열로 둔다. "
     "이 세 값은 [털색]·[특징]·[상황]·[기타]에 다시 적지 않는다. "
+    "[사용자가 고른 조건]이 주어지면 보호자가 화면에서 직접 고른 털색·성별이다. 글과 함께 확정된 값으로 보고, message에서 어떤 아이를 찾을지 말할 때 빠뜨리지 않는다(예: '고등어무늬 수컷에 꼬리가 짧은 아이로 찾아볼게요.'). 정리한 글의 항목에는 다시 적지 않는다. "
     "animal_kind는 종류가 기타 동물일 때만 글이 말하는 동물을 허용값 가운데 하나로 쓰고(예: 앵무새·사랑앵무는 새, 송아지는 소), 개·고양이 검색이거나 글로 알 수 없으면 빈 문자열로 둔다."
 )
 
@@ -97,6 +98,10 @@ FRIENDLY_FALLBACK_MESSAGE = "입력한 내용과 사진을 함께 보고 찾을 
 # 보호자가 읽는 멘트에 섞이면 안 되는 시스템 용어. 섞이면 쉬운 기본 문장으로 바꾼다.
 JARGON_WORDS = ("허용 색", "허용값", "허용 값", "정규화", "검색 특징", "서버", "모델", "추출", "파라미터", "스키마")
 PHOTO_ONLY_MESSAGE = "글 없이 사진 분석 특징으로 정리해 찾아요."
+# 글에서도 사진에서도 찾을 외형 특징이 하나도 나오지 않으면 검색 전에 한 번 묻는다(대화의 첫 검색에서만).
+NEED_INFO_MESSAGE = "글에서 찾을 만한 외형 특징을 찾지 못했어요."
+NEED_INFO_QUESTION = "아는 특징을 골라 주시거나 사진을 올려 주세요. 잘 모르면 '이대로 찾기'를 눌러 주세요."
+NEED_INFO_FIELDS = ["color", "sex", "marks"]  # 보기는 assess.FIELD_OPTIONS(서버 목록)에서만 나온다
 PHOTO_LINE_PREFIX = "사진에서 확인한 특징:"  # frontend/src/lib/photo.js photoTraitLine 과 같은 머리말
 def friendly_message(message: str) -> str:
     """보호자가 읽을 멘트. 시스템 용어가 섞였으면 쉬운 기본 문장으로 바꾼다."""
@@ -115,7 +120,7 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-INPUT_REVIEW_PROMPT_VERSION = "input-review-v5"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영, v4: 보호자용 쉬운 말·가까운 색으로 바꾸기, v5: 글의 중성화·나이·몸무게 정리
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v6"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영, v4: 보호자용 쉬운 말·가까운 색으로 바꾸기, v5: 글의 중성화·나이·몸무게 정리, v6: 화면에서 고른 털색·성별을 멘트에 함께
 INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
@@ -211,7 +216,7 @@ class FeatureExtractor:
         )
 
     async def review_input(self, description: str, photo: dict | None = None, species: str = "",
-                           previous: dict | None = None) -> InputReviewResult:
+                           previous: dict | None = None, chosen: dict | None = None) -> InputReviewResult:
         """검색 전 입력 검토: 글과 서버가 보관한 사진 분석 결과의 중복·모순·문맥을 한 번에 정리한다."""
         source_text = (description or "").strip()
         usable_photo = photo if photo and photo.get("suitable") else None
@@ -241,8 +246,15 @@ class FeatureExtractor:
                 "이미_보고한_중복": sorted(reported),
                 "사용자가_확정한_항목": sorted(confirmed),
             }, ensure_ascii=False)
+        # 사용자가 화면에서 고른 털색·성별(검색 조건 칸). 글에는 없지만 멘트에서 함께 말하도록 넘긴다.
+        chosen = {k: v for k, v in (chosen or {}).items() if v}
+        chosen_text = ""
+        if chosen:
+            chosen_text = "\n\n[사용자가 고른 조건]\n" + json.dumps(
+                {"털색": chosen.get("color", ""), "성별": {"M": "수컷", "F": "암컷"}.get(chosen.get("sex"), "")},
+                ensure_ascii=False)
         human = ("[찾는 동물 종류]\n" + species_text + "\n\n[사용자 글]\n" + (source_text or "(입력된 글 없음)")
-                 + "\n\n[사진 분석 특징]\n" + photo_text + memory_text)
+                 + "\n\n[사진 분석 특징]\n" + photo_text + chosen_text + memory_text)
         response = await self._invoke_structured(
             [("system", INPUT_REVIEW_SYSTEM_PROMPT), ("human", human)],
             InputReviewModelResponse,
@@ -277,6 +289,12 @@ class FeatureExtractor:
                      for c in response.conflicts if c.item.strip() and c.item.strip() not in confirmed][:6]
         # 질문할 내용이 비었거나 물을 모순이 남지 않았으면 묻지 않고 찾는다.
         action = "ask" if response.action == "ask" and question and conflicts else "search"
+        # 쓸 만한 사진도 없고 글에서도 외형 특징(털색·성별·표식·중성화·나이·몸무게)이 하나도 안 나오면 먼저 정보를 청한다.
+        # 문장은 서버 고정값이다. 같은 대화에서 이미 물었으면 graph가 다시 묻지 않고 그대로 찾는다.
+        needs_info = (usable_photo is None and not (colors or marks or sex or neuter or chosen)
+                      and age_years is None and weight_kg is None)
+        if needs_info:
+            action, question = "ask", NEED_INFO_QUESTION
         return InputReviewResult(
             organized_text=organized,
             features={"colors": colors, "sex": sex, "marks": marks,
@@ -287,11 +305,13 @@ class FeatureExtractor:
             conflicts=conflicts,
             action=action,
             question=question if action == "ask" else "",
-            message=(ORGANIZED_TEXT_MESSAGE if own_text and not conflicts and action == "search"
-                     else PHOTO_ONLY_MESSAGE if not user_wrote and not conflicts
+            message=(NEED_INFO_MESSAGE if needs_info
+                     else ORGANIZED_TEXT_MESSAGE if own_text and not chosen and not conflicts and action == "search"
+                     else PHOTO_ONLY_MESSAGE if not user_wrote and not chosen and not conflicts
                      else friendly_message(response.message)),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",
+            info_fields=list(NEED_INFO_FIELDS) if needs_info else [],
             prompt_version=INPUT_REVIEW_PROMPT_VERSION,
         )
 

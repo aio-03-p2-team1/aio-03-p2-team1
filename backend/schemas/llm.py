@@ -84,6 +84,7 @@ class InputReviewResult(StrictSchema):
     message: str
     breed_mention: str = ""
     animal_kind: str = ""
+    info_fields: list[str] = []  # 특징이 하나도 없어 검색 전에 고르게 할 항목(서버 고정 보기, assess.FIELD_OPTIONS)
     prompt_version: str
 
 

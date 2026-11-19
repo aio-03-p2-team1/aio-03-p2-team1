@@ -10,6 +10,8 @@ from backend.agent.llm import (
     ORGANIZED_TEXT_MESSAGE,
     friendly_message,
     PHOTO_ONLY_MESSAGE,
+    NEED_INFO_MESSAGE,
+    NEED_INFO_QUESTION,
     INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -369,3 +371,27 @@ def test_review_input_drops_neuter_age_weight_not_written_in_the_text():
     result = asyncio.run(extractor(client).review_input("흰색 암컷, 빨간 목줄", None, "dog"))
     assert "neuter" not in result.features and "age_years" not in result.features and "weight_kg" not in result.features
     assert "[나이]" not in result.organized_text and "[중성화]" not in result.organized_text
+
+
+def test_review_input_asks_for_features_when_text_and_photo_give_none():
+    # '믿어주세요'처럼 외형 특징이 하나도 없고 사진도 없으면 검색 전에 특징이나 사진을 청한다.
+    client = FakeChatClient(review_payload(fur_color="", features="", situation="", other="", colors=[], sex="",
+                                           marks=[], duplicates=[], conflicts=[], action="search",
+                                           message="정리할 외형 정보가 없어요."))
+    result = asyncio.run(extractor(client).review_input("믿어주세요", None, "cat"))
+    assert result.action == "ask" and result.question == NEED_INFO_QUESTION and result.message == NEED_INFO_MESSAGE
+    assert result.info_fields == ["color", "sex", "marks"]
+    # 사진이 있으면 묻지 않는다.
+    photo = {"suitable": True, "species": "cat", "breed": "", "colors": [], "sex": "", "marks": []}
+    result = asyncio.run(extractor(FakeChatClient(review_payload(colors=[], sex="", marks=[], conflicts=[])))
+                         .review_input("믿어주세요", photo, "cat"))
+    assert result.action == "search" and result.info_fields == []
+
+
+def test_review_input_passes_chosen_color_and_sex_to_the_model():
+    client = FakeChatClient(review_payload(fur_color="", colors=[], sex="", marks=["꼬리 짧음"], conflicts=[], duplicates=[],
+                                           message="고등어무늬 수컷에 꼬리가 짧은 아이로 찾아볼게요."))
+    result = asyncio.run(extractor(client).review_input("꼬리 짧음", None, "cat", chosen={"color": "고등어무늬", "sex": "M"}))
+    human = client.messages[1][1]
+    assert "[사용자가 고른 조건]" in human and "고등어무늬" in human and "수컷" in human
+    assert result.action == "search" and "고등어무늬" in result.message

@@ -91,20 +91,22 @@ class FakeReviewer:
 
     model = "fake-review"
 
-    def __init__(self, *actions, error=None, breed_mention="", animal_kind=""):
+    def __init__(self, *actions, error=None, breed_mention="", animal_kind="", info_fields=None):
         self.actions = list(actions) or ["search"]
         self.error = error
         self.breed_mention = breed_mention
         self.animal_kind = animal_kind
+        self.info_fields = info_fields or []
         self.calls = []
         self.memories = []
 
-    async def review_input(self, description, photo=None, species="", previous=None):
+    async def review_input(self, description, photo=None, species="", previous=None, chosen=None):
         from backend.agent.llm import LlmError
         from backend.schemas.llm import InputReviewResult
 
         self.calls.append((description, photo))
         self.memories.append(previous)
+        self.chosen = chosen
         if self.error:
             raise LlmError(self.error)
         action = self.actions.pop(0) if len(self.actions) > 1 else self.actions[0]
@@ -118,6 +120,7 @@ class FakeReviewer:
             message="흰색이 글과 사진에 겹쳐 하나로 합쳤어요.",
             breed_mention=self.breed_mention,
             animal_kind=self.animal_kind,
+            info_fields=self.info_fields if action == "ask" else [],
             prompt_version="input-review-v2",
         )
 
@@ -158,6 +161,22 @@ def test_input_review_asks_before_search_once_per_thread():
     assert second["status"] == "completed"  # 같은 대화에서는 다시 묻지 않고 글 기준으로 찾는다
     assert second["input_review"]["action"] == "search" and second["input_review"]["question"] == ""
     assert len(animal.calls) == 1
+
+
+def test_input_review_without_features_offers_server_options_before_search():
+    """특징이 하나도 없어 물을 때는 지역 넓히기 전에, 검색 전에 서버가 정한 보기(털색·성별·특징)를 함께 보낸다."""
+    reviewer = FakeReviewer("ask", "ask", info_fields=["color", "sex", "marks"])
+    animal = FakeAnimal(pages=[[api_item(1)]])
+    d = deps(animal)
+    d["llm"] = reviewer
+    criteria = {"species": "cat", "region": "전체", "lost_date": START, "description": "으흠"}
+    first = search(d, criteria)
+    assert first["status"] == "awaiting_input" and animal.calls == []
+    fields = {f["field"]: f for f in first["input_review"]["info_request"]}
+    assert set(fields) == {"color", "sex", "marks"} and "흰색" in fields["color"]["options"]
+    second = search(d, {**criteria, "color": "흰색", "sex": "M"}, thread_id=first["thread_id"])
+    assert second["status"] == "completed" and "info_request" not in second["input_review"]
+    assert reviewer.chosen == {"color": "흰색", "sex": "M"}  # 고른 털색·성별을 입력 검토에 넘겨 멘트에 함께 말하게 한다
 
 
 def test_widen_follow_up_without_description_reuses_the_thread_text():
