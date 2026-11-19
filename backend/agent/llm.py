@@ -79,7 +79,9 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
     "장소·날짜·시간·이름·연락처는 새로 만들거나 바꾸지 말고 원문에 있는 그대로만 [상황]이나 [기타]에 옮긴다. "
     "action은 검색에 큰 영향을 주는 털색이나 성별이 글과 사진에서 정면으로 어긋나 어느 쪽이 맞는지 사용자에게 확인해야 할 때만 ask로, 그 외에는 search로 한다. "
     "ask이면 question에 사용자에게 물을 한 문장 질문을 쓰고, search이면 question은 빈 문자열로 둔다. "
-    "message에는 사용자에게 보여 줄 판단을 1~2문장으로 쓴다: 무엇을 합쳤고 무엇이 어긋났으며 어떤 기준으로 찾을지. 검토할 내용이 없으면 그렇다고 짧게 쓴다. "
+    "message·question은 반려동물을 잃어버린 보호자가 읽는 말이다. 일상 한국어 해요체로 짧고 쉽게 1~2문장만 쓴다(예: '사진과 글에 같은 털색이 있어 하나로 정리했어요. 흰 털에 회색 줄무늬인 아이로 찾아볼게요.'). "
+    "허용 색상·허용값·정규화·검색 특징·중복 제거·서버·모델·추출 같은 시스템 용어는 쓰지 않는다. 무엇을 합쳤고 무엇이 달랐으며 어떤 모습의 아이를 찾을지만 말한다. 검토할 내용이 없으면 그렇다고 짧게 쓴다. "
+    "글이나 사진의 색이 허용 색 목록에 그대로 없으면 빼지 말고 가장 가까운 허용 색으로 바꿔 넣는다(예: 베이지·아이보리 → 크림, 밤색 → 갈색). "
     "breed_mention에는 글에 직접 적힌 품종 이름 하나를 원문 그대로 쓴다(예: 푸들, 말티즈, 코리안숏헤어). '믹스'만 적혔거나 품종이 없으면 빈 문자열로 둔다. 사진만으로 품종을 추정해 넣지 않는다. "
     "[이전 검토(같은 대화)]가 주어지면 같은 대화에서 앞서 한 검토 기억이다. 지금 글이 이전에 정리한 글과 같으면 그 글에는 사진 특징이 이미 합쳐져 있으므로 중복으로 보고하지 않고, 이미 보고한 중복과 사용자가 확정한 항목의 모순은 다시 보고하거나 묻지 않는다. "
     "animal_kind는 종류가 기타 동물일 때만 글이 말하는 동물을 허용값 가운데 하나로 쓰고(예: 앵무새·사랑앵무는 새, 송아지는 소), 개·고양이 검색이거나 글로 알 수 없으면 빈 문자열로 둔다."
@@ -87,8 +89,19 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
 
 
 ORGANIZED_TEXT_MESSAGE = "이미 정리한 글이라 그대로 기준으로 찾아요."
+FRIENDLY_FALLBACK_MESSAGE = "입력한 내용과 사진을 함께 보고 찾을 특징을 정리했어요."
+# 보호자가 읽는 멘트에 섞이면 안 되는 시스템 용어. 섞이면 쉬운 기본 문장으로 바꾼다.
+JARGON_WORDS = ("허용 색", "허용값", "허용 값", "정규화", "검색 특징", "서버", "모델", "추출", "파라미터", "스키마")
 PHOTO_ONLY_MESSAGE = "글 없이 사진 분석 특징으로 정리해 찾아요."
 PHOTO_LINE_PREFIX = "사진에서 확인한 특징:"  # frontend/src/lib/photo.js photoTraitLine 과 같은 머리말
+def friendly_message(message: str) -> str:
+    """보호자가 읽을 멘트. 시스템 용어가 섞였으면 쉬운 기본 문장으로 바꾼다."""
+    text = (message or "").strip()[:300]
+    if not text or any(word in text for word in JARGON_WORDS):
+        return FRIENDLY_FALLBACK_MESSAGE
+    return text
+
+
 def _build_system_prompt(task_instructions: str) -> str:
     return FEATURE_SYSTEM_PROMPT_TEMPLATE.format(
         color_values=COLOR_VALUES_TEXT,
@@ -98,7 +111,7 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-INPUT_REVIEW_PROMPT_VERSION = "input-review-v3"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v4"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영, v4: 보호자용 쉬운 말·가까운 색으로 바꾸기
 INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
@@ -241,6 +254,8 @@ class FeatureExtractor:
         )
         organized = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
         question = response.question.strip()[:200]
+        if any(word in question for word in JARGON_WORDS):
+            question = ""  # 알아듣기 어려운 질문이면 묻지 않고 글 기준으로 찾는다
         # 이전에 정리한 글 그대로면 중복을 새로 보고하지 않고, 이미 보고한 중복도 다시 올리지 않는다.
         # 사용자가 직접 쓴 글이 없으면(사진만) 비교할 대상이 없어 중복도 없다.
         duplicates = [] if own_text or not user_wrote else [
@@ -260,7 +275,7 @@ class FeatureExtractor:
             question=question if action == "ask" else "",
             message=(ORGANIZED_TEXT_MESSAGE if own_text and not conflicts and action == "search"
                      else PHOTO_ONLY_MESSAGE if not user_wrote and not conflicts
-                     else response.message.strip()[:300]),
+                     else friendly_message(response.message)),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",
             prompt_version=INPUT_REVIEW_PROMPT_VERSION,

@@ -6,7 +6,9 @@ import pytest
 
 from backend.agent.llm import (
     COLOR_VALUES_TEXT,
+    FRIENDLY_FALLBACK_MESSAGE,
     ORGANIZED_TEXT_MESSAGE,
+    friendly_message,
     PHOTO_ONLY_MESSAGE,
     INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
@@ -173,6 +175,16 @@ def test_review_input_with_photo_only_reports_no_duplicates():
     result = asyncio.run(extractor(client).review_input("사진에서 확인한 특징: 흰색, 회색, 고등어무늬", photo, "cat"))
     assert result.duplicates == [] and result.message == PHOTO_ONLY_MESSAGE
     assert "사진에서 확인한 특징" not in client.messages[1][1].split("[사진 분석 특징]")[0]
+
+
+def test_review_message_with_system_jargon_falls_back_to_plain_words():
+    client = FakeChatClient(review_payload(
+        message="몸털의 베이지색은 허용 색상으로 명확히 정규화하기 어려워 제외했습니다.",
+        action="ask", question="허용값 기준 털색을 고를까요?"))
+    result = asyncio.run(extractor(client).review_input("베이지색 몸털, 검정 머리털", None, "dog"))
+    assert result.message == FRIENDLY_FALLBACK_MESSAGE
+    assert result.action == "search" and result.question == ""  # 알아듣기 어려운 질문이면 묻지 않는다
+    assert friendly_message("흰 털에 회색 줄무늬인 아이로 찾아볼게요.") == "흰 털에 회색 줄무늬인 아이로 찾아볼게요."
 
 
 def test_review_input_rejects_empty_input_without_calling_model():
