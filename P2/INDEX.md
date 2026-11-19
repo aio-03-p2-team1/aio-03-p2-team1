@@ -12,6 +12,7 @@
 
 ## 기술 참고 자료
 
+- [기술 스택과 운영 구성](../docs/development.md#기술-스택)
 - [에이전트 시험 결과 보고서](../docs/test-report.md)
 - [색상 정규화 설명](../docs/color-normalization.md)
 - [실제 공고의 털색 데이터](../docs/data/animal-color-combinations.tsv)
