@@ -717,7 +717,7 @@ function InputReview({ review, awaiting, picks = {}, onChoose, answers = {}, onT
           ))}
           <div className="input-review-choice">
             <button type="button" className="primary-button" disabled={!picked} onClick={onSearchInfo}>고른 특징으로 찾기</button>
-            <button type="button" className="text-button" onClick={onSearchInfo}>이대로 찾기</button>
+            <button type="button" className="secondary-button" onClick={onSearchInfo}>이대로 찾기</button>
           </div>
         </div>
       )}
