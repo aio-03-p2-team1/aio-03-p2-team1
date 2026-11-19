@@ -166,6 +166,7 @@ sequenceDiagram
 | `memory_used` | 장기 기억에서 채운 값 | dict | {} | context | run |
 | `llm_features` | LLM 추출 특징 + 쓸 만한 사진의 특징(`photo_store.merge_features`) | dict | — | context, agent_tools | run |
 | `input_review` | 검색 전 입력 검토 결과(`action` search\|ask, `message`, `question`, `duplicates`, `conflicts`, `organized_text`, `photo_used`, `filters`(글에서 찾아 거른 품종·동물 종류 안내), `prompt_version`) | dict \| None | — | context | run |
+| `review_memory` | 같은 대화의 직전 입력 검토 기억(`organized_text`, 보고한 `duplicates`, `conflicts`, 사용자가 답해 확정한 `confirmed_items`). 대화 기록(`thread.review`)에 저장하고 다음 검토 입력의 [이전 검토]로 넘긴다. 모델은 이전 호출을 스스로 기억하지 않으므로 서버가 넘긴다 | dict \| None | runner | — | thread |
 | `kind_labels` | 기타 동물 공고별 동물 종류 판단(공고 번호 → `{kind, by: text\|photo}`) | dict | {} | rank | 조건 캐시 |
 | `kind_check` | 기타 동물 종류 거르기 요약(`target`, `checked`, `kept`, `kept_by_text`, `kept_by_photo`, `other_kind`, `unknown`) | dict \| None | — | rank | run |
 | `photo_features` | 서버가 보관한 사진 분석 결과(`suitable`, 종류·품종·털색·성별·특징). 사진을 받았는지 판단은 이 값으로만 | dict \| None | 요청 `photo_analysis_id` | runner | run |
@@ -418,6 +419,6 @@ LLM이 설정된 정상 검색 전체에서 **도구 호출(function calling)로
 
 프론트는 사진 품종을 설명 문장에 추가하지 않고 셀렉트 값으로 반영한다. 수동 선택이 같은 축종에 있으면 유지하고, 축종이 바뀌면 초기화한 뒤 검증된 사진 품종을 적용한다. 사진 즉시 재검색 경로도 같은 함수를 쓴다.
 
-텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v3(v2 글의 품종·기타 동물 종류 추출, v3 정리된 글을 다시 검토할 때 중복 미보고), 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
+텍스트 특징 추출·사진 분석·입력 검토는 `backend/agent/llm.py`의 공통 프롬프트 템플릿을 사용한다. 색상 허용값과 `marks` 기준은 템플릿에서 한 번 정의하고, 각 작업은 필요한 지시만 보탠다. 입력 검토는 글과 사진 분석 특징을 함께 받으며 충돌 시 글을 우선하고 사진은 글에 없는 항목만 보완한다. 프롬프트/조건 캐시 버전은 특징 추출·사진 분석 feature-extract-v8, 입력 검토 input-review-v3(v2 글의 품종·기타 동물 종류 추출, v3 같은 대화의 이전 검토 기억 반영), 에이전트 재검토 search-research-v1 / rrf-breed-v3다. 털색·무늬 `Color` 허용값과 대표 한국어 이름은 `backend/normalization/color.py`의 `ColorDictionary`에서 생성하고, 같은 사전이 토크나이저 별칭도 관리한다. 고정 목록과 `prompt_cache_key`를 사용한다. 모델 제공자의 실제 캐시 적중률은 미측정이다.
 
 검색 에이전트 search-agent-v2의 update_features는 품종 필드를 제공하지 않는다. 설명에서 품종을 추출하거나 품종 코드를 변경하지 않으며, 품종 완화 시에는 breed와 breed_code를 함께 제거한다. 사진 품종 코드 검증과 선택된 코드의 정규화는 기존 품종 노드가 담당한다.

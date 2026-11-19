@@ -7,7 +7,6 @@ import pytest
 from backend.agent.llm import (
     COLOR_VALUES_TEXT,
     ORGANIZED_TEXT_MESSAGE,
-    is_organized_text,
     INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -143,21 +142,27 @@ def test_classify_animal_photos_sends_all_photos_in_one_call():
     assert len(images) == 3 and all(part["image_url"]["detail"] == "low" for part in images)
 
 
-def test_review_input_does_not_report_duplicates_in_its_own_organized_text():
-    """이전 검토가 정리해 입력란에 넣은 글을 다시 검토하면 사진 특징과 겹치는 값을 새 중복으로 보고하지 않는다."""
-    client = FakeChatClient(review_payload(conflicts=[], duplicates=["흰색·회색 털색"], message="흰색이 반복되어 합쳤습니다."))
+def test_review_input_uses_previous_review_memory_of_the_same_thread():
+    """모델은 이전 호출을 기억하지 못하므로 서버가 넘긴 직전 검토 기억으로 판단한다."""
     organized = "[털색]: 흰색, 회색\n[특징]: 이마와 얼굴의 회색 줄무늬\n[상황]: 마지막으로 본 곳 공원"
+    previous = {"organized_text": organized, "duplicates": ["흰색·회색 털색"], "conflicts": [], "confirmed_items": []}
+    client = FakeChatClient(review_payload(conflicts=[], duplicates=["흰색·회색 털색"], message="흰색이 반복되어 합쳤습니다."))
     photo = {"suitable": True, "species": "cat", "breed": "", "colors": ["흰색", "회색"], "sex": "", "marks": []}
-    result = asyncio.run(extractor(client).review_input(organized, photo, "cat"))
-    assert result.duplicates == []
+    result = asyncio.run(extractor(client).review_input(organized, photo, "cat", previous=previous))
+    assert result.duplicates == []  # 자기가 정리한 글 그대로면 새 중복이 아니다
     assert result.message == ORGANIZED_TEXT_MESSAGE
-    assert "이전 검토에서 사진 특징까지 합쳐 정리한 글" in client.messages[1][1]
+    human = client.messages[1][1]
+    assert "[이전 검토(같은 대화)]" in human and '"지금_글이_이전에_정리한_글과_같음": true' in human
 
 
-def test_is_organized_text_only_for_template_lines():
-    assert is_organized_text("[털색]: 흰색\n[기타]: 4살")
-    assert not is_organized_text("흰색 고양이\n[털색]: 흰색")
-    assert not is_organized_text("")
+def test_review_input_does_not_ask_again_about_items_the_user_confirmed():
+    previous = {"organized_text": "[털색]: 기타", "duplicates": ["목 깃털 무늬"], "conflicts": [], "confirmed_items": ["털색"]}
+    client = FakeChatClient(review_payload(
+        action="ask", question="털색이 맞나요?", duplicates=["목 깃털 무늬", "빨간 목줄"],
+        conflicts=[{"item": "털색", "text_value": "기타", "photo_value": "회색"}]))
+    result = asyncio.run(extractor(client).review_input("[털색]: 기타: 회색\n[특징]: 빨간 목줄", None, "etc", previous=previous))
+    assert result.conflicts == [] and result.action == "search" and result.question == ""
+    assert result.duplicates == ["빨간 목줄"]  # 이미 보고한 중복은 다시 올리지 않는다
 
 
 def test_review_input_rejects_empty_input_without_calling_model():

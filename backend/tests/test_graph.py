@@ -97,12 +97,14 @@ class FakeReviewer:
         self.breed_mention = breed_mention
         self.animal_kind = animal_kind
         self.calls = []
+        self.memories = []
 
-    async def review_input(self, description, photo=None, species=""):
+    async def review_input(self, description, photo=None, species="", previous=None):
         from backend.agent.llm import LlmError
         from backend.schemas.llm import InputReviewResult
 
         self.calls.append((description, photo))
+        self.memories.append(previous)
         if self.error:
             raise LlmError(self.error)
         action = self.actions.pop(0) if len(self.actions) > 1 else self.actions[0]
@@ -251,6 +253,22 @@ def test_input_review_does_not_ask_on_follow_up_after_first_search_went_ahead():
     assert len(reviewer.calls) == 2  # 이어 찾을 때도 검토는 하되
     assert second["status"] == "completed" and second["input_review"]["action"] == "search"  # 묻지 않는다
     assert not any(q.get("field") == "input_review" for q in second.get("questions") or [])
+
+
+def test_thread_keeps_review_memory_and_marks_answered_conflicts_confirmed():
+    """서버가 대화 기록에 직전 검토를 남겨 다음 검토에 넘긴다(모델은 스스로 기억하지 못함)."""
+    reviewer = FakeReviewer("ask", "search")
+    d = deps(FakeAnimal(pages=[[api_item(1)]]))
+    d["llm"] = reviewer
+    criteria = {"species": "dog", "region": "전체", "lost_date": START, "description": "흰색 강아지"}
+    first = search(d, criteria, photo=PHOTO)
+    assert reviewer.memories == [None]  # 새 대화는 기억 없이 검토
+    assert first["status"] == "awaiting_input"
+    search(d, {"description": "[털색]: 흰색\n[특징]: 빨간 목줄"}, photo=PHOTO, thread_id=first["thread_id"])
+    memory = reviewer.memories[-1]
+    assert memory["organized_text"] == "[털색]: 흰색\n[특징]: 빨간 목줄"
+    assert memory["duplicates"] == ["흰색(글과 사진)"]
+    assert memory["confirmed_items"] == ["털색"]  # 물었던 항목에 사용자가 답했으므로 확정
 
 
 def test_input_review_failure_is_reported_not_hidden():

@@ -73,6 +73,40 @@ def agent_history(thread: dict[str, Any], declined: list[str] | None,
 RELAX_VALUE = "any"  # 화면이 '이 조건 빼고 찾기'에 동의했을 때 보내는 값(정규화에서 조건이 빠진다)
 
 
+def review_memory(thread: dict[str, Any]) -> dict[str, Any] | None:
+    """같은 대화의 직전 입력 검토 기억. LLM은 이전 호출을 기억하지 못하므로 서버가 대화 기록에서 꺼내 넘긴다.
+
+    직전 검색이 모순을 물었고(questions 에 input_review) 이번 요청이 그 답이면, 물었던 항목을 사용자가 확정한 것으로 본다.
+    """
+    saved = thread.get("review")
+    if not saved:
+        return None
+    confirmed = set(saved.get("confirmed_items") or [])
+    asked = any(isinstance(q, dict) and q.get("field") == "input_review" for q in thread.get("questions") or [])
+    if asked:
+        confirmed |= {c.get("item") for c in saved.get("conflicts") or [] if c.get("item")}
+    return {
+        "organized_text": saved.get("organized_text") or "",
+        "duplicates": list(saved.get("duplicates") or []),
+        "conflicts": list(saved.get("conflicts") or []),
+        "confirmed_items": sorted(confirmed),
+    }
+
+
+def saved_review(run: dict[str, Any], memory: dict[str, Any] | None) -> dict[str, Any] | None:
+    """대화 기록에 남길 입력 검토 기억(정리한 글·보고한 중복·모순·확정 항목). 이번에 검토가 없으면 이전 기억을 유지한다."""
+    review = run.get("input_review")
+    if not review:
+        return memory
+    reported = list(dict.fromkeys([*((memory or {}).get("duplicates") or []), *(review.get("duplicates") or [])]))
+    return {
+        "organized_text": review.get("organized_text") or "",
+        "duplicates": reported[:20],
+        "conflicts": list(review.get("conflicts") or []),
+        "confirmed_items": list((memory or {}).get("confirmed_items") or []),
+    }
+
+
 def next_history(history: dict[str, Any], request: dict[str, Any] | None) -> dict[str, Any]:
     history = {"photo_requests": history.get("photo_requests", 0), "info_requests": history.get("info_requests", 0),
                "asked_fields": list(history.get("asked_fields") or []), "declined": list(history.get("declined") or []),
@@ -97,6 +131,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
     thread = await store.get(owner, "thread", thread_id) or {}
     session_criteria = thread.get("criteria")
     history = agent_history(thread, request.get("declined"), request.get("criteria"))
+    memory = review_memory(thread)
     profile = (await store.get(owner, "memory", request["profile_id"]) or {}) if request.get("profile_id") else None
     merged, origins = crit.merge_conditions(request.get("criteria", {}), session_criteria, (profile or {}).get("confirmed"))
     normalized, missing, errors = crit.normalize(merged)
@@ -116,6 +151,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
         "trace": [],
         "agent_history": history,
         "photo_features": request.get("photo"),  # 서버가 보관한 사진 분석 결과(없으면 None)
+        "review_memory": memory,  # 같은 대화의 직전 입력 검토 기억(없으면 None)
         "llm_features": {},
     }
     # 에이전트 루프(걸음 최대 4, 다시 찾기 최대 2)까지 들어가도 넉넉하게 잡는다.
@@ -133,7 +169,9 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
                                # 반경 계산 방식과 지도 키 유무에 따라 결과가 달라지므로 캐시 키에 넣는다.
                                "radius": RADIUS_VERSION if getattr(deps.get("kakao"), "configured", False) else "off",
                                # 사진 특징이 다르면 결과가 달라지므로 캐시 키에 넣는다.
-                               "photo": request.get("photo")},
+                               "photo": request.get("photo"),
+                               # 같은 대화의 이전 검토 기억이 다르면 입력 검토 결과가 달라진다.
+                               "review_memory": memory},
                         reflection=request.get("reflection_enabled", True))
     cache_hit = False
 
@@ -230,6 +268,7 @@ async def run_search(deps: dict[str, Any], owner: str, request: dict[str, Any]) 
             "questions": run.get("questions") or [],
             "last_run_id": run_id,
             "agent": next_history(history, run.get("agent_request")),
+            "review": saved_review(run, memory),
             "updated_at": _now(),
         },
     )

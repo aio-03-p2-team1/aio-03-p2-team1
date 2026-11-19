@@ -145,7 +145,8 @@ async def context(state: SearchState, config) -> dict:
         # 검색 에이전트의 입력 검토: 글과 사진 분석 특징의 중복·모순·문맥을 정리하고, 바로 찾을지 먼저 물을지 정한다.
         started = time.perf_counter()
         try:
-            review = await llm.review_input(criteria.get("description") or "", photo, criteria.get("species") or "")
+            review = await llm.review_input(criteria.get("description") or "", photo, criteria.get("species") or "",
+                                            previous=state.get("review_memory"))
         except LlmError as exc:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("input_review", {"model": llm.model}, exc.code, "글·사진 특징 검토")]
