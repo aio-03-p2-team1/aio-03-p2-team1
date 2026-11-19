@@ -41,6 +41,7 @@ class SearchState(TypedDict, total=False):
     memory_used: dict[str, Any]
     llm_features: dict[str, Any]
     input_review: dict[str, Any] | None  # 검색 전 입력 검토(글·사진 특징의 중복·모순 정리, 판단 멘트, 바로 찾기/먼저 묻기). context 가 채움
+    review_memory: dict[str, Any] | None  # 같은 대화의 직전 입력 검토 기억(정리한 글·보고한 중복·모순·사용자가 확정한 항목). runner 가 대화 기록에서 채움
     kind_labels: dict[str, dict[str, str]]  # 기타 동물 공고별 동물 종류 판단(공고 번호 → {kind, by: text|photo}). 다시 정렬할 때 재사용
     kind_check: dict[str, Any] | None  # 기타 동물 종류 거르기 요약(찾는 종류, 확인·남긴·다른 종류·모름 건수)
     photo_features: dict[str, Any] | None  # 서버가 보관한 사진 분석 결과(photo_store). 사진을 받았는지 판단은 이 값으로만

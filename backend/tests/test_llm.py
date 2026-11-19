@@ -6,6 +6,10 @@ import pytest
 
 from backend.agent.llm import (
     COLOR_VALUES_TEXT,
+    FRIENDLY_FALLBACK_MESSAGE,
+    ORGANIZED_TEXT_MESSAGE,
+    friendly_message,
+    PHOTO_ONLY_MESSAGE,
     INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -96,6 +100,7 @@ def review_payload(**overrides):
         "duplicates": ["흰색(글과 사진)"],
         "conflicts": [{"item": "털색", "text_value": "흰색", "photo_value": "갈색"}],
         "action": "search", "question": "", "message": "흰색은 글과 사진에 겹쳐 하나로 합쳤고, 털색은 글 기준으로 찾을게요.",
+        "neuter": "", "age": "", "weight": "",
         "breed_mention": "푸들", "animal_kind": "",
     }
     payload.update(overrides)
@@ -139,6 +144,48 @@ def test_classify_animal_photos_sends_all_photos_in_one_call():
     assert labels == ["새", "소", "모름"]  # 빠진 번호는 모름, 범위 밖 번호는 무시
     images = [part for part in client.messages[1][1] if part["type"] == "image_url"]
     assert len(images) == 3 and all(part["image_url"]["detail"] == "low" for part in images)
+
+
+def test_review_input_uses_previous_review_memory_of_the_same_thread():
+    """모델은 이전 호출을 기억하지 못하므로 서버가 넘긴 직전 검토 기억으로 판단한다."""
+    organized = "[털색]: 흰색, 회색\n[특징]: 이마와 얼굴의 회색 줄무늬\n[상황]: 마지막으로 본 곳 공원"
+    previous = {"organized_text": organized, "duplicates": ["흰색·회색 털색"], "conflicts": [], "confirmed_items": []}
+    client = FakeChatClient(review_payload(conflicts=[], duplicates=["흰색·회색 털색"], message="흰색이 반복되어 합쳤습니다."))
+    photo = {"suitable": True, "species": "cat", "breed": "", "colors": ["흰색", "회색"], "sex": "", "marks": []}
+    result = asyncio.run(extractor(client).review_input(organized, photo, "cat", previous=previous))
+    assert result.duplicates == []  # 자기가 정리한 글 그대로면 새 중복이 아니다
+    assert result.message == ORGANIZED_TEXT_MESSAGE
+    human = client.messages[1][1]
+    assert "[이전 검토(같은 대화)]" in human and '"지금_글이_이전에_정리한_글과_같음": true' in human
+
+
+def test_review_input_does_not_ask_again_about_items_the_user_confirmed():
+    previous = {"organized_text": "[털색]: 기타", "duplicates": ["목 깃털 무늬"], "conflicts": [], "confirmed_items": ["털색"]}
+    client = FakeChatClient(review_payload(
+        action="ask", question="털색이 맞나요?", duplicates=["목 깃털 무늬", "빨간 목줄"],
+        conflicts=[{"item": "털색", "text_value": "기타", "photo_value": "회색"}]))
+    result = asyncio.run(extractor(client).review_input("[털색]: 기타: 회색\n[특징]: 빨간 목줄", None, "etc", previous=previous))
+    assert result.conflicts == [] and result.action == "search" and result.question == ""
+    assert result.duplicates == ["빨간 목줄"]  # 이미 보고한 중복은 다시 올리지 않는다
+
+
+def test_review_input_with_photo_only_reports_no_duplicates():
+    """사진만 올리면 화면이 넣은 '사진에서 확인한 특징' 줄은 사진 특징과 같은 출처라 중복으로 보지 않는다."""
+    client = FakeChatClient(review_payload(conflicts=[], duplicates=["흰색", "회색", "고등어무늬"], message="중복을 합쳤습니다."))
+    photo = {"suitable": True, "species": "cat", "breed": "", "colors": ["흰색", "회색"], "sex": "", "marks": ["고등어무늬"]}
+    result = asyncio.run(extractor(client).review_input("사진에서 확인한 특징: 흰색, 회색, 고등어무늬", photo, "cat"))
+    assert result.duplicates == [] and result.message == PHOTO_ONLY_MESSAGE
+    assert "사진에서 확인한 특징" not in client.messages[1][1].split("[사진 분석 특징]")[0]
+
+
+def test_review_message_with_system_jargon_falls_back_to_plain_words():
+    client = FakeChatClient(review_payload(
+        message="몸털의 베이지색은 허용 색상으로 명확히 정규화하기 어려워 제외했습니다.",
+        action="ask", question="허용값 기준 털색을 고를까요?"))
+    result = asyncio.run(extractor(client).review_input("베이지색 몸털, 검정 머리털", None, "dog"))
+    assert result.message == FRIENDLY_FALLBACK_MESSAGE
+    assert result.action == "search" and result.question == ""  # 알아듣기 어려운 질문이면 묻지 않는다
+    assert friendly_message("흰 털에 회색 줄무늬인 아이로 찾아볼게요.") == "흰 털에 회색 줄무늬인 아이로 찾아볼게요."
 
 
 def test_review_input_rejects_empty_input_without_calling_model():
@@ -303,3 +350,22 @@ def test_prompt_cache_key_reaches_openai_request_transport():
 def test_feature_prompt_version_is_current():
     from backend.agent.llm import PROMPT_VERSION
     assert PROMPT_VERSION == 'feature-extract-v8'
+
+
+def test_review_input_organizes_neuter_age_weight_written_in_the_text():
+    client = FakeChatClient(review_payload(neuter="Y", age="3살", weight="4.5kg", conflicts=[], duplicates=[]))
+    result = asyncio.run(extractor(client).review_input("흰색 암컷, 중성화했고 3살, 4.5kg 정도예요", None, "dog"))
+    assert "[중성화]: 했음\n[나이]: 약 3살\n[몸무게]: 약 4.5kg" in result.organized_text
+    assert result.features["neuter"] == "Y" and result.features["age_years"] == 3 and result.features["weight_kg"] == 4.5
+    # 정리한 글을 다시 넣어도 같은 값으로 읽힌다.
+    again = asyncio.run(extractor(FakeChatClient(review_payload(neuter="Y", age="약 3살", weight="약 4.5kg")))
+                        .review_input(result.organized_text, None, "dog"))
+    assert again.features["neuter"] == "Y" and again.features["age_years"] == 3 and again.features["weight_kg"] == 4.5
+
+
+def test_review_input_drops_neuter_age_weight_not_written_in_the_text():
+    # 모델이 글에 없는 값을 내도(사진·품종으로 추정 등) 버린다.
+    client = FakeChatClient(review_payload(neuter="Y", age="5살", weight="7kg"))
+    result = asyncio.run(extractor(client).review_input("흰색 암컷, 빨간 목줄", None, "dog"))
+    assert "neuter" not in result.features and "age_years" not in result.features and "weight_kg" not in result.features
+    assert "[나이]" not in result.organized_text and "[중성화]" not in result.organized_text

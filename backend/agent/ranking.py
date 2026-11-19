@@ -5,9 +5,10 @@ import math
 from datetime import date
 from typing import Any
 
+from backend.normalization import profile
 from backend.normalization.color import tokenize_color_words
 
-WEIGHTS = {"color": 3, "sex": 2, "keyword": 1}
+WEIGHTS = {"color": 3, "sex": 2, "keyword": 1, "neuter": 1, "age": 1, "weight": 1}
 MAX_KEYWORD_POINTS = 3
 TOP_K = 300
 RRF_K = 60
@@ -142,6 +143,37 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
         else:
             mismatched.append("성별 다름")
 
+    # 글에 적힌 중성화·나이·몸무게(입력 검토가 확인한 값). 공고 값은 보호소 추정이라 거르지 않고 비슷하면 점수만 더한다.
+    neuter = features.get("neuter")
+    if neuter in ("Y", "N"):
+        if item.get("neuter") not in ("Y", "N"):
+            unknown.append("중성화")
+        elif item["neuter"] == neuter:
+            points += WEIGHTS["neuter"]
+            matched.append("중성화 " + ("했음" if neuter == "Y" else "안 했음"))
+        else:
+            mismatched.append("중성화 다름")
+    age_years = features.get("age_years")
+    if isinstance(age_years, (int, float)):
+        notice = profile.notice_age_years(item.get("age"), _reference_year(item))
+        if notice is None:
+            unknown.append("나이")
+        elif profile.age_close(age_years, notice):
+            points += WEIGHTS["age"]
+            matched.append(f"나이 비슷: {item.get('age')}")
+        else:
+            mismatched.append(f"나이: {item.get('age')}")
+    weight_kg = features.get("weight_kg")
+    if isinstance(weight_kg, (int, float)):
+        notice = profile.notice_weight_kg(item.get("weight"))
+        if notice is None:
+            unknown.append("몸무게")
+        elif profile.weight_close(weight_kg, notice):
+            points += WEIGHTS["weight"]
+            matched.append(f"몸무게 비슷: {item.get('weight')}")
+        else:
+            mismatched.append(f"몸무게: {item.get('weight')}")
+
     wanted_keywords = keywords(criteria.get("description")) + [k for k in (features.get("marks") or []) if isinstance(k, str)]
     if wanted_keywords:
         mark = item.get("special_mark") or ""
@@ -153,6 +185,14 @@ def score(item: dict[str, Any], criteria: dict[str, Any], features: dict[str, An
             matched.append("특징: " + ", ".join(hits[:MAX_KEYWORD_POINTS]))
 
     return {"score": points, "matched": matched, "mismatched": mismatched, "unknown": unknown}
+
+
+def _reference_year(item: dict[str, Any]) -> int:
+    """공고 나이(출생 연도)를 나이로 바꿀 기준 해. 발견 날짜가 있으면 그 해, 없으면 올해."""
+    try:
+        return date.fromisoformat(item["happen_date"]).year
+    except (KeyError, TypeError, ValueError):
+        return date.today().year
 
 
 def _date_gap(item: dict[str, Any], lost_date: str | None) -> int:
@@ -201,6 +241,26 @@ def breed_matches(item: dict[str, Any], breed: str | None) -> bool:
     return False
 
 
+def life_stage_matches(item: dict[str, Any], features: dict[str, Any] | None) -> bool:
+    """글에 나이가 적혔을 때 새끼·성체가 확실히 다른 공고는 뺀다(나이 차이는 점수로만 보지만 이건 같은 개체일 수 없다).
+
+    - 2살 이상을 찾는데 공고가 올해 태어난 새끼(나이 0, '60일미만' 포함)면 뺀다.
+    - 1살 미만을 찾는데 공고가 3살 이상이면 뺀다.
+    공고 나이가 없으면 남긴다.
+    """
+    wanted = (features or {}).get("age_years")
+    if not isinstance(wanted, (int, float)):
+        return True
+    notice = profile.notice_age_years(item.get("age"), _reference_year(item))
+    if notice is None:
+        return True
+    if wanted >= profile.ADULT_YEARS and notice <= 0:
+        return False
+    if wanted < 1 and notice >= profile.ADULT_YEARS + 1:
+        return False
+    return True
+
+
 def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     lost_date = criteria.get("lost_date") or criteria.get("start_date")
     # 구조동물 API는 품종 코드를 검색 파라미터로 받지 않을 수 있으므로(글에서 찾은 품종·조회 실패 후 재조회),
@@ -211,6 +271,8 @@ def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[s
         if in_scope(item, criteria):
             continue
         if breed and not breed_matches(item, breed):
+            continue
+        if not life_stage_matches(item, features):
             continue
         evidence = score(item, criteria, features)
         out.append({**item, "evidence": evidence, "score": evidence["score"]})

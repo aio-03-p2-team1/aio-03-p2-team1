@@ -8,6 +8,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, ValidationError
 
 from backend.normalization.animal_kind import KIND_NAMES, UNKNOWN
+from backend.normalization import profile
 from backend.normalization.color import ColorDictionary
 from backend.schemas.llm import (
     FeatureExtractionRequest,
@@ -79,10 +80,30 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
     "장소·날짜·시간·이름·연락처는 새로 만들거나 바꾸지 말고 원문에 있는 그대로만 [상황]이나 [기타]에 옮긴다. "
     "action은 검색에 큰 영향을 주는 털색이나 성별이 글과 사진에서 정면으로 어긋나 어느 쪽이 맞는지 사용자에게 확인해야 할 때만 ask로, 그 외에는 search로 한다. "
     "ask이면 question에 사용자에게 물을 한 문장 질문을 쓰고, search이면 question은 빈 문자열로 둔다. "
-    "message에는 사용자에게 보여 줄 판단을 1~2문장으로 쓴다: 무엇을 합쳤고 무엇이 어긋났으며 어떤 기준으로 찾을지. 검토할 내용이 없으면 그렇다고 짧게 쓴다. "
+    "message·question은 반려동물을 잃어버린 보호자가 읽는 말이다. 일상 한국어 해요체로 짧고 쉽게 1~2문장만 쓴다(예: '사진과 글에 같은 털색이 있어 하나로 정리했어요. 흰 털에 회색 줄무늬인 아이로 찾아볼게요.'). "
+    "허용 색상·허용값·정규화·검색 특징·중복 제거·서버·모델·추출 같은 시스템 용어는 쓰지 않는다. 무엇을 합쳤고 무엇이 달랐으며 어떤 모습의 아이를 찾을지만 말한다. 검토할 내용이 없으면 그렇다고 짧게 쓴다. "
+    "글이나 사진의 색이 허용 색 목록에 그대로 없으면 빼지 말고 가장 가까운 허용 색으로 바꿔 넣는다(예: 베이지·아이보리 → 크림, 밤색 → 갈색). "
     "breed_mention에는 글에 직접 적힌 품종 이름 하나를 원문 그대로 쓴다(예: 푸들, 말티즈, 코리안숏헤어). '믹스'만 적혔거나 품종이 없으면 빈 문자열로 둔다. 사진만으로 품종을 추정해 넣지 않는다. "
+    "[이전 검토(같은 대화)]가 주어지면 같은 대화에서 앞서 한 검토 기억이다. 지금 글이 이전에 정리한 글과 같으면 그 글에는 사진 특징이 이미 합쳐져 있으므로 중복으로 보고하지 않고, 이미 보고한 중복과 사용자가 확정한 항목의 모순은 다시 보고하거나 묻지 않는다. "
+    "neuter·age·weight는 글에 직접 적힌 중성화 여부·나이·몸무게만 옮긴다. neuter는 중성화했다면 Y, 안 했다면 N, 글에 없으면 빈 문자열이다. "
+    "age·weight에는 글에 적힌 숫자와 단위를 그대로 쓰고(예: 3살, 6개월, 4kg, 4.5키로), 사진이나 품종으로 추정하지 않으며 글에 없으면 빈 문자열로 둔다. "
+    "이 세 값은 [털색]·[특징]·[상황]·[기타]에 다시 적지 않는다. "
     "animal_kind는 종류가 기타 동물일 때만 글이 말하는 동물을 허용값 가운데 하나로 쓰고(예: 앵무새·사랑앵무는 새, 송아지는 소), 개·고양이 검색이거나 글로 알 수 없으면 빈 문자열로 둔다."
 )
+
+
+ORGANIZED_TEXT_MESSAGE = "이미 정리한 글이라 그대로 기준으로 찾아요."
+FRIENDLY_FALLBACK_MESSAGE = "입력한 내용과 사진을 함께 보고 찾을 특징을 정리했어요."
+# 보호자가 읽는 멘트에 섞이면 안 되는 시스템 용어. 섞이면 쉬운 기본 문장으로 바꾼다.
+JARGON_WORDS = ("허용 색", "허용값", "허용 값", "정규화", "검색 특징", "서버", "모델", "추출", "파라미터", "스키마")
+PHOTO_ONLY_MESSAGE = "글 없이 사진 분석 특징으로 정리해 찾아요."
+PHOTO_LINE_PREFIX = "사진에서 확인한 특징:"  # frontend/src/lib/photo.js photoTraitLine 과 같은 머리말
+def friendly_message(message: str) -> str:
+    """보호자가 읽을 멘트. 시스템 용어가 섞였으면 쉬운 기본 문장으로 바꾼다."""
+    text = (message or "").strip()[:300]
+    if not text or any(word in text for word in JARGON_WORDS):
+        return FRIENDLY_FALLBACK_MESSAGE
+    return text
 
 
 def _build_system_prompt(task_instructions: str) -> str:
@@ -94,7 +115,7 @@ def _build_system_prompt(task_instructions: str) -> str:
 
 SYSTEM_PROMPT = _build_system_prompt(TEXT_TASK_INSTRUCTIONS)
 PHOTO_SYSTEM_PROMPT = _build_system_prompt(PHOTO_TASK_INSTRUCTIONS)
-INPUT_REVIEW_PROMPT_VERSION = "input-review-v2"  # v2: 글의 품종·기타 동물 종류 추출
+INPUT_REVIEW_PROMPT_VERSION = "input-review-v5"  # v2: 글의 품종·기타 동물 종류 추출, v3: 같은 대화의 이전 검토 기억 반영, v4: 보호자용 쉬운 말·가까운 색으로 바꾸기, v5: 글의 중성화·나이·몸무게 정리
 INPUT_REVIEW_SYSTEM_PROMPT = _build_system_prompt(INPUT_REVIEW_TASK_INSTRUCTIONS)
 
 
@@ -189,18 +210,39 @@ class FeatureExtractor:
             prompt_version=PROMPT_VERSION,
         )
 
-    async def review_input(self, description: str, photo: dict | None = None, species: str = "") -> InputReviewResult:
+    async def review_input(self, description: str, photo: dict | None = None, species: str = "",
+                           previous: dict | None = None) -> InputReviewResult:
         """검색 전 입력 검토: 글과 서버가 보관한 사진 분석 결과의 중복·모순·문맥을 한 번에 정리한다."""
         source_text = (description or "").strip()
         usable_photo = photo if photo and photo.get("suitable") else None
+        # 화면이 사진 분석 결과를 글에 '사진에서 확인한 특징: …' 줄로 넣어 준다. 이 줄은 서버가 보관한 사진 특징과
+        # 같은 출처라 비교하면 가짜 중복이 생기므로, 사진 특징이 있으면 검토 글에서는 뺀다.
+        if usable_photo:
+            source_text = "\n".join(line for line in source_text.splitlines()
+                                    if not line.strip().startswith(PHOTO_LINE_PREFIX)).strip()
+        user_wrote = bool(source_text)
         if len(source_text) > 1000 or (not source_text and usable_photo is None):
             raise LlmError("llm_request")
         photo_text = json.dumps(
             {k: usable_photo.get(k) for k in ("species", "breed", "colors", "sex", "marks")} if usable_photo
             else "사진 특징 없음", ensure_ascii=False)
         species_text = {"dog": "강아지", "cat": "고양이", "etc": "기타 동물"}.get(species, "미지정")
+        # 같은 대화의 직전 검토 기억(서버가 대화 기록에 보관해 넘긴다). 모델은 이전 호출을 스스로 기억하지 못한다.
+        previous = previous or {}
+        reported = {d.strip() for d in previous.get("duplicates") or []}
+        confirmed = {c.strip() for c in previous.get("confirmed_items") or []}
+        # 입력란 글이 직전 검토가 정리해 넣은 글 그대로면 사진 특징이 이미 합쳐져 있다(새 중복이 아님).
+        own_text = bool(previous.get("organized_text")) and source_text == previous["organized_text"].strip()
+        memory_text = ""
+        if previous:
+            memory_text = "\n\n[이전 검토(같은 대화)]\n" + json.dumps({
+                "이전에_정리한_글": previous.get("organized_text") or "",
+                "지금_글이_이전에_정리한_글과_같음": own_text,
+                "이미_보고한_중복": sorted(reported),
+                "사용자가_확정한_항목": sorted(confirmed),
+            }, ensure_ascii=False)
         human = ("[찾는 동물 종류]\n" + species_text + "\n\n[사용자 글]\n" + (source_text or "(입력된 글 없음)")
-                 + "\n\n[사진 분석 특징]\n" + photo_text)
+                 + "\n\n[사진 분석 특징]\n" + photo_text + memory_text)
         response = await self._invoke_structured(
             [("system", INPUT_REVIEW_SYSTEM_PROMPT), ("human", human)],
             InputReviewModelResponse,
@@ -208,25 +250,46 @@ class FeatureExtractor:
         colors = list(dict.fromkeys(c for c in response.colors if c in ALLOWED_COLORS))
         marks = list(dict.fromkeys(m.strip()[:30] for m in response.marks if m.strip()))[:6]
         sex = response.sex if response.sex in ("M", "F") else ""
+        # 중성화·나이·몸무게는 글에 실제로 적힌 숫자·말이 있을 때만 쓴다(모델이 지어낸 값은 버린다).
+        neuter = profile.user_neuter(response.neuter, source_text)
+        age_years = profile.user_age_years(response.age, source_text)
+        weight_kg = profile.user_weight_kg(response.weight, source_text)
         sections = (
             ("털색", response.fur_color),
             ("특징", response.features),
+            ("중성화", {"Y": "했음", "N": "안 했음"}.get(neuter, "")),
+            ("나이", profile.age_label(age_years) if age_years is not None else ""),
+            ("몸무게", f"약 {weight_kg:g}kg" if weight_kg is not None else ""),
             ("상황", response.situation),
             ("기타", response.other),
         )
         organized = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
         question = response.question.strip()[:200]
-        # 질문할 내용이 비었으면 묻지 않고 찾는다(빈 질문으로 멈추지 않게).
-        action = "ask" if response.action == "ask" and question else "search"
+        if any(word in question for word in JARGON_WORDS):
+            question = ""  # 알아듣기 어려운 질문이면 묻지 않고 글 기준으로 찾는다
+        # 이전에 정리한 글 그대로면 중복을 새로 보고하지 않고, 이미 보고한 중복도 다시 올리지 않는다.
+        # 사용자가 직접 쓴 글이 없으면(사진만) 비교할 대상이 없어 중복도 없다.
+        duplicates = [] if own_text or not user_wrote else [
+            d.strip()[:40] for d in response.duplicates if d.strip() and d.strip() not in reported][:8]
+        # 사용자가 이미 답해 확정한 항목의 모순은 다시 보고하거나 묻지 않는다.
+        conflicts = [{"item": c.item.strip()[:20], "text_value": c.text_value.strip()[:40],
+                      "photo_value": c.photo_value.strip()[:40]}
+                     for c in response.conflicts if c.item.strip() and c.item.strip() not in confirmed][:6]
+        # 질문할 내용이 비었거나 물을 모순이 남지 않았으면 묻지 않고 찾는다.
+        action = "ask" if response.action == "ask" and question and conflicts else "search"
         return InputReviewResult(
             organized_text=organized,
-            features={"colors": colors, "sex": sex, "marks": marks},
-            duplicates=[d.strip()[:40] for d in response.duplicates if d.strip()][:8],
-            conflicts=[{"item": c.item.strip()[:20], "text_value": c.text_value.strip()[:40],
-                        "photo_value": c.photo_value.strip()[:40]} for c in response.conflicts if c.item.strip()][:6],
+            features={"colors": colors, "sex": sex, "marks": marks,
+                      **({"neuter": neuter} if neuter else {}),
+                      **({"age_years": age_years} if age_years is not None else {}),
+                      **({"weight_kg": weight_kg} if weight_kg is not None else {})},
+            duplicates=duplicates,
+            conflicts=conflicts,
             action=action,
             question=question if action == "ask" else "",
-            message=response.message.strip()[:300],
+            message=(ORGANIZED_TEXT_MESSAGE if own_text and not conflicts and action == "search"
+                     else PHOTO_ONLY_MESSAGE if not user_wrote and not conflicts
+                     else friendly_message(response.message)),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",
             prompt_version=INPUT_REVIEW_PROMPT_VERSION,
