@@ -658,8 +658,7 @@ function Results({ run, busy, error, onWiden, onWidenRadius, onRelaxSex }) {
 function InputReview({ review, awaiting, picks = {}, onChoose }) {
   const view = inputReviewView(review)
   if (!view) return null
-  // 모순을 물은 상태면 항목마다 버튼 두 개를 둔다. 글 값이 '기타'처럼 뭉뚱그린 값이면 '예(사진 값 넣기)/아니오',
-  // 서로 다른 값이면 '글대로/사진대로'.
+  // 모순을 물은 상태면 항목마다 버튼 두 개를 둔다(항목 이름과 입력한 값·사진 분석 값을 함께 표시).
   const choices = awaiting && view.question ? (review.conflicts || []).filter((c) => conflictChoices(c).length) : []
   return (
     <div className="input-review" id="input-review" role="status">
