@@ -97,6 +97,9 @@ FRIENDLY_FALLBACK_MESSAGE = "입력한 내용과 사진을 함께 보고 찾을 
 # 보호자가 읽는 멘트에 섞이면 안 되는 시스템 용어. 섞이면 쉬운 기본 문장으로 바꾼다.
 JARGON_WORDS = ("허용 색", "허용값", "허용 값", "정규화", "검색 특징", "서버", "모델", "추출", "파라미터", "스키마")
 PHOTO_ONLY_MESSAGE = "글 없이 사진 분석 특징으로 정리해 찾아요."
+# 글에서도 사진에서도 찾을 외형 특징이 하나도 나오지 않으면 검색 전에 한 번 묻는다(대화의 첫 검색에서만).
+NEED_INFO_MESSAGE = "글에서 찾을 만한 외형 특징을 찾지 못했어요."
+NEED_INFO_QUESTION = "털색, 무늬, 목줄이나 옷 같은 특징을 적어 주시거나 사진을 올려 주세요. 이대로 찾으려면 그냥 다시 눌러 주세요."
 PHOTO_LINE_PREFIX = "사진에서 확인한 특징:"  # frontend/src/lib/photo.js photoTraitLine 과 같은 머리말
 def friendly_message(message: str) -> str:
     """보호자가 읽을 멘트. 시스템 용어가 섞였으면 쉬운 기본 문장으로 바꾼다."""
@@ -277,6 +280,12 @@ class FeatureExtractor:
                      for c in response.conflicts if c.item.strip() and c.item.strip() not in confirmed][:6]
         # 질문할 내용이 비었거나 물을 모순이 남지 않았으면 묻지 않고 찾는다.
         action = "ask" if response.action == "ask" and question and conflicts else "search"
+        # 쓸 만한 사진도 없고 글에서도 외형 특징(털색·성별·표식·중성화·나이·몸무게)이 하나도 안 나오면 먼저 정보를 청한다.
+        # 문장은 서버 고정값이다. 같은 대화에서 이미 물었으면 graph가 다시 묻지 않고 그대로 찾는다.
+        needs_info = (usable_photo is None and not (colors or marks or sex or neuter)
+                      and age_years is None and weight_kg is None)
+        if needs_info:
+            action, question = "ask", NEED_INFO_QUESTION
         return InputReviewResult(
             organized_text=organized,
             features={"colors": colors, "sex": sex, "marks": marks,
@@ -287,7 +296,8 @@ class FeatureExtractor:
             conflicts=conflicts,
             action=action,
             question=question if action == "ask" else "",
-            message=(ORGANIZED_TEXT_MESSAGE if own_text and not conflicts and action == "search"
+            message=(NEED_INFO_MESSAGE if needs_info
+                     else ORGANIZED_TEXT_MESSAGE if own_text and not conflicts and action == "search"
                      else PHOTO_ONLY_MESSAGE if not user_wrote and not conflicts
                      else friendly_message(response.message)),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
