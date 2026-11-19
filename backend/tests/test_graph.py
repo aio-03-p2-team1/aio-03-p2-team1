@@ -100,12 +100,13 @@ class FakeReviewer:
         self.calls = []
         self.memories = []
 
-    async def review_input(self, description, photo=None, species="", previous=None):
+    async def review_input(self, description, photo=None, species="", previous=None, chosen=None):
         from backend.agent.llm import LlmError
         from backend.schemas.llm import InputReviewResult
 
         self.calls.append((description, photo))
         self.memories.append(previous)
+        self.chosen = chosen
         if self.error:
             raise LlmError(self.error)
         action = self.actions.pop(0) if len(self.actions) > 1 else self.actions[0]
@@ -173,8 +174,9 @@ def test_input_review_without_features_offers_server_options_before_search():
     assert first["status"] == "awaiting_input" and animal.calls == []
     fields = {f["field"]: f for f in first["input_review"]["info_request"]}
     assert set(fields) == {"color", "sex", "marks"} and "흰색" in fields["color"]["options"]
-    second = search(d, {**criteria, "color": "흰색"}, thread_id=first["thread_id"])
+    second = search(d, {**criteria, "color": "흰색", "sex": "M"}, thread_id=first["thread_id"])
     assert second["status"] == "completed" and "info_request" not in second["input_review"]
+    assert reviewer.chosen == {"color": "흰색", "sex": "M"}  # 고른 털색·성별을 입력 검토에 넘겨 멘트에 함께 말하게 한다
 
 
 def test_widen_follow_up_without_description_reuses_the_thread_text():

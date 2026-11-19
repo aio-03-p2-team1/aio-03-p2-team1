@@ -386,3 +386,12 @@ def test_review_input_asks_for_features_when_text_and_photo_give_none():
     result = asyncio.run(extractor(FakeChatClient(review_payload(colors=[], sex="", marks=[], conflicts=[])))
                          .review_input("믿어주세요", photo, "cat"))
     assert result.action == "search" and result.info_fields == []
+
+
+def test_review_input_passes_chosen_color_and_sex_to_the_model():
+    client = FakeChatClient(review_payload(fur_color="", colors=[], sex="", marks=["꼬리 짧음"], conflicts=[], duplicates=[],
+                                           message="고등어무늬 수컷에 꼬리가 짧은 아이로 찾아볼게요."))
+    result = asyncio.run(extractor(client).review_input("꼬리 짧음", None, "cat", chosen={"color": "고등어무늬", "sex": "M"}))
+    human = client.messages[1][1]
+    assert "[사용자가 고른 조건]" in human and "고등어무늬" in human and "수컷" in human
+    assert result.action == "search" and "고등어무늬" in result.message

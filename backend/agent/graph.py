@@ -146,7 +146,8 @@ async def context(state: SearchState, config) -> dict:
         started = time.perf_counter()
         try:
             review = await llm.review_input(criteria.get("description") or "", photo, criteria.get("species") or "",
-                                            previous=state.get("review_memory"))
+                                            previous=state.get("review_memory"),
+                                            chosen={"color": criteria.get("color") or "", "sex": criteria.get("sex") or ""})
         except LlmError as exc:
             update["error"] = {"code": exc.code, "message": ERROR_MESSAGES.get(exc.code, exc.code)}
             update["tool_calls"] = [_call("input_review", {"model": llm.model}, exc.code, "글·사진 특징 검토")]
