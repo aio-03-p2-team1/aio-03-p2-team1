@@ -405,7 +405,7 @@ export default function SearchPage() {
 
       <form className="panel search-form search-form-wide" onSubmit={onSubmit} noValidate>
         <div className="panel-title"><span>01</span><h2>사진과 정보 입력</h2></div>
-        <fieldset className="search-form-grid search-form-grid-v2">
+        <fieldset className={`search-form-grid search-form-grid-v2${photoMessage ? ' has-photo-message' : ''}`}>
           <div className="photo-upload-column">
             <label className="upload-box">
               사진 올리기
@@ -413,8 +413,8 @@ export default function SearchPage() {
             <span>{photo ? '사진을 바꾸려면 다시 선택하세요' : '찾을 동물이 중심에 선명하게 보이는 사진 (JPG, PNG 또는 WEBP · 최대 8MB)'}</span>
               {photo && <img src={photo} alt="올린 반려동물 사진" referrerPolicy="no-referrer" />}
             </label>
-            {photoMessage && <p className="photo-analysis-message" role="status">{photoMessage}</p>}
           </div>
+          {photoMessage && <p className="photo-analysis-message" role="status">{photoMessage}</p>}
           <div className="search-fields-v2">
             <div className="field-block">
               <span className="field-label">종류 <em className="req">필수</em></span>

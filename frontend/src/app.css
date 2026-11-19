@@ -77,7 +77,10 @@ button[disabled]{opacity:.65;cursor:progress}
 .search-form-grid-v2 .upload-box{min-height:100%}
 .photo-upload-column{display:flex;flex-direction:column;min-width:0}
 .photo-upload-column .upload-box{flex:1}
-.photo-analysis-message{margin:9px 2px 0;color:#8d573e;font-size:12px;line-height:1.55}
+.search-form-grid-v2.has-photo-message{grid-template-areas:"photo fields" "photo message";row-gap:12px}
+.has-photo-message .photo-upload-column{grid-area:photo}
+.has-photo-message .search-fields-v2{grid-area:fields}
+.photo-analysis-message{grid-area:message;margin:0;color:#754733;font-size:15px;font-weight:600;line-height:1.6;overflow-wrap:anywhere}
 .search-fields-v2{display:flex;flex-direction:column;gap:14px;min-width:0}
 .search-fields-v2 .search-description textarea{min-height:120px}
 .search-fields-v2 .form-pair label,.search-fields-v2 .search-description{margin-top:0}
@@ -153,7 +156,7 @@ button[disabled]{opacity:.65;cursor:progress}
 .region-picked{flex:1;min-width:200px;color:#5d564c;font-size:13px}
 .region-picked strong{color:#2f4a2c}
 
-@media(max-width:900px){.search-form-grid-v2{grid-template-columns:1fr}.search-form-grid-v2 .upload-box{min-height:150px}}
+@media(max-width:900px){.search-form-grid-v2{grid-template-columns:1fr}.search-form-grid-v2.has-photo-message{grid-template-areas:"photo" "message" "fields"}.search-form-grid-v2 .upload-box{min-height:150px}}
 @media(max-width:560px){.species-picker{grid-template-columns:repeat(2,minmax(0,1fr))}.region-map{height:260px}.modal-foot .primary-button{width:100%}}
 
 .account-area a.account-name{text-decoration:none}
