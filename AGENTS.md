@@ -4,6 +4,7 @@
 - 기술 스택·환경변수·로컬 실행·배포: `docs/development.md`
 - 에이전트 구조·상태·API 계약: `docs/architecture.md`
 - 일정·평가·필수 산출물: `docs/project-context.md`
+- [P2 발표 자료 인덱스](P2/index.md)에서 발표 구성, PPT, 이미지와 참고 문서를 찾을 수 있다.
 - 둘이 충돌하면 사용자(팀원)에게 묻는다.
 
 ## 프로젝트 한 줄 요약
