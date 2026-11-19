@@ -5,6 +5,7 @@
 | [발표 구성](Presentation.md) | 발표 순서, 시연 흐름, 준비할 항목 |
 | [PPT 디자인 초안](ppt/dasimanna-design-draft.pptx) | 시작 화면과 본문 템플릿 2종 |
 | [팀원 역할 분담](ref/team-roles.md) | 발표용 역할, 주요 기여, 근거 커밋 |
+| [Team 다시마 세계관](ref/worldbuilding.md) | 팀명과 파비콘의 유래, 발표용 한 줄 |
 | [LangGraph 흐름도](img/mermaid-diagram.png) | 검색 에이전트의 실행 흐름 |
 
 ## 기술 참고 자료
