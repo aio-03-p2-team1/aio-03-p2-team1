@@ -34,3 +34,17 @@ def test_score_adds_points_for_close_neuter_age_weight_without_filtering():
     assert close["score"] == 3 and "중성화 했음" in close["matched"]
     assert far["score"] == 0 and "중성화 다름" in far["mismatched"]
     assert unknown["score"] == 0 and set(unknown["unknown"]) >= {"중성화", "나이", "몸무게"}
+
+
+def test_rank_drops_kittens_when_the_text_says_an_adult_age():
+    from backend.agent.ranking import rank
+
+    items = [item(id="kitten", age="2026(년생)"), item(id="baby", age="60일미만(년생)"),
+             item(id="adult", age="2020(년생)"), item(id="unknown", age="")]
+    kept = [c["id"] for c in rank(items, {}, {"age_years": 6})]
+    assert set(kept) == {"adult", "unknown"}
+    # 나이를 적지 않았으면 거르지 않는다.
+    assert len(rank(items, {}, {})) == 4
+    # 새끼를 찾으면 3살 이상 공고를 뺀다.
+    kept = [c["id"] for c in rank([item(id="old", age="2020(년생)"), item(id="young", age="2026(년생)")], {}, {"age_years": 0.5})]
+    assert kept == ["young"]

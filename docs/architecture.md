@@ -236,7 +236,7 @@ flowchart LR
 
 ## 7. 후보 정렬 규칙
 
-`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3) · 중성화 1 · 나이 1 · 몸무게 1. 중성화·나이·몸무게는 입력 검토가 글에서 확인한 값(`llm_features.neuter`·`age_years`·`weight_kg`, `backend/normalization/profile.py`)이 있을 때만 공고의 `neuterYn`·`age`(출생 연도→발견 해 기준 나이)·`weight`와 비교한다. 보호소 추정값이라 거르지 않고 나이 ±2살·몸무게 ±30%(최소 1kg) 안이면 점수만 더한다. 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
+`backend/agent/ranking.py`: 품종 3 · 털색 3 · 성별 2 · 특징 키워드 1(최대 3) · 중성화 1 · 나이 1 · 몸무게 1. 중성화·나이·몸무게는 입력 검토가 글에서 확인한 값(`llm_features.neuter`·`age_years`·`weight_kg`, `backend/normalization/profile.py`)이 있을 때만 공고의 `neuterYn`·`age`(출생 연도→발견 해 기준 나이)·`weight`와 비교한다. 보호소 추정값이라 거르지 않고 나이 ±2살·몸무게 ±30%(최소 1kg) 안이면 점수만 더한다. 단 새끼·성체가 확실히 다른 공고는 후보에서 뺀다(`life_stage_matches`: 2살 이상을 찾는데 공고 나이 0(올해 출생·60일미만), 1살 미만을 찾는데 공고 3살 이상). 공고 나이가 없으면 남긴다. 누락 필드는 `unknown`, 다른 값은 `mismatched`. 동점은 점수 → 실종일과 가까운 발견일 → 공고 ID. LangChain `OpenAIEmbeddings`로 전체 공고를 임베딩하고 이 규칙 순위와 코사인 순위를 RRF(k=60)로 합쳐 최대 300건을 보관한다. 화면은 페이지당 20건을 보여 준다. 점수는 같은 동물일 확률이 아니다.
 
 털색·무늬 정규화 규칙과 DB 원문 커버리지는 [color-normalization.md](color-normalization.md)를 참고한다.
 

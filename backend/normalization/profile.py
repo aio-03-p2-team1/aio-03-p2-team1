@@ -15,6 +15,7 @@ _NOTICE_YEAR = re.compile(r"((?:19|20)\d{2})")
 _NOTICE_WEIGHT = re.compile(_NUMBER)
 
 AGE_TOLERANCE_YEARS = 2  # 보호소 나이는 추정값이라 ±2살까지 비슷하다고 본다
+ADULT_YEARS = 2  # 이 나이 이상이면 새끼 공고(나이 0)와는 같은 개체일 수 없다고 본다
 WEIGHT_TOLERANCE = 0.3  # 몸무게는 ±30%(작은 동물은 최소 1kg)까지 비슷하다고 본다
 
 

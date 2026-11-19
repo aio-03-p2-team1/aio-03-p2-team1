@@ -241,6 +241,26 @@ def breed_matches(item: dict[str, Any], breed: str | None) -> bool:
     return False
 
 
+def life_stage_matches(item: dict[str, Any], features: dict[str, Any] | None) -> bool:
+    """글에 나이가 적혔을 때 새끼·성체가 확실히 다른 공고는 뺀다(나이 차이는 점수로만 보지만 이건 같은 개체일 수 없다).
+
+    - 2살 이상을 찾는데 공고가 올해 태어난 새끼(나이 0, '60일미만' 포함)면 뺀다.
+    - 1살 미만을 찾는데 공고가 3살 이상이면 뺀다.
+    공고 나이가 없으면 남긴다.
+    """
+    wanted = (features or {}).get("age_years")
+    if not isinstance(wanted, (int, float)):
+        return True
+    notice = profile.notice_age_years(item.get("age"), _reference_year(item))
+    if notice is None:
+        return True
+    if wanted >= profile.ADULT_YEARS and notice <= 0:
+        return False
+    if wanted < 1 and notice >= profile.ADULT_YEARS + 1:
+        return False
+    return True
+
+
 def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     lost_date = criteria.get("lost_date") or criteria.get("start_date")
     # 구조동물 API는 품종 코드를 검색 파라미터로 받지 않을 수 있으므로(글에서 찾은 품종·조회 실패 후 재조회),
@@ -251,6 +271,8 @@ def rank(items: list[dict[str, Any]], criteria: dict[str, Any], features: dict[s
         if in_scope(item, criteria):
             continue
         if breed and not breed_matches(item, breed):
+            continue
+        if not life_stage_matches(item, features):
             continue
         evidence = score(item, criteria, features)
         out.append({**item, "evidence": evidence, "score": evidence["score"]})
