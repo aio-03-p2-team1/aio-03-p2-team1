@@ -87,6 +87,8 @@ INPUT_REVIEW_TASK_INSTRUCTIONS = (
 
 
 ORGANIZED_TEXT_MESSAGE = "이미 정리한 글이라 그대로 기준으로 찾아요."
+PHOTO_ONLY_MESSAGE = "글 없이 사진 분석 특징으로 정리해 찾아요."
+PHOTO_LINE_PREFIX = "사진에서 확인한 특징:"  # frontend/src/lib/photo.js photoTraitLine 과 같은 머리말
 def _build_system_prompt(task_instructions: str) -> str:
     return FEATURE_SYSTEM_PROMPT_TEMPLATE.format(
         color_values=COLOR_VALUES_TEXT,
@@ -196,6 +198,12 @@ class FeatureExtractor:
         """검색 전 입력 검토: 글과 서버가 보관한 사진 분석 결과의 중복·모순·문맥을 한 번에 정리한다."""
         source_text = (description or "").strip()
         usable_photo = photo if photo and photo.get("suitable") else None
+        # 화면이 사진 분석 결과를 글에 '사진에서 확인한 특징: …' 줄로 넣어 준다. 이 줄은 서버가 보관한 사진 특징과
+        # 같은 출처라 비교하면 가짜 중복이 생기므로, 사진 특징이 있으면 검토 글에서는 뺀다.
+        if usable_photo:
+            source_text = "\n".join(line for line in source_text.splitlines()
+                                    if not line.strip().startswith(PHOTO_LINE_PREFIX)).strip()
+        user_wrote = bool(source_text)
         if len(source_text) > 1000 or (not source_text and usable_photo is None):
             raise LlmError("llm_request")
         photo_text = json.dumps(
@@ -234,7 +242,8 @@ class FeatureExtractor:
         organized = "\n".join(f"[{label}]: {value.strip()}" for label, value in sections if value and value.strip())[:1000]
         question = response.question.strip()[:200]
         # 이전에 정리한 글 그대로면 중복을 새로 보고하지 않고, 이미 보고한 중복도 다시 올리지 않는다.
-        duplicates = [] if own_text else [
+        # 사용자가 직접 쓴 글이 없으면(사진만) 비교할 대상이 없어 중복도 없다.
+        duplicates = [] if own_text or not user_wrote else [
             d.strip()[:40] for d in response.duplicates if d.strip() and d.strip() not in reported][:8]
         # 사용자가 이미 답해 확정한 항목의 모순은 다시 보고하거나 묻지 않는다.
         conflicts = [{"item": c.item.strip()[:20], "text_value": c.text_value.strip()[:40],
@@ -250,6 +259,7 @@ class FeatureExtractor:
             action=action,
             question=question if action == "ask" else "",
             message=(ORGANIZED_TEXT_MESSAGE if own_text and not conflicts and action == "search"
+                     else PHOTO_ONLY_MESSAGE if not user_wrote and not conflicts
                      else response.message.strip()[:300]),
             breed_mention=response.breed_mention.strip()[:30] if species in ("dog", "cat") else "",
             animal_kind=response.animal_kind if species == "etc" else "",

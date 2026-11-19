@@ -7,6 +7,7 @@ import pytest
 from backend.agent.llm import (
     COLOR_VALUES_TEXT,
     ORGANIZED_TEXT_MESSAGE,
+    PHOTO_ONLY_MESSAGE,
     INPUT_REVIEW_PROMPT_VERSION,
     PHOTO_SYSTEM_PROMPT,
     SYSTEM_PROMPT,
@@ -163,6 +164,15 @@ def test_review_input_does_not_ask_again_about_items_the_user_confirmed():
     result = asyncio.run(extractor(client).review_input("[털색]: 기타: 회색\n[특징]: 빨간 목줄", None, "etc", previous=previous))
     assert result.conflicts == [] and result.action == "search" and result.question == ""
     assert result.duplicates == ["빨간 목줄"]  # 이미 보고한 중복은 다시 올리지 않는다
+
+
+def test_review_input_with_photo_only_reports_no_duplicates():
+    """사진만 올리면 화면이 넣은 '사진에서 확인한 특징' 줄은 사진 특징과 같은 출처라 중복으로 보지 않는다."""
+    client = FakeChatClient(review_payload(conflicts=[], duplicates=["흰색", "회색", "고등어무늬"], message="중복을 합쳤습니다."))
+    photo = {"suitable": True, "species": "cat", "breed": "", "colors": ["흰색", "회색"], "sex": "", "marks": ["고등어무늬"]}
+    result = asyncio.run(extractor(client).review_input("사진에서 확인한 특징: 흰색, 회색, 고등어무늬", photo, "cat"))
+    assert result.duplicates == [] and result.message == PHOTO_ONLY_MESSAGE
+    assert "사진에서 확인한 특징" not in client.messages[1][1].split("[사진 분석 특징]")[0]
 
 
 def test_review_input_rejects_empty_input_without_calling_model():
